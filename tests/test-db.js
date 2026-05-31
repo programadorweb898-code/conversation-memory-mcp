@@ -1,3 +1,8 @@
-require("../src/database");
+const { expect } = require('chai');
+const db = require('../src/database');
 
-console.log("Database initialized");
+describe('Database Initialization', () => {
+  it('debería inicializar correctamente', () => {
+    expect(db).to.not.be.null;
+  });
+});

@@ -1,30 +1,22 @@
+const { expect } = require('chai');
 const searchMessages = require("../src/tools/searchMessages");
 const saveMessage = require("../src/tools/saveMessage");
 
-async function runTest() {
-  console.log("Iniciando test de búsqueda...");
+describe('Search Messages Tool', () => {
+  it('debería encontrar un mensaje previamente guardado mediante búsqueda semántica', async () => {
+    const testContent = "Esta es una prueba de búsqueda de JWT";
+    const sessionId = `test-session-search-${Date.now()}`;
+    
+    await saveMessage({
+      sessionId: sessionId,
+      project: "test-project",
+      role: "assistant",
+      content: testContent
+    });
 
-  // Primero guardamos un mensaje para asegurar que hay algo que buscar
-  const testContent = "Esta es una prueba de búsqueda de JWT";
-  await saveMessage({
-    sessionId: "test-session-search",
-    project: "test-project",
-    role: "assistant",
-    content: testContent
+    const results = await searchMessages({ query: "JWT" });
+    
+    const found = results.some(m => m.content === testContent);
+    expect(found).to.be.true;
   });
-
-  // Buscamos el mensaje
-  const results = await searchMessages({ query: "JWT" });
-
-  console.log("Resultados encontrados:", results.length);
-  
-  const found = results.some(m => m.content === testContent);
-  
-  if (found) {
-    console.log("✅ Test exitoso: Mensaje encontrado.");
-  } else {
-    console.log("❌ Test fallido: No se encontró el mensaje.");
-  }
-}
-
-runTest().catch(console.error);
+});
