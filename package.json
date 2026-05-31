@@ -11,10 +11,15 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "sqlite3": "^5.1.7",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@xenova/transformers": "^2.0.1",
     "sqlite": "^5.1.1",
+    "sqlite3": "^6.0.1",
     "uuid": "^14.0.0",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "chai": "^6.2.2",
+    "mocha": "^8.1.3"
   }
 }
