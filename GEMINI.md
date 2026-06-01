@@ -54,6 +54,12 @@ Responde siempre en español
 
 No instales librerias ni ejecutes test automaticamente,solo dame los comandos para ejecutarlos manualmente
 
+Norma de Memoria Persistente (Obligatorio):
+Como agente, debes asegurar la persistencia de toda la historia de trabajo:
+1. Registro: Tras cada interacción (prompt y respuesta), usa obligatoriamente `saveMessage` para persistir el contenido.
+2. Recuperación: Antes de responder preguntas históricas, usa `searchMessages` o `recoverSession` para verificar el contexto previo.
+No confíes únicamente en la ventana de contexto volátil.
+
 Work incrementally.
 
 Never generate the entire project at once.

@@ -7,6 +7,7 @@ const saveMessage = require("./tools/saveMessage");
 const searchMessages = require("./tools/searchMessages");
 const lastSession = require("./tools/lastSession");
 const recoverSession = require("./tools/recoverSession");
+const listSessions = require("./tools/listSessions");
 
 // Create server
 const server = new McpServer({
@@ -67,6 +68,17 @@ server.tool(
   async ({ sessionId }) => {
     const messages = await recoverSession({ sessionId });
     return { content: [{ type: "text", text: JSON.stringify(messages, null, 2) }] };
+  }
+);
+
+// 5. listSessions
+server.tool(
+  "listSessions",
+  "Lista todas las sesiones disponibles",
+  {},
+  async () => {
+    const sessions = await listSessions();
+    return { content: [{ type: "text", text: JSON.stringify(sessions, null, 2) }] };
   }
 );
 
