@@ -58,13 +58,10 @@ async function runTests() {
   } catch (error) {
     console.error("❌ Ocurrió un error durante las pruebas:", error);
   } finally {
-    // Limpieza: Cerrar la conexión a la base de datos
-    db.close((err) => {
-      if (err) {
-        console.error("Error al cerrar la base de datos:", err.message);
-      } else {
-        console.log("Conexión a la base de datos cerrada.");
-      }
+    // Limpieza: eliminar embedding de prueba (no cerrar la BD aquí)
+    db.run(`DELETE FROM message_embeddings WHERE message_id = ?`, [testMessageId], (err) => {
+      if (err) console.error("Error limpiando message_embeddings:", err.message);
+      else console.log("Embedding de prueba eliminado.");
     });
     console.log("Pruebas finalizadas.");
   }

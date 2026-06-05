@@ -57,9 +57,13 @@ async function searchMessages({ query, keyword, project }) {
           return { ...row, similarity };
         });
 
+        // Filtrar resultados por un umbral de similitud para eliminar ruido
+        const SIMILARITY_THRESHOLD = 0.5;
+        const filtered = scoredResults.filter(r => r.similarity > SIMILARITY_THRESHOLD);
+
         // Ordenar por similitud
-        scoredResults.sort((a, b) => b.similarity - a.similarity);
-        return resolve(scoredResults);
+        filtered.sort((a, b) => b.similarity - a.similarity);
+        return resolve(filtered);
       } 
 
       resolve(rows);

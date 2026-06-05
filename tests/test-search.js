@@ -26,15 +26,12 @@ describe('Semantic Search Messages Tool', () => {
   });
 
   after(function(done) {
-    // Cleanup: Delete test messages and close the database
-    db.run(`DELETE FROM conversations WHERE session_id = ?`, [testSessionId], (err) => {
-      if (err) console.error("Error cleaning up conversations:", err.message);
-      db.run(`DELETE FROM message_embeddings WHERE message_id IN (SELECT id FROM conversations WHERE session_id = ?)`, [testSessionId], (err) => {
-        if (err) console.error("Error cleaning up message_embeddings:", err.message);
-        db.close((err) => {
-          if (err) console.error("Error closing database:", err.message);
-          done();
-        });
+    // Cleanup: Delete test messages (do not close DB here)
+    db.run(`DELETE FROM message_embeddings WHERE message_id IN (SELECT id FROM conversations WHERE session_id = ?)`, [testSessionId], (err) => {
+      if (err) console.error("Error cleaning up message_embeddings:", err.message);
+      db.run(`DELETE FROM conversations WHERE session_id = ?`, [testSessionId], (err) => {
+        if (err) console.error("Error cleaning up conversations:", err.message);
+        done();
       });
     });
   });
