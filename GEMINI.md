@@ -43,7 +43,9 @@ conversation-memory-mcp/
 │   │   ├── saveMessage.js
 │   │   ├── searchMessages.js
 │   │   ├── lastSession.js
-│   │   └── recoverSession.js
+│   │   ├── recoverSession.js
+│   │   ├── pushToEngram.js
+│   │   └── getLastSessionContext.js
 │   └── services/
 ├── tests/
 ├── conversations.db
@@ -54,11 +56,14 @@ Responde siempre en español
 
 No instales librerias ni ejecutes test automaticamente,solo dame los comandos para ejecutarlos manualmente
 
-Norma de Memoria Persistente (Obligatorio):
-Como agente, debes asegurar la persistencia de toda la historia de trabajo:
-1. Registro: Tras cada interacción (prompt y respuesta), usa obligatoriamente `saveMessage` para persistir el contenido.
-2. Recuperación: Antes de responder preguntas históricas, usa `searchMessages` o `recoverSession` para verificar el contexto previo.
-No confíes únicamente en la ventana de contexto volátil.
+### Política de Persistencia Proactiva (Obligatorio)
+
+Como agente, debo asegurar la persistencia automática de toda la historia de trabajo:
+
+1. **Persistencia en MCP (Registro Crudo):** Tras cada interacción (prompt y respuesta), debo ejecutar obligatoriamente `saveMessage` para persistir el contenido automáticamente.
+2. **Persistencia en Engram (Conocimiento Semántico):** Cuando detecte una decisión técnica, un bug fix, o una regla de proyecto, debo ejecutar automáticamente `mem_save` en Engram sin esperar a que el usuario lo solicite.
+
+El usuario no debe tener que recordar guardar el historial o el conocimiento; es responsabilidad exclusiva del agente.
 
 Work incrementally.
 
@@ -81,6 +86,13 @@ Always:
 - keep SQLite access centralized
 - prefer maintainability over clever code
 
+Integration Workflow with Engram
+
+To bridge raw conversation history with Engram's semantic memory:
+1. Use `getLastSessionContext` to get the full raw history.
+2. Use `pushToEngram` on specific `messageId`s that contain critical decisions, findings, or learned patterns.
+3. Call Engram's `mem_save` with the content retrieved from `pushToEngram` to store it semantically.
+
 Database Requirements
 
 Store:
@@ -98,6 +110,8 @@ Support:
 - search by keyword
 - recover session
 - retrieve last session
+- push to Engram
+- get last session context
 
 Future Roadmap
 
@@ -107,7 +121,6 @@ The design must allow later addition of:
 - semantic search
 - ChromaDB or Qdrant
 - automatic session summaries
-- integration with Engram
 - multi-agent memory sharing
 
 Workflow

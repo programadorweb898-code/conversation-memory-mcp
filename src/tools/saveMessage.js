@@ -1,6 +1,6 @@
 const db = require("../database");
 const { v4: uuidv4 } = require("uuid");
-const { getEmbedding } = require("../services/embeddingService");
+const { generateEmbedding, saveEmbedding } = require("../services/embeddingService");
 
 async function saveMessage({
   sessionId,
@@ -25,15 +25,9 @@ async function saveMessage({
 
           // 2. Generar y guardar embedding
           try {
-            const embedding = await getEmbedding(content);
-            db.run(
-              `INSERT INTO message_embeddings (message_id, embedding) VALUES (?, ?)`,
-              [messageId, JSON.stringify(embedding)],
-              (err) => {
-                if (err) console.error("Error saving embedding:", err);
-                resolve(true);
-              }
-            );
+            const generatedEmbedding = await generateEmbedding(content);
+            await saveEmbedding(messageId, generatedEmbedding);
+            resolve(true);
           } catch (embeddingErr) {
             console.error("Error generating embedding:", embeddingErr);
             resolve(true); // Resolvemos true porque el mensaje sí se guardó

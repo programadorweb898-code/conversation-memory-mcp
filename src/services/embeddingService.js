@@ -1,22 +1,91 @@
-const { pipeline } = require('@xenova/transformers');
+// src/services/embeddingService.js
+
+const db = require("../database");
+const { v4: uuidv4 } = require("uuid");
+const { pipeline } = require("@xenova/transformers"); // Import pipeline
+
+// Specify the model and ensure it's quantized for efficiency
+const model = "Xenova/all-MiniLM-L6-v2";
+let extractor = null; // Will store the initialized pipeline
 
 /**
- * Servicio para generar embeddings de texto de forma local.
- * Utiliza el modelo 'all-MiniLM-L6-v2'.
+ * Initializes the embedding pipeline.
+ * This should be called once at application startup.
  */
-let pipe = null;
-
-async function getEmbedding(text) {
-  if (!pipe) {
-    // La primera vez que se llama, descarga o carga el modelo localmente
-    pipe = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+async function initializeEmbeddingPipeline() {
+  if (!extractor) {
+    console.log(`Loading embedding model: ${model}`);
+    extractor = await pipeline("feature-extraction", model, { quantized: true });
+    console.log("Embedding model loaded.");
   }
-  
-  // Generar embedding
-  const output = await pipe(text, { pooling: 'mean', normalize: true });
-  
-  // Convertir el resultado a un array plano de números
-  return Array.from(output.data);
 }
 
-module.exports = { getEmbedding };
+/**
+ * Generates an embedding for a given text using Hugging Face Transformers.js.
+ * @param {string} text The text to embed.
+ * @returns {string} A JSON string representation of the embedding vector.
+ */
+async function generateEmbedding(text) {
+  if (!extractor) {
+    // Ensure the pipeline is initialized before use.
+    // In a production app, initializeEmbeddingPipeline should be called once at startup.
+    await initializeEmbeddingPipeline();
+  }
+
+  // Generate embeddings
+  const output = await extractor(text, { pooling: "mean", normalize: true });
+  // The output is typically a Tensor. Convert it to a plain array.
+  const embedding = output.data; // This gets the raw data from the Tensor
+  return JSON.stringify(Array.from(embedding)); // Convert TypedArray to standard Array and then to JSON string
+}
+
+/**
+ * Saves an embedding associated with a message ID to the database.
+ * @param {string} messageId The ID of the message.
+ * @param {string} embedding The JSON string representation of the embedding.
+ * @returns {Promise<void>}
+ */
+async function saveEmbedding(messageId, embedding) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT OR REPLACE INTO message_embeddings (message_id, embedding) VALUES (?, ?)`,
+      [messageId, embedding],
+      function (err) {
+        if (err) {
+          console.error("Error saving embedding:", err.message);
+          return reject(err);
+        }
+        console.log(`Embedding for message ${messageId} saved.`);
+        resolve();
+      }
+    );
+  });
+}
+
+/**
+ * Retrieves an embedding for a given message ID from the database.
+ * @param {string} messageId The ID of the message.
+ * @returns {Promise<string|null>} The JSON string representation of the embedding, or null if not found.
+ */
+async function getEmbedding(messageId) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT embedding FROM message_embeddings WHERE message_id = ?`,
+      [messageId],
+      (err, row) => {
+        if (err) {
+          console.error("Error retrieving embedding:", err.message);
+          return reject(err);
+        }
+        resolve(row ? row.embedding : null);
+      }
+    );
+  });
+}
+
+module.exports = {
+  initializeEmbeddingPipeline, // Export the initialization function
+  generateEmbedding,
+  saveEmbedding,
+  getEmbedding,
+};

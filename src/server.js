@@ -1,5 +1,6 @@
+const express = require("express");
 const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
-const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
+const { SSEServerTransport } = require("@modelcontextprotocol/sdk/server/sse.js");
 const { z } = require("zod");
 
 // Import tools
@@ -8,6 +9,13 @@ const searchMessages = require("./tools/searchMessages");
 const lastSession = require("./tools/lastSession");
 const recoverSession = require("./tools/recoverSession");
 const listSessions = require("./tools/listSessions");
+const pushToEngram = require("./tools/pushToEngram");
+const getLastSessionContext = require("./tools/getLastSessionContext");
+const saveSessionSummary = require("./tools/saveSessionSummary"); // Added import
+const getSessionSummary = require("./tools/getSessionSummary"); // Added import
+
+// Changed import for embeddingService
+const { generateEmbedding, saveEmbedding, initializeEmbeddingPipeline } = require("./services/embeddingService");
 
 // Create server
 const server = new McpServer({
@@ -82,11 +90,104 @@ server.tool(
   }
 );
 
-// Connect
-async function main() {
-  const transport = new StdioServerTransport();
+// 6. pushToEngram
+server.tool(
+  "pushToEngram",
+  "Prepara un mensaje para ser enviado a Engram",
+  {
+    messageId: z.string().describe("ID del mensaje a recuperar"),
+  },
+  async ({ messageId }) => {
+    const message = await pushToEngram({ messageId });
+    return { content: [{ type: "text", text: JSON.stringify(message, null, 2) }] };
+  }
+);
+
+// 7. getLastSessionContext
+server.tool(
+  "getLastSessionContext",
+  "Recupera el historial completo de la última sesión",
+  {},
+  async () => {
+    const context = await getLastSessionContext();
+    return { content: [{ type: "text", text: JSON.stringify(context, null, 2) }] };
+  }
+);
+
+// 8. saveSessionSummary
+server.tool(
+  "saveSessionSummary",
+  "Guarda o actualiza el resumen de una sesión",
+  {
+    sessionId: z.string().describe("ID de la sesión"),
+    summary: z.string().describe("Contenido del resumen"),
+  },
+  async ({ sessionId, summary }) => {
+    await saveSessionSummary({ sessionId, summary });
+    return { content: [{ type: "text", text: "Resumen guardado correctamente." }] };
+  }
+);
+
+// 9. getSessionSummary
+server.tool(
+  "getSessionSummary",
+  "Recupera el resumen de una sesión específica",
+  {
+    sessionId: z.string().describe("ID de la sesión"),
+  },
+  async ({ sessionId }) => {
+    const summary = await getSessionSummary({ sessionId });
+    return {
+      content: [
+        {
+          type: "text",
+          text: summary ? JSON.stringify(summary, null, 2) : "No hay resumen para esta sesión.",
+        },
+      ],
+    };
+  }
+);
+
+// 10. generateAndSaveEmbedding
+server.tool(
+  "generateAndSaveEmbedding",
+  "Genera y guarda un embedding para un mensaje dado",
+  {
+    messageId: z.string().describe("ID del mensaje al que se asociará el embedding"),
+    text: z.string().describe("El texto del cual generar el embedding"),
+  },
+  async ({ messageId, text }) => {
+    try {
+      const generatedEmbedding = await generateEmbedding(text);
+      await saveEmbedding(messageId, generatedEmbedding);
+      return { content: [{ type: "text", text: `Embedding generado y guardado para el mensaje ${messageId}.` }] };
+    } catch (error) {
+      console.error("Error al generar y guardar embedding:", error);
+      return { content: [{ type: "text", text: `Error al generar y guardar embedding para el mensaje ${messageId}: ${error.message}` }] };
+    }
+  }
+);
+
+
+const app = express();
+let transport;
+
+app.get("/sse", async (req, res) => {
+  transport = new SSEServerTransport("/messages", res);
   await server.connect(transport);
-  console.error("MCP Server running on stdio");
+});
+
+app.post("/messages", async (req, res) => {
+  await transport.handlePostMessage(req, res);
+});
+
+// Initialize the embedding pipeline before starting the server
+async function startServer() {
+  await initializeEmbeddingPipeline();
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
 }
 
-main().catch(console.error);
+startServer();

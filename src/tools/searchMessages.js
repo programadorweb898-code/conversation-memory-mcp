@@ -1,45 +1,68 @@
 const db = require("../database");
-const { getEmbedding } = require("../services/embeddingService");
+const { generateEmbedding } = require("../services/embeddingService"); // Importar generateEmbedding
 
 /**
- * Busca mensajes en la base de datos usando búsqueda semántica (embeddings).
+ * Busca mensajes en la base de datos.
+ * Si se proporciona keyword, realiza búsqueda por texto (LIKE).
+ * Si no, realiza búsqueda semántica (embeddings).
  * @param {Object} params - Parámetros de búsqueda.
- * @param {string} params.query - El término a buscar.
+ * @param {string} [params.query] - El término para búsqueda semántica.
+ * @param {string} [params.keyword] - El término para búsqueda por palabras clave.
  * @param {string} [params.project] - (Opcional) Filtrar por proyecto.
- * @returns {Promise<Array>} - Lista de mensajes encontrados, ordenados por relevancia semántica.
+ * @returns {Promise<Array>} - Lista de mensajes encontrados.
  */
-async function searchMessages({ query, project }) {
-  // 1. Generar embedding para la consulta
-  const queryEmbedding = await getEmbedding(query);
-
+async function searchMessages({ query, keyword, project }) {
   return new Promise((resolve, reject) => {
-    // 2. Obtener todos los mensajes y sus embeddings
-    let sql = `
-      SELECT c.*, me.embedding 
-      FROM conversations c
-      JOIN message_embeddings me ON c.id = me.message_id
-    `;
+    // Si queremos búsqueda semántica, necesitamos los embeddings, hacemos JOIN.
+    // Si solo queremos búsqueda por keyword, no necesitamos JOIN con embeddings.
+    let sql = `SELECT c.* ${query ? ', me.embedding' : ''} FROM conversations c`;
+    if (query) {
+      sql += ` JOIN message_embeddings me ON c.id = me.message_id`;
+    }
+
     const params = [];
+    const whereClauses = [];
 
     if (project) {
-      sql += ` WHERE c.project = ?`;
+      whereClauses.push(`c.project = ?`);
       params.push(project);
     }
 
-    db.all(sql, params, (err, rows) => {
+    // Búsqueda por palabras clave (si se proporciona)
+    if (keyword) {
+      whereClauses.push(`c.content LIKE ?`);
+      params.push(`%${keyword}%`);
+    }
+
+    if (whereClauses.length > 0) {
+      sql += ` WHERE ` + whereClauses.join(` AND `);
+    }
+
+    db.all(sql, params, async (err, rows) => {
       if (err) return reject(err);
 
-      // 3. Calcular similitud coseno (dot product ya que están normalizados)
-      const scoredResults = rows.map((row) => {
-        const embedding = JSON.parse(row.embedding);
-        const similarity = dotProduct(queryEmbedding, embedding);
-        return { ...row, similarity };
-      });
+      // Si se pidió búsqueda semántica
+      if (query) {
+        const queryEmbeddingJson = await generateEmbedding(query);
+        const queryEmbedding = JSON.parse(queryEmbeddingJson);
 
-      // 4. Ordenar por similitud (descendente) y filtrar los mejores (ej. > 0.5)
-      scoredResults.sort((a, b) => b.similarity - a.similarity);
-      
-      resolve(scoredResults);
+        if (!queryEmbedding || !Array.isArray(queryEmbedding)) {
+          return reject(new Error("No se pudo generar el embedding para la consulta."));
+        }
+
+        // Calcular similitud coseno
+        const scoredResults = rows.map((row) => {
+          const embedding = JSON.parse(row.embedding);
+          const similarity = dotProduct(queryEmbedding, embedding);
+          return { ...row, similarity };
+        });
+
+        // Ordenar por similitud
+        scoredResults.sort((a, b) => b.similarity - a.similarity);
+        return resolve(scoredResults);
+      } 
+
+      resolve(rows);
     });
   });
 }

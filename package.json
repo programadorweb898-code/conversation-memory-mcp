@@ -1,7 +1,7 @@
 {
   "name": "conversation-memory-mcp",
   "version": "1.0.0",
-  "description": "",
+  "description": "Servidor MCP para almacenar y recuperar el historial de conversaciones de forma persistente mediante SQLite.",
   "main": "server.js",
   "scripts": {
     "test": "mocha tests/",
@@ -22,5 +22,16 @@
   "devDependencies": {
     "chai": "^6.2.2",
     "mocha": "^8.1.3"
-  }
+  },
+  "directories": {
+    "test": "tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/programadorweb898-code/conversation-memory-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/programadorweb898-code/conversation-memory-mcp/issues"
+  },
+  "homepage": "https://github.com/programadorweb898-code/conversation-memory-mcp#readme"
 }
