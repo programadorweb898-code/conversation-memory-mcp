@@ -1,72 +1,74 @@
 const db = require("../database");
-const { generateEmbedding } = require("../services/embeddingService"); // Importar generateEmbedding
+const { z } = require("zod");
+const { generateEmbedding } = require("../services/embeddingService");
+
+const SearchMessagesSchema = z.object({
+  query: z.string().optional(),
+  keyword: z.string().optional(),
+  project: z.string().optional(),
+}).refine(data => data.query || data.keyword || data.project, {
+  message: "Se requiere al menos uno de: query, keyword, o project",
+});
 
 /**
  * Busca mensajes en la base de datos.
- * Si se proporciona keyword, realiza búsqueda por texto (LIKE).
- * Si no, realiza búsqueda semántica (embeddings).
- * @param {Object} params - Parámetros de búsqueda.
- * @param {string} [params.query] - El término para búsqueda semántica.
- * @param {string} [params.keyword] - El término para búsqueda por palabras clave.
- * @param {string} [params.project] - (Opcional) Filtrar por proyecto.
- * @returns {Promise<Array>} - Lista de mensajes encontrados.
  */
-async function searchMessages({ query, keyword, project }) {
+async function searchMessages(params) {
+  const validatedParams = SearchMessagesSchema.parse(params);
+  const { query, keyword, project } = validatedParams;
+
   return new Promise((resolve, reject) => {
-    // Si queremos búsqueda semántica, necesitamos los embeddings, hacemos JOIN.
-    // Si solo queremos búsqueda por keyword, no necesitamos JOIN con embeddings.
     let sql = `SELECT c.* ${query ? ', me.embedding' : ''} FROM conversations c`;
     if (query) {
       sql += ` JOIN message_embeddings me ON c.id = me.message_id`;
     }
 
-    const params = [];
+    const dbParams = [];
     const whereClauses = [];
 
     if (project) {
       whereClauses.push(`c.project = ?`);
-      params.push(project);
+      dbParams.push(project);
     }
 
-    // Búsqueda por palabras clave (si se proporciona)
     if (keyword) {
       whereClauses.push(`c.content LIKE ?`);
-      params.push(`%${keyword}%`);
+      dbParams.push(`%${keyword}%`);
     }
 
     if (whereClauses.length > 0) {
       sql += ` WHERE ` + whereClauses.join(` AND `);
     }
 
-    db.all(sql, params, async (err, rows) => {
+    db.all(sql, dbParams, async (err, rows) => {
       if (err) return reject(err);
 
-      // Si se pidió búsqueda semántica
       if (query) {
-        const queryEmbeddingJson = await generateEmbedding(query);
-        const queryEmbedding = JSON.parse(queryEmbeddingJson);
+        try {
+          const queryEmbeddingJson = await generateEmbedding(query);
+          const queryEmbedding = JSON.parse(queryEmbeddingJson);
 
-        if (!queryEmbedding || !Array.isArray(queryEmbedding)) {
-          return reject(new Error("No se pudo generar el embedding para la consulta."));
+          if (!queryEmbedding || !Array.isArray(queryEmbedding)) {
+            throw new Error("No se pudo generar el embedding válido para la consulta.");
+          }
+
+          const scoredResults = rows.map((row) => {
+            const embedding = JSON.parse(row.embedding);
+            const similarity = dotProduct(queryEmbedding, embedding);
+            return { ...row, similarity };
+          });
+
+          const SIMILARITY_THRESHOLD = 0.5;
+          const filtered = scoredResults.filter(r => r.similarity > SIMILARITY_THRESHOLD);
+          filtered.sort((a, b) => b.similarity - a.similarity);
+          
+          resolve(filtered);
+        } catch (error) {
+          reject(error);
         }
-
-        // Calcular similitud coseno
-        const scoredResults = rows.map((row) => {
-          const embedding = JSON.parse(row.embedding);
-          const similarity = dotProduct(queryEmbedding, embedding);
-          return { ...row, similarity };
-        });
-
-        // Filtrar resultados por un umbral de similitud para eliminar ruido
-        const SIMILARITY_THRESHOLD = 0.5;
-        const filtered = scoredResults.filter(r => r.similarity > SIMILARITY_THRESHOLD);
-
-        // Ordenar por similitud
-        filtered.sort((a, b) => b.similarity - a.similarity);
-        return resolve(filtered);
-      } 
-
-      resolve(rows);
+      } else {
+        resolve(rows);
+      }
     });
   });
 }

@@ -1,13 +1,15 @@
 const db = require("../database");
+const generateSessionSummary = require("./generateSessionSummary");
 
 /**
  * Guarda o actualiza el resumen de una sesión específica.
  * @param {Object} params
  * @param {string} params.sessionId - El ID de la sesión.
- * @param {string} params.summary - El contenido del resumen.
  * @returns {Promise<boolean>}
  */
-async function saveSessionSummary({ sessionId, summary }) {
+async function saveSessionSummary({ sessionId }) {
+  const summary = await generateSessionSummary({ sessionId });
+
   return new Promise((resolve, reject) => {
     const sql = `
       INSERT INTO session_summaries (session_id, summary, timestamp)

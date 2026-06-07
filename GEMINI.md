@@ -45,7 +45,9 @@ conversation-memory-mcp/
 │   │   ├── lastSession.js
 │   │   ├── recoverSession.js
 │   │   ├── pushToEngram.js
-│   │   └── getLastSessionContext.js
+│   │   ├── getLastSessionContext.js
+│   │   ├── deleteMessage.js
+│   │   └── deleteSession.js
 │   └── services/
 ├── tests/
 ├── conversations.db
@@ -112,7 +114,8 @@ Support:
 - retrieve last session
 - push to Engram
 - get last session context
-
+- delete message
+- delete session
 Future Roadmap
 
 The design must allow later addition of:

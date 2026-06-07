@@ -1,15 +1,19 @@
 const sqlite3 = require("sqlite3").verbose();
 const path = require('path');
 
-const dbPath = path.resolve(__dirname, '..', 'conversations.db');
+const dbPath = process.env.DATABASE_PATH || path.resolve(__dirname, '..', 'conversations.db');
 
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
     console.error("Error opening database:", err.message);
+    // Optionally, re-throw or handle the error more robustly depending on application needs
     return;
   }
 
-  console.log("Connected to SQLite database", dbPath);
+  // Only log if not in-memory, to avoid excessive logging during tests
+  if (dbPath !== ':memory:') {
+    console.log("Connected to SQLite database", dbPath);
+  }
 });
 
 db.serialize(() => {
@@ -20,8 +24,11 @@ db.serialize(() => {
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
       project TEXT,
       role TEXT NOT NULL,
-      content TEXT NOT NULL
-    )
+      content TEXT NOT NULL,
+      agent_id TEXT
+    );
+    -- Add agent_id column if it doesn't exist (for existing databases)
+    ALTER TABLE conversations ADD COLUMN agent_id TEXT;
   `);
   db.run(`CREATE INDEX IF NOT EXISTS idx_conversations_project ON conversations(project)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_conversations_session_id ON conversations(session_id)`);

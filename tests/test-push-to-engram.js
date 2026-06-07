@@ -21,6 +21,10 @@ describe('Push To Engram Tool', () => {
     // Probamos la herramienta
     const result = await pushToEngram({ messageId: message.id });
     
-    expect(result.content).to.equal(content);
+    // Validamos la nueva estructura
+    expect(result).to.have.property('message');
+    expect(result).to.have.property('suggestion');
+    expect(result.message.content).to.equal(content);
+    expect(result.suggestion).to.have.property('title');
   });
 });

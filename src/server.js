@@ -11,8 +11,36 @@ const recoverSession = require("./tools/recoverSession");
 const listSessions = require("./tools/listSessions");
 const pushToEngram = require("./tools/pushToEngram");
 const getLastSessionContext = require("./tools/getLastSessionContext");
-const saveSessionSummary = require("./tools/saveSessionSummary"); // Added import
-const getSessionSummary = require("./tools/getSessionSummary"); // Added import
+const saveSessionSummary = require("./tools/saveSessionSummary"); 
+const getSessionSummary = require("./tools/getSessionSummary"); 
+const finalizeSession = require("./tools/finalizeSession");
+const deleteMessage = require("./tools/deleteMessage");
+const deleteSession = require("./tools/deleteSession");
+const deleteMessagePair = require("./tools/deleteMessagePair");
+
+// Seguimiento de inactividad
+const activityTracker = new Map();
+const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutos
+
+function updateActivity(sessionId) {
+  // Limpiar temporizador anterior si existe
+  if (activityTracker.has(sessionId)) {
+    clearTimeout(activityTracker.get(sessionId).timer);
+  }
+
+  // Crear nuevo temporizador
+  const timer = setTimeout(async () => {
+    console.log(`Inactividad detectada para la sesión: ${sessionId}`);
+    try {
+      await finalizeSession(sessionId);
+    } catch (err) {
+      console.error(`Error al finalizar sesión por inactividad ${sessionId}:`, err);
+    }
+    activityTracker.delete(sessionId);
+  }, INACTIVITY_TIMEOUT);
+
+  activityTracker.set(sessionId, { timer });
+}
 
 // Changed import for embeddingService
 const { generateEmbedding, saveEmbedding, initializeEmbeddingPipeline } = require("./services/embeddingService");
@@ -148,7 +176,33 @@ server.tool(
   }
 );
 
-// 10. generateAndSaveEmbedding
+// 10. finalizeSession
+server.tool(
+  "finalizeSession",
+  "Finaliza explícitamente una sesión, generando y guardando su resumen",
+  {
+    sessionId: z.string().describe("ID de la sesión"),
+  },
+  async ({ sessionId }) => {
+    const summary = await finalizeSession(sessionId);
+    return { content: [{ type: "text", text: `Sesión finalizada. Resumen: ${summary}` }] };
+  }
+);
+
+// 11. deleteSession
+server.tool(
+  "deleteSession",
+  "Elimina todos los mensajes y embeddings de una sesión específica",
+  {
+    sessionId: z.string().describe("ID de la sesión a eliminar"),
+  },
+  async ({ sessionId }) => {
+    await deleteSession(sessionId);
+    return { content: [{ type: "text", text: `Sesión ${sessionId} y sus mensajes eliminados correctamente.` }] };
+  }
+);
+
+// 11. generateAndSaveEmbedding
 server.tool(
   "generateAndSaveEmbedding",
   "Genera y guarda un embedding para un mensaje dado",
@@ -185,6 +239,27 @@ app.post("/messages", async (req, res) => {
 async function startServer() {
   await initializeEmbeddingPipeline();
   const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+startServer();
+c (req, res) => {
+  await transport.handlePostMessage(req, res);
+});
+
+// Initialize the embedding pipeline before starting the server
+async function startServer() {
+  await initializeEmbeddingPipeline();
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+startServer();
+ocess.env.PORT || 3000;
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
