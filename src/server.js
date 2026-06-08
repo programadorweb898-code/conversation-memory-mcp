@@ -1,8 +1,40 @@
 const express = require("express");
+const helmet = require("helmet");
 const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
 const { SSEServerTransport } = require("@modelcontextprotocol/sdk/server/sse.js");
 const { z } = require("zod");
+const rateLimit = require("express-rate-limit");
+const errorHandler = require("./errorHandler");
 
+// límite para conexiones SSE: máximo 10 por IP por minuto
+const sseLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  message: { error: "Demasiadas conexiones SSE. Intentá en un minuto." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// límite para mensajes: máximo 60 por IP por minuto
+const messagesLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: { error: "Demasiados mensajes. Intentá en un minuto." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+function requireJson(req, res, next) {
+  const contentType = req.headers["content-type"] || "";
+
+  if (!contentType.includes("application/json")) {
+    return res.status(415).json({
+      error: "Content-Type debe ser application/json",
+    });
+  }
+
+  next();
+}
 // Import tools
 const saveMessage = require("./tools/saveMessage");
 const searchMessages = require("./tools/searchMessages");
@@ -218,6 +250,32 @@ server.tool(
   }
 );
 
+// 12. deleteMessage
+server.tool(
+  "deleteMessage",
+  "Elimina un mensaje específico y su embedding asociado",
+  {
+    messageId: z.string().describe("ID del mensaje a eliminar"),
+  },
+  async ({ messageId }) => {
+    await deleteMessage(messageId);
+    return { content: [{ type: "text", text: `Mensaje ${messageId} y su embedding eliminados correctamente.` }] };
+  }
+);
+
+// 13. deleteMessagePair
+server.tool(
+  "deleteMessagePair",
+  "Elimina un mensaje y su mensaje relacionado (pregunta/respuesta) y sus embeddings",
+  {
+    messageId: z.string().describe("ID del mensaje del par a eliminar"),
+  },
+  async ({ messageId }) => {
+    await deleteMessagePair(messageId);
+    return { content: [{ type: "text", text: `Par de mensajes con ${messageId} y sus embeddings eliminados correctamente.` }] };
+  }
+);
+
 // 11. generateAndSaveEmbedding
 server.tool(
   "generateAndSaveEmbedding",
@@ -240,14 +298,38 @@ server.tool(
 
 
 const app = express();
-let transport;
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  xPoweredBy: true,
+}));
 
-app.get("/sse", async (req, res) => {
-  transport = new SSEServerTransport("/messages", res);
+const transports = new Map();
+
+app.get("/sse", sseLimiter,  async (req, res) => {
+  const clientId = crypto.randomUUID();
+  
+  const transport = new SSEServerTransport("/messages", res);
+  transports.set(clientId, transport);
+  
+  // cuando el cliente se desconecta, limpiar
+  res.on("close", () => {
+    transports.delete(clientId);
+    console.log(`Cliente ${clientId} desconectado. Transports activos: ${transports.size}`);
+  });
+  res.setHeader("X-Client-Id", clientId);
+  
   await server.connect(transport);
 });
 
-app.post("/messages", async (req, res) => {
+app.post("/messages", messagesLimiter, requireJson, async (req, res) => {
+  const clientId = req.headers["x-client-id"];
+  
+  if (!clientId || !transports.has(clientId)) {
+    return res.status(400).json({ error: "Cliente no identificado o sesión expirada" });
+  }
+  
+  const transport = transports.get(clientId);
   await transport.handlePostMessage(req, res);
 });
 

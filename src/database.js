@@ -1,7 +1,37 @@
 const sqlite3 = require("sqlite3").verbose();
 const path = require('path');
 
-const dbPath = process.env.DATABASE_PATH || path.resolve(__dirname, '..', 'conversations.db');
+// DESPUÉS
+const DEFAULT_DB_PATH = path.resolve(__dirname, '..', 'conversations.db');
+const PROJECT_ROOT = path.resolve(__dirname, '..');
+
+function resolveDbPath(envPath) {
+  if (!envPath) return DEFAULT_DB_PATH;
+
+  const resolved = path.resolve(envPath);
+
+  // bloquear path traversal: el archivo debe estar dentro del proyecto
+  if (!resolved.startsWith(PROJECT_ROOT)) {
+    console.error(
+      `DATABASE_PATH inválido: "${resolved}" está fuera del directorio del proyecto.`
+    );
+    console.error(`Usando path por defecto: ${DEFAULT_DB_PATH}`);
+    return DEFAULT_DB_PATH;
+  }
+
+  // bloquear extensiones peligrosas
+  const ext = path.extname(resolved);
+  if (ext !== '.db' && ext !== '.sqlite' && ext !== '.sqlite3') {
+    console.error(
+      `DATABASE_PATH inválido: extensión "${ext}" no permitida.`
+    );
+    return DEFAULT_DB_PATH;
+  }
+
+  return resolved;
+}
+
+const dbPath = resolveDbPath(process.env.DATABASE_PATH);
 
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
@@ -14,6 +44,16 @@ const db = new sqlite3.Database(dbPath, (err) => {
   if (dbPath !== ':memory:') {
     console.log("Connected to SQLite database", dbPath);
   }
+
+  // Cargar la extensión sqlite-vss
+  db.loadExtension('./vss0', (err) => {
+    if (err) {
+      console.error("Error loading sqlite-vss extension:", err.message);
+      // Depending on strictness, you might want to exit or throw here
+    } else {
+      console.log("sqlite-vss extension loaded successfully.");
+    }
+  });
 });
 
 db.runAsync = (sql, params = []) =>
@@ -65,24 +105,35 @@ db.serialize(() => {
           console.error("Error adding agent_id column:", alterErr.message);
         }
       });
-    }
-  });
-  db.run(`CREATE INDEX IF NOT EXISTS idx_conversations_project ON conversations(project)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_conversations_session_id ON conversations(session_id)`);
-  db.run(`
+    });
+    db.run(`CREATE INDEX IF NOT EXISTS idx_conversations_project ON conversations(project)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_conversations_session_id ON conversations(session_id)`);
+    db.run(`
     CREATE TABLE IF NOT EXISTS message_embeddings (
       message_id TEXT PRIMARY KEY,
       embedding TEXT NOT NULL,
       FOREIGN KEY(message_id) REFERENCES conversations(id)
     )
-  `);
-  db.run(`
+    `);
+    db.run(`
     CREATE TABLE IF NOT EXISTS session_summaries (
       session_id TEXT PRIMARY KEY,
       summary TEXT NOT NULL,
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )
-  `);
-});
+    `);
 
-module.exports = db;
+    // Tablas para sqlite-vss
+    db.run(`
+    CREATE TABLE IF NOT EXISTS vss_ip_params(key TEXT PRIMARY KEY, value ANY)
+    `);
+    db.run(`
+    CREATE TABLE IF NOT EXISTS vss_config(key TEXT PRIMARY KEY, value ANY)
+    `);
+    db.run(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS vss_embeddings USING vss0(id, embedding(384))
+    `);
+    });
+
+    module.exports = db;
+

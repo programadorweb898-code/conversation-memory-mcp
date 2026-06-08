@@ -46,31 +46,17 @@ async function generateEmbedding(text) {
  */
 async function saveEmbedding(messageId, embedding) {
   try {
-    await db.runAsync(
-      `INSERT OR REPLACE INTO message_embeddings (message_id, embedding) VALUES (?, ?)`,
-      [messageId, embedding]
-    );
-    console.log(`Embedding for message ${messageId} saved.`);
-  } catch (err) {
-    console.error("Error saving embedding:", err.message);
-    throw err;
-  }
-}
+    const embeddingArray = JSON.parse(embedding); // Parse the JSON string back to an array of floats
+    // Convert float array to a Buffer (Float32Array)
+    const embeddingBuffer = Buffer.from(new Float32Array(embeddingArray).buffer);
 
-/**
- * Retrieves an embedding for a given message ID from the database.
- * @param {string} messageId The ID of the message.
- * @returns {Promise<string|null>} The JSON string representation of the embedding, or null if not found.
- */
-async function getEmbedding(messageId) {
-  try {
-    const row = await db.getAsync(
-      `SELECT embedding FROM message_embeddings WHERE message_id = ?`,
-      [messageId]
+    await db.runAsync(
+      `INSERT INTO vss_embeddings (id, embedding) VALUES (?, ?)`,
+      [messageId, embeddingBuffer] // Insert as Buffer
     );
-    return row ? row.embedding : null;
+    console.log(`Embedding for message ${messageId} saved to vss_embeddings.`);
   } catch (err) {
-    console.error("Error retrieving embedding:", err.message);
+    console.error("Error saving embedding to vss_embeddings:", err.message);
     throw err;
   }
 }
@@ -79,5 +65,4 @@ module.exports = {
   initializeEmbeddingPipeline, // Export the initialization function
   generateEmbedding,
   saveEmbedding,
-  getEmbedding,
 };

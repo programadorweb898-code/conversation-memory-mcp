@@ -5,7 +5,7 @@ const embeddingService = require("../services/embeddingService");
 
 const SaveMessageSchema = z.object({
   sessionId: z.string().min(1),
-  project: z.string().min(1),
+  project: z.string().min(1).optional().nullable(),
   role: z.enum(["user", "assistant", "system"]),
   content: z.string().min(1),
   agentId: z.string().optional(),
@@ -23,7 +23,7 @@ async function saveMessage(params) {
       VALUES (?, ?, datetime('now'), ?, ?, ?, ?)
     `;
 
-    await db.runAsync(sql, [messageId, sessionId, project, role, content, agentId]);
+    await db.runAsync(sql, [messageId, sessionId, project ?? null, role, content, agentId ?? null]);
   } catch (err) {
     console.error("Error saving message:", err.message);
     throw err;
