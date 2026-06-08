@@ -1,10 +1,10 @@
 const db = require("../database");
 const { v4: uuidv4 } = require("uuid");
 const { z } = require("zod");
-const { generateEmbedding, saveEmbedding } = require("../services/embeddingService");
+const embeddingService = require("../services/embeddingService");
 
 const SaveMessageSchema = z.object({
-  sessionId: z.string().uuid(),
+  sessionId: z.string().min(1),
   project: z.string().min(1),
   role: z.enum(["user", "assistant", "system"]),
   content: z.string().min(1),
@@ -27,8 +27,8 @@ async function saveMessage(params) {
       if (err) return reject(err);
 
       try {
-        const generatedEmbedding = await generateEmbedding(content);
-        await saveEmbedding(messageId, generatedEmbedding);
+        const generatedEmbedding = await embeddingService.generateEmbedding(content);
+        await embeddingService.saveEmbedding(messageId, generatedEmbedding);
         resolve(true);
       } catch (embeddingErr) {
         console.error("Error generating embedding:", embeddingErr);

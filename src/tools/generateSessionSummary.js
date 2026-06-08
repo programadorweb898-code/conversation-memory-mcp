@@ -25,8 +25,7 @@ async function generateSessionSummary({ sessionId }) {
         // Concatenar mensajes para un resumen simple
         const summary = rows
           .map((row) => `${row.role}: ${row.content}`)
-          .join("
-");
+          .join("");
 
         resolve(summary);
       }

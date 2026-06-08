@@ -27,9 +27,22 @@ db.serialize(() => {
       content TEXT NOT NULL,
       agent_id TEXT
     );
-    -- Add agent_id column if it doesn't exist (for existing databases)
-    ALTER TABLE conversations ADD COLUMN agent_id TEXT;
   `);
+  db.all(`PRAGMA table_info(conversations)`, (err, columns) => {
+    if (err) {
+      console.error("Error checking conversations schema:", err.message);
+      return;
+    }
+
+    const hasAgentId = columns.some((column) => column.name === "agent_id");
+    if (!hasAgentId) {
+      db.run(`ALTER TABLE conversations ADD COLUMN agent_id TEXT`, (alterErr) => {
+        if (alterErr) {
+          console.error("Error adding agent_id column:", alterErr.message);
+        }
+      });
+    }
+  });
   db.run(`CREATE INDEX IF NOT EXISTS idx_conversations_project ON conversations(project)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_conversations_session_id ON conversations(session_id)`);
   db.run(`

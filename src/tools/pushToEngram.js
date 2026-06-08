@@ -10,9 +10,8 @@ async function pushToEngram({ messageId }) {
   return new Promise((resolve, reject) => {
     // Recuperar el mensaje y el contexto de sesión
     const sql = `
-      SELECT c.*, s.id as session_id 
+      SELECT c.*
       FROM conversations c
-      JOIN sessions s ON c.session_id = s.id
       WHERE c.id = ?
     `;
     

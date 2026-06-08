@@ -6,7 +6,7 @@ const db = require("../database");
  */
 async function lastSession() {
   return new Promise((resolve, reject) => {
-    const sql = `SELECT session_id FROM conversations ORDER BY timestamp DESC LIMIT 1`;
+    const sql = `SELECT session_id FROM conversations ORDER BY timestamp DESC, rowid DESC LIMIT 1`;
 
     db.get(sql, [], (err, row) => {
       if (err) {

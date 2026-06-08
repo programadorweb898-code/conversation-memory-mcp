@@ -53,13 +53,7 @@ describe('saveMessage', () => {
 
   afterEach((done) => {
     sinon.restore(); // Restore all stubs
-    db.close((err) => {
-      if (err) return done(err);
-      // Re-open db connection to ensure it's fresh for the next test
-      // This is crucial for ':memory:' databases
-      require('../src/database'); 
-      done();
-    });
+    done();
   });
 
   it('should save a message successfully with required fields', async () => {
