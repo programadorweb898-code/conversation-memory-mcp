@@ -64,6 +64,7 @@ Como agente, debo asegurar la persistencia automática de toda la historia de tr
 
 1. **Persistencia en MCP (Registro Crudo):** Tras cada interacción (prompt y respuesta), debo ejecutar obligatoriamente `saveMessage` para persistir el contenido automáticamente.
 2. **Persistencia en Engram (Conocimiento Semántico):** Cuando detecte una decisión técnica, un bug fix, o una regla de proyecto, debo ejecutar automáticamente `mem_save` en Engram sin esperar a que el usuario lo solicite.
+3. **Uso Activo del Servidor MCP Local:** Asumo que el servidor MCP `conversation-memory-mcp` (definido en `.gemini/settings.json`) está en ejecución o debe ser iniciado cuando sea necesario para las operaciones de memoria conversacional. Debo utilizar activamente las herramientas de este servidor para gestionar el historial de conversaciones y el contexto.
 
 El usuario no debe tener que recordar guardar el historial o el conocimiento; es responsabilidad exclusiva del agente.
 
