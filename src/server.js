@@ -6,6 +6,7 @@ const { z } = require("zod");
 // Import tools
 const saveMessage = require("./tools/saveMessage");
 const searchMessages = require("./tools/searchMessages");
+const semanticSearchMessages = require("./tools/semanticSearchMessages");
 const lastSession = require("./tools/lastSession");
 const recoverSession = require("./tools/recoverSession");
 const listSessions = require("./tools/listSessions");
@@ -79,6 +80,21 @@ server.tool(
   },
   async ({ query, project }) => {
     const results = await searchMessages({ query, project });
+    return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
+  }
+);
+
+// 2.5. semanticSearchMessages
+server.tool(
+  "semanticSearchMessages",
+  "Busca mensajes semánticamente similares a una consulta",
+  {
+    query: z.string().describe("La consulta de búsqueda"),
+    project: z.string().optional().describe("Filtrar por proyecto"),
+    limit: z.number().optional().describe("Número máximo de resultados (por defecto: 5)"),
+  },
+  async ({ query, project, limit }) => {
+    const results = await semanticSearchMessages({ query, project, limit });
     return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
   }
 );
