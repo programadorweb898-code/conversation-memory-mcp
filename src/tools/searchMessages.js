@@ -17,8 +17,8 @@ async function searchMessages(params) {
   const validatedParams = SearchMessagesSchema.parse(params);
   const { query, keyword, project } = validatedParams;
 
-  return new Promise((resolve, reject) => {
-    let sql = `SELECT c.* ${query ? ', me.embedding' : ''} FROM conversations c`;
+  try {
+    let sql = `SELECT c.* ${query ? ", me.embedding" : ""} FROM conversations c`;
     if (query) {
       sql += ` JOIN message_embeddings me ON c.id = me.message_id`;
     }
@@ -40,37 +40,32 @@ async function searchMessages(params) {
       sql += ` WHERE ` + whereClauses.join(` AND `);
     }
 
-    db.all(sql, dbParams, async (err, rows) => {
-      if (err) return reject(err);
+    const rows = await db.allAsync(sql, dbParams);
+    if (!query) {
+      return rows;
+    }
 
-      if (query) {
-        try {
-          const queryEmbeddingJson = await generateEmbedding(query);
-          const queryEmbedding = JSON.parse(queryEmbeddingJson);
+    const queryEmbeddingJson = await generateEmbedding(query);
+    const queryEmbedding = JSON.parse(queryEmbeddingJson);
 
-          if (!queryEmbedding || !Array.isArray(queryEmbedding)) {
-            throw new Error("No se pudo generar el embedding válido para la consulta.");
-          }
+    if (!Array.isArray(queryEmbedding)) {
+      throw new Error("No se pudo generar el embedding valido para la consulta.");
+    }
 
-          const scoredResults = rows.map((row) => {
-            const embedding = JSON.parse(row.embedding);
-            const similarity = dotProduct(queryEmbedding, embedding);
-            return { ...row, similarity };
-          });
-
-          const SIMILARITY_THRESHOLD = 0.5;
-          const filtered = scoredResults.filter(r => r.similarity > SIMILARITY_THRESHOLD);
-          filtered.sort((a, b) => b.similarity - a.similarity);
-          
-          resolve(filtered);
-        } catch (error) {
-          reject(error);
-        }
-      } else {
-        resolve(rows);
-      }
+    const scoredResults = rows.map((row) => {
+      const embedding = JSON.parse(row.embedding);
+      const similarity = dotProduct(queryEmbedding, embedding);
+      return { ...row, similarity };
     });
-  });
+
+    const SIMILARITY_THRESHOLD = 0.5;
+    return scoredResults
+      .filter((result) => result.similarity > SIMILARITY_THRESHOLD)
+      .sort((a, b) => b.similarity - a.similarity);
+  } catch (err) {
+    console.error("Error searching messages:", err.message);
+    throw err;
+  }
 }
 
 function dotProduct(a, b) {

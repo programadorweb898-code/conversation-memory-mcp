@@ -8,9 +8,8 @@ const generateSessionSummary = require("./generateSessionSummary");
  * @returns {Promise<boolean>}
  */
 async function saveSessionSummary({ sessionId }) {
-  const summary = await generateSessionSummary({ sessionId });
-
-  return new Promise((resolve, reject) => {
+  try {
+    const summary = await generateSessionSummary({ sessionId });
     const sql = `
       INSERT INTO session_summaries (session_id, summary, timestamp)
       VALUES (?, ?, datetime('now'))
@@ -19,14 +18,12 @@ async function saveSessionSummary({ sessionId }) {
         timestamp = excluded.timestamp
     `;
 
-    db.run(sql, [sessionId, summary], (err) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(true);
-      }
-    });
-  });
+    await db.runAsync(sql, [sessionId, summary]);
+    return true;
+  } catch (err) {
+    console.error("Error saving session summary:", err.message);
+    throw err;
+  }
 }
 
 module.exports = saveSessionSummary;

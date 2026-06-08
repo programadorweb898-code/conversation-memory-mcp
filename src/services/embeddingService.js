@@ -1,7 +1,6 @@
 // src/services/embeddingService.js
 
 const db = require("../database");
-const { v4: uuidv4 } = require("uuid");
 const { pipeline } = require("@xenova/transformers"); // Import pipeline
 
 // Specify the model and ensure it's quantized for efficiency
@@ -46,20 +45,16 @@ async function generateEmbedding(text) {
  * @returns {Promise<void>}
  */
 async function saveEmbedding(messageId, embedding) {
-  return new Promise((resolve, reject) => {
-    db.run(
+  try {
+    await db.runAsync(
       `INSERT OR REPLACE INTO message_embeddings (message_id, embedding) VALUES (?, ?)`,
-      [messageId, embedding],
-      function (err) {
-        if (err) {
-          console.error("Error saving embedding:", err.message);
-          return reject(err);
-        }
-        console.log(`Embedding for message ${messageId} saved.`);
-        resolve();
-      }
+      [messageId, embedding]
     );
-  });
+    console.log(`Embedding for message ${messageId} saved.`);
+  } catch (err) {
+    console.error("Error saving embedding:", err.message);
+    throw err;
+  }
 }
 
 /**
@@ -68,19 +63,16 @@ async function saveEmbedding(messageId, embedding) {
  * @returns {Promise<string|null>} The JSON string representation of the embedding, or null if not found.
  */
 async function getEmbedding(messageId) {
-  return new Promise((resolve, reject) => {
-    db.get(
+  try {
+    const row = await db.getAsync(
       `SELECT embedding FROM message_embeddings WHERE message_id = ?`,
-      [messageId],
-      (err, row) => {
-        if (err) {
-          console.error("Error retrieving embedding:", err.message);
-          return reject(err);
-        }
-        resolve(row ? row.embedding : null);
-      }
+      [messageId]
     );
-  });
+    return row ? row.embedding : null;
+  } catch (err) {
+    console.error("Error retrieving embedding:", err.message);
+    throw err;
+  }
 }
 
 module.exports = {

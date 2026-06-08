@@ -7,17 +7,14 @@ const db = require("../database");
  * @returns {Promise<Object|null>} - El resumen y su timestamp o null si no existe.
  */
 async function getSessionSummary({ sessionId }) {
-  return new Promise((resolve, reject) => {
+  try {
     const sql = `SELECT summary, timestamp FROM session_summaries WHERE session_id = ?`;
-
-    db.get(sql, [sessionId], (err, row) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(row || null);
-      }
-    });
-  });
+    const row = await db.getAsync(sql, [sessionId]);
+    return row || null;
+  } catch (err) {
+    console.error("Error retrieving session summary:", err.message);
+    throw err;
+  }
 }
 
 module.exports = getSessionSummary;

@@ -5,7 +5,7 @@ const db = require("../database");
  * @returns {Promise<Array>} - Lista de objetos con session_id y timestamp de última actividad.
  */
 async function listSessions() {
-  return new Promise((resolve, reject) => {
+  try {
     const sql = `
       SELECT session_id, MAX(timestamp) as last_activity 
       FROM conversations 
@@ -13,14 +13,12 @@ async function listSessions() {
       ORDER BY last_activity DESC
     `;
 
-    db.all(sql, [], (err, rows) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(rows || []);
-      }
-    });
-  });
+    const rows = await db.allAsync(sql);
+    return rows || [];
+  } catch (err) {
+    console.error("Error listing sessions:", err.message);
+    throw err;
+  }
 }
 
 module.exports = listSessions;

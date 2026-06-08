@@ -5,17 +5,14 @@ const db = require("../database");
  * @returns {Promise<string|null>} - El ID de la sesión más reciente o null si no hay registros.
  */
 async function lastSession() {
-  return new Promise((resolve, reject) => {
+  try {
     const sql = `SELECT session_id FROM conversations ORDER BY timestamp DESC, rowid DESC LIMIT 1`;
-
-    db.get(sql, [], (err, row) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(row ? row.session_id : null);
-      }
-    });
-  });
+    const row = await db.getAsync(sql);
+    return row ? row.session_id : null;
+  } catch (err) {
+    console.error("Error retrieving last session:", err.message);
+    throw err;
+  }
 }
 
 module.exports = lastSession;

@@ -7,17 +7,13 @@ const db = require("../database");
  * @returns {Promise<Array>} - Lista de mensajes de la sesión.
  */
 async function recoverSession({ sessionId }) {
-  return new Promise((resolve, reject) => {
+  try {
     const sql = `SELECT * FROM conversations WHERE session_id = ? ORDER BY timestamp ASC`;
-    
-    db.all(sql, [sessionId], (err, rows) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(rows);
-      }
-    });
-  });
+    return await db.allAsync(sql, [sessionId]);
+  } catch (err) {
+    console.error("Error recovering session:", err.message);
+    throw err;
+  }
 }
 
 module.exports = recoverSession;

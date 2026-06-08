@@ -245,24 +245,3 @@ async function startServer() {
 }
 
 startServer();
-c (req, res) => {
-  await transport.handlePostMessage(req, res);
-});
-
-// Initialize the embedding pipeline before starting the server
-async function startServer() {
-  await initializeEmbeddingPipeline();
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-}
-
-startServer();
-ocess.env.PORT || 3000;
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-}
-
-startServer();

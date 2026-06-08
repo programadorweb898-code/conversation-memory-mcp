@@ -16,27 +16,28 @@ async function saveMessage(params) {
   const { sessionId, project, role, content, agentId } = validatedParams;
   const messageId = uuidv4();
 
-  return new Promise((resolve, reject) => {
+  try {
     const sql = `
       INSERT INTO conversations
       (id, session_id, timestamp, project, role, content, agent_id)
       VALUES (?, ?, datetime('now'), ?, ?, ?, ?)
     `;
-    
-    db.run(sql, [messageId, sessionId, project, role, content, agentId], async (err) => {
-      if (err) return reject(err);
 
-      try {
-        const generatedEmbedding = await embeddingService.generateEmbedding(content);
-        await embeddingService.saveEmbedding(messageId, generatedEmbedding);
-        resolve(true);
-      } catch (embeddingErr) {
-        console.error("Error generating embedding:", embeddingErr);
-        // Resolvemos true porque el mensaje sí se guardó correctamente en DB
-        resolve(true); 
-      }
-    });
-  });
+    await db.runAsync(sql, [messageId, sessionId, project, role, content, agentId]);
+  } catch (err) {
+    console.error("Error saving message:", err.message);
+    throw err;
+  }
+
+  try {
+    const generatedEmbedding = await embeddingService.generateEmbedding(content);
+    await embeddingService.saveEmbedding(messageId, generatedEmbedding);
+  } catch (embeddingErr) {
+    console.error("Error generating embedding:", embeddingErr);
+    // Return success because the message was already persisted.
+  }
+
+  return true;
 }
 
 module.exports = saveMessage;
