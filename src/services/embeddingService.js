@@ -46,23 +46,32 @@ async function generateEmbedding(text) {
  */
 async function saveEmbedding(messageId, embedding) {
   try {
-    const embeddingArray = JSON.parse(embedding); // Parse the JSON string back to an array of floats
-    // Convert float array to a Buffer (Float32Array)
-    const embeddingBuffer = Buffer.from(new Float32Array(embeddingArray).buffer);
-
+    // The 'embedding' parameter is already a JSON string from generateEmbedding
     await db.runAsync(
-      `INSERT INTO vss_embeddings (id, embedding) VALUES (?, ?)`,
-      [messageId, embeddingBuffer] // Insert as Buffer
+      `INSERT OR REPLACE INTO message_embeddings (message_id, embedding) VALUES (?, ?)`,
+      [messageId, embedding] // embedding ya viene como JSON string
     );
-    console.log(`Embedding for message ${messageId} saved to vss_embeddings.`);
+    console.log(`Embedding for message ${messageId} saved to message_embeddings.`);
   } catch (err) {
-    console.error("Error saving embedding to vss_embeddings:", err.message);
+    console.error("Error saving embedding to message_embeddings:", err.message);
     throw err;
   }
 }
+
+async function getEmbedding(messageId) {
+  const row = await db.getAsync(
+    `SELECT embedding FROM message_embeddings WHERE message_id = ?`,
+    [messageId]
+  );
+  return row ? row.embedding : null;
+}
+
 
 module.exports = {
   initializeEmbeddingPipeline, // Export the initialization function
   generateEmbedding,
   saveEmbedding,
+  getEmbedding,
 };
+
+// TODO: migrar a pgvector o sqlite-vss si supera 500k mensajes

@@ -46,14 +46,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
   }
 
   // Cargar la extensión sqlite-vss
-  db.loadExtension('./vss0', (err) => {
-    if (err) {
-      console.error("Error loading sqlite-vss extension:", err.message);
-      // Depending on strictness, you might want to exit or throw here
-    } else {
-      console.log("sqlite-vss extension loaded successfully.");
-    }
-  });
+
 });
 
 db.runAsync = (sql, params = []) =>
@@ -123,17 +116,7 @@ db.serialize(() => {
     )
     `);
 
-    // Tablas para sqlite-vss
-    db.run(`
-    CREATE TABLE IF NOT EXISTS vss_ip_params(key TEXT PRIMARY KEY, value ANY)
-    `);
-    db.run(`
-    CREATE TABLE IF NOT EXISTS vss_config(key TEXT PRIMARY KEY, value ANY)
-    `);
-    db.run(`
-    CREATE VIRTUAL TABLE IF NOT EXISTS vss_embeddings USING vss0(id, embedding(384))
-    `);
+
     });
 
-    module.exports = db;
-
+module.exports = db;

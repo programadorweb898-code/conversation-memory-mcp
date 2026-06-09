@@ -1,50 +1,52 @@
-const db = require('../database');
-const { generateEmbedding } = require('../services/embeddingService');
+const db = require("../database");
+const { generateEmbedding, calculateCosineSimilarity } = require("../services/embeddingService");
 
 async function semanticSearchMessages({ query, project, limit = 5 }) {
   if (!query) throw new Error("La consulta no puede estar vacía.");
 
   const queryEmbeddingJson = await generateEmbedding(query);
-  const queryEmbedding = JSON.parse(queryEmbeddingJson); // This is an array of floats
-
-  // Convert queryEmbedding to a Buffer (Float32Array) for vss_search
-  const queryEmbeddingBuffer = Buffer.from(new Float32Array(queryEmbedding).buffer);
+  const queryEmbedding = JSON.parse(queryEmbeddingJson); // Esto es un array de floats
 
   let sql = `
     SELECT
-      T1.id AS message_id,
-      T2.content,
-      T2.session_id,
-      T2.project,
-      T2.role,
-      T2.timestamp,
-      T2.agent_id,
-      vss_search(T1.embedding, ?) AS distance
-    FROM vss_embeddings AS T1
-    JOIN conversations AS T2 ON T1.id = T2.id
+      me.message_id,
+      me.embedding AS message_embedding_json,
+      c.content,
+      c.session_id,
+      c.project,
+      c.role,
+      c.timestamp,
+      c.agent_id
+    FROM message_embeddings AS me
+    JOIN conversations AS c ON me.message_id = c.id
   `;
-  const params = [queryEmbeddingBuffer];
+  const params = [];
 
   if (project) {
-    sql += ` WHERE T2.project = ?`;
+    sql += ` WHERE c.project = ?`;
     params.push(project);
   }
 
-  sql += ` ORDER BY distance LIMIT ?`;
-  params.push(limit);
+  const allMessagesWithEmbeddings = await db.allAsync(sql, params);
 
-  const messages = await db.allAsync(sql, params);
+  const resultsWithSimilarity = allMessagesWithEmbeddings.map((row) => {
+    const messageEmbedding = JSON.parse(row.message_embedding_json);
+    const similarity = calculateCosineSimilarity(queryEmbedding, messageEmbedding);
+    return {
+      message_id: row.message_id,
+      content: row.content,
+      session_id: row.session_id,
+      project: row.project,
+      role: row.role,
+      timestamp: row.timestamp,
+      agent_id: row.agent_id,
+      similarity: similarity,
+    };
+  });
 
-  return messages.map(msg => ({
-    message_id: msg.message_id,
-    content: msg.content,
-    session_id: msg.session_id,
-    project: msg.project,
-    role: msg.role,
-    timestamp: msg.timestamp,
-    agent_id: msg.agent_id,
-    distance: msg.distance // Expose the distance for now, can be transformed to similarity if needed
-  }));
+  resultsWithSimilarity.sort((a, b) => b.similarity - a.similarity);
+
+  return resultsWithSimilarity.slice(0, limit);
 }
 
 module.exports = semanticSearchMessages;
