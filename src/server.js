@@ -5,7 +5,7 @@ const { SSEServerTransport } = require("@modelcontextprotocol/sdk/server/sse.js"
 const { z } = require("zod");
 const rateLimit = require("express-rate-limit");
 const errorHandler = require("./errorHandler");
-
+const crypto = require("crypto");
 // límite para conexiones SSE: máximo 10 por IP por minuto
 const sseLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -303,6 +303,9 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
   xPoweredBy: true,
 }));
+
+// Coloca el middleware de errores después de todas las rutas y middleware para que capture los errores.
+app.use(errorHandler);
 
 const transports = new Map();
 
