@@ -51,30 +51,6 @@ const deleteMessage = require("./tools/deleteMessage");
 const deleteSession = require("./tools/deleteSession");
 const deleteMessagePair = require("./tools/deleteMessagePair");
 
-// Seguimiento de inactividad
-const activityTracker = new Map();
-const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutos
-
-function updateActivity(sessionId) {
-  // Limpiar temporizador anterior si existe
-  if (activityTracker.has(sessionId)) {
-    clearTimeout(activityTracker.get(sessionId).timer);
-  }
-
-  // Crear nuevo temporizador
-  const timer = setTimeout(async () => {
-    console.log(`Inactividad detectada para la sesión: ${sessionId}`);
-    try {
-      await finalizeSession(sessionId);
-    } catch (err) {
-      console.error(`Error al finalizar sesión por inactividad ${sessionId}:`, err);
-    }
-    activityTracker.delete(sessionId);
-  }, INACTIVITY_TIMEOUT);
-
-  activityTracker.set(sessionId, { timer });
-}
-
 // Changed import for embeddingService
 const { generateEmbedding, saveEmbedding, initializeEmbeddingPipeline } = require("./services/embeddingService");
 
@@ -345,4 +321,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = { app, startServer };

@@ -8,7 +8,6 @@ process.env.DATABASE_PATH = ':memory:';
 // Import db and saveMessage AFTER setting the environment variable
 const db = require('../src/database');
 const saveMessage = require('../src/tools/saveMessage');
-const { generateEmbedding, saveEmbedding } = require('../src/services/embeddingService');
 
 describe('saveMessage', () => {
   let embeddingStub;
