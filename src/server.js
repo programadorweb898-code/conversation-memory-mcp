@@ -305,7 +305,6 @@ app.use(helmet({
 }));
 
 // Coloca el middleware de errores después de todas las rutas y middleware para que capture los errores.
-app.use(errorHandler);
 
 const transports = new Map();
 
@@ -340,6 +339,7 @@ app.post("/messages", messagesLimiter, requireJson, async (req, res) => {
 async function startServer() {
   await initializeEmbeddingPipeline();
   const PORT = process.env.PORT || 3000;
+  app.use(errorHandler);
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });

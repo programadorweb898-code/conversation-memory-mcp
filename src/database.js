@@ -98,7 +98,6 @@ db.serialize(() => {
           console.error("Error adding agent_id column:", alterErr.message);
         }
       });
-    });
     db.run(`CREATE INDEX IF NOT EXISTS idx_conversations_project ON conversations(project)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_conversations_session_id ON conversations(session_id)`);
     db.run(`
