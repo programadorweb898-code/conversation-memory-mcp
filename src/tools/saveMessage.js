@@ -2,6 +2,7 @@ const db = require("../database");
 const { v4: uuidv4 } = require("uuid");
 const { z } = require("zod");
 const embeddingService = require("../services/embeddingService");
+const embeddingQueue = require("../services/embeddingQueue");
 
 const SaveMessageSchema = z.object({
   sessionId: z.string().min(1),
@@ -29,15 +30,11 @@ async function saveMessage(params) {
     throw err;
   }
 
-  try {
-    const generatedEmbedding = await embeddingService.generateEmbedding(content);
-    await embeddingService.saveEmbedding(messageId, generatedEmbedding);
-  } catch (embeddingErr) {
-    console.error("Error generating embedding:", embeddingErr);
-    // Return success because the message was already persisted.
-  }
+  // Add embedding generation to the queue
+  embeddingQueue.addTask({ messageId, content });
+  console.log(`Embedding task for message ${messageId} queued.`);
 
   return true;
 }
 
-module.exports = saveMessage;
+module.exports = { saveMessage, SaveMessageSchema };
