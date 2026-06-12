@@ -1,0 +1,9 @@
+node_modules
+.git
+.vscode
+.gemini
+conversations.db
+test-output.txt
+11.16.0
+README.md
+eslint.config.js
