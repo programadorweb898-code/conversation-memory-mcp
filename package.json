@@ -4,7 +4,7 @@
   "description": "Servidor MCP para almacenar y recuperar el historial de conversaciones de forma persistente mediante SQLite.",
   "main": "server.js",
   "scripts": {
-    "start":"node src/server.js"
+    "start":"node src/server.js",
     "test": "mocha tests/",
     "dev": "node src/server.js",
     "lint": "eslint ."
