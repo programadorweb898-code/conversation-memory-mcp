@@ -10,13 +10,11 @@ const db = require('../src/database');
 const saveMessage = require('../src/tools/saveMessage');
 
 describe('saveMessage', () => {
-  let embeddingStub;
+  let queueStub;
 
   beforeEach((done) => {
-    // Stub the embedding service to prevent actual external calls during tests
-    embeddingStub = sinon.stub().resolves('mock_embedding_string');
-    sinon.replace(require('../src/services/embeddingService'), 'generateEmbedding', embeddingStub);
-    sinon.replace(require('../src/services/embeddingService'), 'saveEmbedding', sinon.stub().resolves(true));
+    queueStub = sinon.stub();
+    sinon.replace(require('../src/services/embeddingQueue'), 'addTask', queueStub);
 
     db.serialize(() => {
       db.run(`DROP TABLE IF EXISTS conversations`);
@@ -77,7 +75,7 @@ describe('saveMessage', () => {
     expect(retrievedMessage.role).to.equal(params.role);
     expect(retrievedMessage.content).to.equal(params.content);
     expect(retrievedMessage.agent_id).to.be.null; // agentId is optional, should be null by default
-    expect(embeddingStub.calledOnce).to.be.true; // Check if embedding was attempted
+    expect(queueStub.calledOnce).to.be.true; // Check if embedding task was queued
   });
 
   it('should save a message successfully with all fields including agentId', async () => {
@@ -103,7 +101,7 @@ describe('saveMessage', () => {
     expect(retrievedMessage.role).to.equal(params.role);
     expect(retrievedMessage.content).to.equal(params.content);
     expect(retrievedMessage.agent_id).to.equal(params.agentId);
-    expect(embeddingStub.calledOnce).to.be.true;
+    expect(queueStub.calledOnce).to.be.true;
   });
 
   it('should reject if Zod validation fails for missing required fields', async () => {
@@ -122,7 +120,7 @@ describe('saveMessage', () => {
 
     expect(error).to.exist;
     expect(error.name).to.equal('ZodError');
-    expect(embeddingStub.called).to.be.false; // Embedding should not be called if validation fails
+    expect(queueStub.called).to.be.false; // Embedding should not be queued if validation fails
   });
 
   it('should resolve true even if embedding generation fails, but message is saved', async () => {

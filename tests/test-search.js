@@ -2,7 +2,11 @@ const { expect } = require('chai');
 const searchMessages = require("../src/tools/searchMessages");
 const saveMessage = require("../src/tools/saveMessage");
 const db = require("../src/database"); // Import the database connection
-const { initializeEmbeddingPipeline } = require("../src/services/embeddingService"); // Import for initialization
+const {
+  generateEmbedding,
+  initializeEmbeddingPipeline,
+  saveEmbedding,
+} = require("../src/services/embeddingService"); // Import for initialization
 
 describe('Semantic Search Messages Tool', () => {
   const testSessionId = `test-session-semantic-${Date.now()}`;
@@ -21,6 +25,16 @@ describe('Semantic Search Messages Tool', () => {
     await saveMessage({ sessionId: testSessionId, project: testProject, role: "user", content: "Los perros son mascotas leales y amigables." });
     await saveMessage({ sessionId: testSessionId, project: testProject, role: "assistant", content: "Los gatos prefieren la soledad y son cazadores hábiles." });
     await saveMessage({ sessionId: testSessionId, project: "other-project", role: "user", content: "El precio de las acciones subió hoy." });
+
+    const savedMessages = await db.allAsync(
+      `SELECT id, content FROM conversations WHERE session_id = ?`,
+      [testSessionId]
+    );
+
+    for (const message of savedMessages) {
+      const embedding = await generateEmbedding(message.content);
+      await saveEmbedding(message.id, embedding);
+    }
 
     console.log("Test messages saved for semantic search.");
   });

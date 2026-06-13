@@ -1,12 +1,20 @@
 // src/services/embeddingService.js
 
 const db = require("../database");
-const { pipeline } = require("@xenova/transformers"); // Import pipeline
 
 // Specify the model and ensure it's quantized for efficiency
 const model = "Xenova/all-MiniLM-L6-v2";
 let extractor = null; // Will store the initialized pipeline
 let initializationPromise = null; // New variable to store the initialization promise
+let transformersModulePromise = null;
+
+async function loadTransformers() {
+  if (!transformersModulePromise) {
+    transformersModulePromise = import("@xenova/transformers");
+  }
+
+  return transformersModulePromise;
+}
 
 /**
  * Initializes the embedding pipeline.
@@ -15,6 +23,7 @@ let initializationPromise = null; // New variable to store the initialization pr
 async function initializeEmbeddingPipeline() {
   if (!initializationPromise) {
     initializationPromise = (async () => {
+      const { pipeline } = await loadTransformers();
       console.log(`Loading embedding model: ${model}`);
       extractor = await pipeline("feature-extraction", model, { quantized: true });
       console.log("Embedding model loaded.");

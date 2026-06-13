@@ -20,6 +20,10 @@ const messagesLimiter = rateLimit({
 });
 
 function requireJson(req, res, next) {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+    return next();
+  }
+
   const contentType = req.headers["content-type"] || "";
 
   if (!contentType.includes("application/json")) {

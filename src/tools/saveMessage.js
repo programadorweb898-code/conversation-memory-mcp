@@ -37,4 +37,6 @@ async function saveMessage(params) {
   return true;
 }
 
-module.exports = { saveMessage, SaveMessageSchema };
+module.exports = saveMessage;
+module.exports.saveMessage = saveMessage;
+module.exports.SaveMessageSchema = SaveMessageSchema;
