@@ -1,5 +1,5 @@
 const db = require("../database");
-const { v4: uuidv4 } = (await import("uuid")).v4;
+const { randomUUID } = require("crypto");
 const { z } = require("zod");
 const embeddingService = require("../services/embeddingService");
 const embeddingQueue = require("../services/embeddingQueue");
@@ -15,7 +15,7 @@ const SaveMessageSchema = z.object({
 async function saveMessage(params) {
   const validatedParams = SaveMessageSchema.parse(params);
   const { sessionId, project, role, content, agentId } = validatedParams;
-  const messageId = uuidv4();
+  const messageId = randomUUID();
 
   try {
     const sql = `
