@@ -1,5 +1,5 @@
 const db = require("../database");
-const { v4: uuidv4 } = require("uuid");
+const { v4: uuidv4 } = (await import("uuid")).v4;
 const { z } = require("zod");
 const embeddingService = require("../services/embeddingService");
 const embeddingQueue = require("../services/embeddingQueue");
