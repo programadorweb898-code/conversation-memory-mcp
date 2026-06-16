@@ -1,5 +1,5 @@
 # Use a stable and complete base image
-FROM node:20-noble
+FROM node:20-bookworm
 
 # Install ALL build tools and sqlite development libraries
 RUN apt-get update && apt-get install -y \
@@ -21,6 +21,9 @@ COPY package*.json ./
 
 # Install dependencies
 RUN npm install
+
+# Rebuild sqlite3 from source to ensure compatibility with the GLIBC version of the base image
+RUN npm rebuild sqlite3 --build-from-source
 
 # Copy the rest of the application
 COPY . .
