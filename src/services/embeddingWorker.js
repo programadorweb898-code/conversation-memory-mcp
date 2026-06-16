@@ -2,34 +2,46 @@
 
 const embeddingQueue = require("./embeddingQueue");
 const embeddingService = require("./embeddingService");
+const db = require("../database");
 
-const workerIntervalMs = 1000; // Poll the queue every 1 second
+const workerIntervalMs = 5000; // Poll the database/queue every 5 seconds
 
 async function processNextEmbeddingTask() {
-  if (embeddingQueue.isEmpty() || embeddingQueue.getProcessingStatus()) {
+  if (embeddingQueue.getProcessingStatus()) {
     return;
   }
 
   embeddingQueue.setProcessingStatus(true);
-  const task = embeddingQueue.getNextTask();
 
-  if (task) {
-    const { messageId, content } = task;
-    console.log(`Processing embedding for message: ${messageId}`);
-    try {
+  try {
+    let task = embeddingQueue.getNextTask();
+
+    // Si la cola en memoria está vacía, buscamos en la base de datos mensajes sin embedding
+    if (!task) {
+      const pendingMessage = await db.getAsync(`
+        SELECT id, content FROM conversations 
+        WHERE id NOT IN (SELECT message_id FROM message_embeddings)
+        LIMIT 1
+      `);
+
+      if (pendingMessage) {
+        task = { messageId: pendingMessage.id, content: pendingMessage.content };
+      }
+    }
+
+    if (task) {
+      const { messageId, content } = task;
+      console.log(`Processing embedding for message: ${messageId}`);
+      
       // Ensure embedding pipeline is initialized before use
       await embeddingService.initializeEmbeddingPipeline();
       const generatedEmbedding = await embeddingService.generateEmbedding(content);
       await embeddingService.saveEmbedding(messageId, generatedEmbedding);
       console.log(`Successfully processed and saved embedding for message: ${messageId}`);
-    } catch (error) {
-      console.error(`Error processing embedding for message ${messageId}:`, error);
-      // Depending on policy, you might want to re-add the task to the queue
-      // or move it to a dead-letter queue. For now, we just log the error.
-    } finally {
-      embeddingQueue.setProcessingStatus(false);
     }
-  } else {
+  } catch (error) {
+    console.error(`Error in embedding worker:`, error);
+  } finally {
     embeddingQueue.setProcessingStatus(false);
   }
 }
@@ -37,16 +49,17 @@ async function processNextEmbeddingTask() {
 let workerInterval;
 
 function startWorker() {
-  console.log("Starting embedding worker...");
+  console.log("Starting resilient embedding worker...");
   // Initialize the embedding pipeline once when the worker starts
   embeddingService.initializeEmbeddingPipeline()
     .then(() => {
       console.log("Embedding pipeline initialized for worker.");
+      // Ejecutar inmediatamente y luego cada intervalo
+      processNextEmbeddingTask();
       workerInterval = setInterval(processNextEmbeddingTask, workerIntervalMs);
     })
     .catch(error => {
       console.error("Failed to initialize embedding pipeline for worker:", error);
-      // Potentially retry initialization or stop the worker if critical
     });
 }
 

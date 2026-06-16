@@ -1,6 +1,6 @@
 const db = require("../database");
 const { z } = require("zod");
-const { generateEmbedding } = require("../services/embeddingService");
+const { generateEmbedding, calculateCosineSimilarity } = require("../services/embeddingService");
 
 const SearchMessagesSchema = z.object({
   query: z.string().optional(),
@@ -54,7 +54,7 @@ async function searchMessages(params) {
 
     const scoredResults = rows.map((row) => {
       const embedding = JSON.parse(row.embedding);
-      const similarity = dotProduct(queryEmbedding, embedding);
+      const similarity = calculateCosineSimilarity(queryEmbedding, embedding);
       return { ...row, similarity };
     });
 
@@ -66,14 +66,6 @@ async function searchMessages(params) {
     console.error("Error searching messages:", err.message);
     throw err;
   }
-}
-
-function dotProduct(a, b) {
-  let sum = 0;
-  for (let i = 0; i < a.length; i++) {
-    sum += a[i] * b[i];
-  }
-  return sum;
 }
 
 module.exports = searchMessages;
