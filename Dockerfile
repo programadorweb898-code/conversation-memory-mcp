@@ -1,24 +1,27 @@
-# Use a more recent Node.js runtime
-FROM node:20
+# Use a stable and complete base image
+FROM node:20-bookworm
 
-# Install build dependencies and system sqlite3
+# Install ALL build tools and sqlite development libraries
 RUN apt-get update && apt-get install -y \
+    build-essential \
     python3 \
-    make \
-    g++ \
     sqlite3 \
     libsqlite3-dev \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory
 WORKDIR /app
 
+# Set environment variables for node-gyp
+ENV PYTHON=/usr/bin/python3
+
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies forcing build from source to match container's GLIBC
-# We use the system sqlite3 library to avoid common compilation issues
-RUN npm install --build-from-source --sqlite=/usr
+# Install dependencies
+# We build from source to ensure compatibility with the container's GLIBC
+RUN npm install --build-from-source
 
 # Copy the rest of the application
 COPY . .
