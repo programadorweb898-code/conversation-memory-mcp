@@ -1,5 +1,5 @@
 # Use a stable and complete base image
-FROM node:20-bookworm
+FROM node:20-noble
 
 # Install ALL build tools and sqlite development libraries
 RUN apt-get update && apt-get install -y \
