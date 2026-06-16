@@ -1,6 +1,13 @@
 # Use an official Node.js runtime as a parent image
 FROM node:18
 
+# Install build dependencies for native modules (like sqlite3)
+RUN apt-get update && apt-get install -y \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 # Set the working directory in the container to /app
 WORKDIR /app
 
