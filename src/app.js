@@ -6,6 +6,8 @@ const { registerMcpTools } = require("./mcpTools");
 const { setupMcpRoutes } = require("./routes");
 const errorHandler = require("./errorHandler");
 
+console.time("⏱️ App initialization");
+
 const app = express();
 
 // Create server
@@ -20,5 +22,7 @@ setupMcpRoutes(app, server);
 
 // Coloca el middleware de errores después de todas las rutas y middleware para que capture los errores.
 app.use(errorHandler);
+
+console.timeEnd("⏱️ App initialization");
 
 module.exports = app;

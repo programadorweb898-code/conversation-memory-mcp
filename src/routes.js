@@ -5,10 +5,13 @@ const transports = new Map();
 
 function setupMcpRoutes(app, server) {
   app.get("/sse", async (req, res) => {
+    console.log("📡 Client connecting to SSE...");
     const clientId = crypto.randomUUID();
     
     const transport = new SSEServerTransport("/messages", res);
     transports.set(clientId, transport);
+    
+    console.log("🔗 SSE transport created for client:", clientId);
     
     // cuando el cliente se desconecta, limpiar
     res.on("close", () => {
@@ -17,7 +20,9 @@ function setupMcpRoutes(app, server) {
     });
     res.setHeader("X-Client-Id", clientId);
     
+    console.log("⏳ Connecting MCP server to transport...");
     await server.connect(transport);
+    console.log("✅ MCP server connected to transport");
   });
   
   app.post("/messages", async (req, res) => {

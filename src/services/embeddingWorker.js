@@ -49,18 +49,10 @@ async function processNextEmbeddingTask() {
 let workerInterval;
 
 function startWorker() {
-  console.log("Starting resilient embedding worker...");
-  // Initialize the embedding pipeline once when the worker starts
-  embeddingService.initializeEmbeddingPipeline()
-    .then(() => {
-      console.log("Embedding pipeline initialized for worker.");
-      // Ejecutar inmediatamente y luego cada intervalo
-      processNextEmbeddingTask();
-      workerInterval = setInterval(processNextEmbeddingTask, workerIntervalMs);
-    })
-    .catch(error => {
-      console.error("Failed to initialize embedding pipeline for worker:", error);
-    });
+  console.log("Starting embedding worker (model will load on first use)...");
+  // NO cargar el modelo aquí - lazy load cuando se procese la primera tarea
+  // Esto permite que Gemini CLI se conecte inmediatamente
+  workerInterval = setInterval(processNextEmbeddingTask, workerIntervalMs);
 }
 
 function stopWorker() {

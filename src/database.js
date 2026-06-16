@@ -33,6 +33,7 @@ function resolveDbPath(envPath) {
 
 const dbPath = resolveDbPath(process.env.DATABASE_PATH);
 
+console.time("⏱️ Database initialization");
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
     console.error("Error opening database:", err.message);
@@ -117,6 +118,7 @@ db.serialize(() => {
       )
     `);
   });
+  console.timeEnd("⏱️ Database initialization");
 });
 
 module.exports = db;

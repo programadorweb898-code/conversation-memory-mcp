@@ -3,7 +3,7 @@
     "conversation-memory-mcp": {
       "command": "node",
       "args": [
-        "src/server.js"
+        "C:\\Users\\gomit\\system-authentication\\conversation-memory-mcp\\src\\server.js"
       ],
       "trust": true
     }

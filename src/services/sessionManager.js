@@ -43,8 +43,8 @@ let sessionMonitorInterval;
 
 function startSessionMonitor() {
   console.log("Iniciando monitor de inactividad de sesiones (5 min)...");
-  // Ejecutar una vez al inicio y luego cada intervalo
-  checkAndFinalizeInactiveSessions();
+  // No ejecutar al inicio - lazy load para que Gemini CLI se conecte inmediatamente
+  // La primera ejecución será después de CHECK_INTERVAL_MS
   sessionMonitorInterval = setInterval(checkAndFinalizeInactiveSessions, CHECK_INTERVAL_MS);
 }
 

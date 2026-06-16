@@ -17,6 +17,7 @@ const deleteSession = require("./tools/deleteSession");
 const deleteMessagePair = require("./tools/deleteMessagePair");
 
 function registerMcpTools(server) {
+  console.time("⏱️ Registering MCP tools");
   // 1. saveMessage
   server.tool(
     "saveMessage",
@@ -226,6 +227,8 @@ function registerMcpTools(server) {
       }
     }
   );
+  
+  console.timeEnd("⏱️ Registering MCP tools");
 }
 
 module.exports = { registerMcpTools };
