@@ -20,8 +20,7 @@ ENV PYTHON=/usr/bin/python3
 COPY package*.json ./
 
 # Install dependencies
-# We build from source to ensure compatibility with the container's GLIBC
-RUN npm install --build-from-source
+RUN npm install
 
 # Copy the rest of the application
 COPY . .
