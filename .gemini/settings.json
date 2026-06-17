@@ -1,9 +1,12 @@
 {
   "mcpServers": {
     "conversation-memory-mcp": {
-      "command": "node",
+      "command": "npx",
       "args": [
-        "C:\\Users\\gomit\\system-authentication\\conversation-memory-mcp\\src\\server.js"
+        "-y",
+        "@modelcontextprotocol/sdk",
+        "connect",
+        "https://conversation-memory-mcp.onrender.com/sse"
       ],
       "trust": true
     }

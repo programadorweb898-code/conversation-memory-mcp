@@ -10,6 +10,10 @@ console.time("⏱️ App initialization");
 
 const app = express();
 
+// Habilitar la confianza en el proxy para entornos como Render
+// Esto es necesario para que express-rate-limit identifique correctamente la IP del cliente
+app.set("trust proxy", 1);
+
 // Create server
 const server = new McpServer({
   name: "conversation-memory-mcp",
