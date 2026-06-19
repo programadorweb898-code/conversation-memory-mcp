@@ -27,22 +27,30 @@ function setupMcpRoutes(app, server) {
   });
   
   app.post("/messages", async (req, res) => {
+    console.log("📥 Recibido POST en /messages");
+    console.log("📥 Body completo:", JSON.stringify(req.body));
+    
     const clientId = req.headers["x-client-id"];
     
     if (!clientId || !transports.has(clientId)) {
       return res.status(400).json({ error: "Cliente no identificado o sesión expirada" });
     }
 
-    // Persistencia automática (intento)
+    // Persistencia automática (depuración)
     try {
-      if (req.body && req.body.params && req.body.params.content) {
+      console.log("🔍 Intentando persistir mensaje...");
+      // Registramos qué estamos viendo para ajustar el IF
+      if (req.body) {
+        console.log("🔍 Estructura del body:", Object.keys(req.body));
+        
+        // Intentamos guardar algo genérico para ver si funciona
         await saveMessage({
-          sessionId: clientId, // Usamos clientId como sessionId provisional
+          sessionId: clientId,
           project: "default",
           role: "user",
-          content: req.body.params.content
+          content: JSON.stringify(req.body).substring(0, 500) // Guardamos parte del body
         });
-        console.log("💾 Mensaje persistido automáticamente.");
+        console.log("💾 Mensaje persistido automáticamente (depuración).");
       }
     } catch (err) {
       console.error("❌ Error persistiendo mensaje:", err);
