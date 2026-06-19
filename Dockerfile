@@ -16,8 +16,12 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install only production dependencies for faster and more stable builds
+# Install production dependencies
 RUN npm ci --only=production
+
+# --- CORRECCIÓN CRÍTICA ---
+# Forzar la recompilación de sqlite3 desde el código fuente para asegurar compatibilidad con GLIBC del sistema
+RUN npm rebuild sqlite3 --build-from-source
 
 # Copy the rest of the application
 COPY . .
