@@ -50,6 +50,31 @@ function setupMcpRoutes(app, server) {
     }
     
     const transport = transports.get(sessionId);
+    
+    // Interceptar respuestas del servidor MCP
+    // Dado que el servidor MCP se conecta al transporte, podemos intentar envolver el método de envío del transporte
+    // O mejor, podemos envolver la función que procesa la respuesta.
+    // Una opción más robusta es hookear el transporte.
+    const originalSend = transport.send.bind(transport);
+    transport.send = async (message) => {
+      // Si el mensaje es una respuesta del asistente, lo persistimos
+      if (message.method === "notifications/message" || (message.result && message.result.content)) {
+         try {
+           const content = JSON.stringify(message.result || message.params).substring(0, 1000);
+           await saveMessage({
+             sessionId: sessionId,
+             project: "default",
+             role: "assistant",
+             content: content
+           });
+           console.log("💾 Respuesta del asistente persistida automáticamente.");
+         } catch (err) {
+           console.error("❌ Error persistiendo respuesta del asistente:", err);
+         }
+      }
+      return originalSend(message);
+    };
+
     await transport.handlePostMessage(req, res, req.body);
   });
 }
