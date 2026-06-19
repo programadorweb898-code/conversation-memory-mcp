@@ -39,11 +39,11 @@ function registerMcpTools(server) {
     "searchMessages",
     "Busca mensajes en el historial",
     {
-      query: z.string().describe("Término de búsqueda"),
+      searchTerm: z.string().describe("Término de búsqueda (palabra clave o consulta semántica)"),
       project: z.string().optional().describe("Filtrar por proyecto"),
     },
-    async ({ query, project }) => {
-      const results = await searchMessages({ query, project });
+    async ({ searchTerm, project }) => {
+      const results = await searchMessages({ searchTerm, project });
       return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
     }
   );
@@ -164,8 +164,8 @@ function registerMcpTools(server) {
       sessionId: z.string().describe("ID de la sesión"),
     },
     async ({ sessionId }) => {
-      const summary = await finalizeSession(sessionId);
-      return { content: [{ type: "text", text: `Sesión finalizada. Resumen: ${summary}` }] };
+      const result = await finalizeSession(sessionId);
+      return { content: [{ type: "text", text: JSON.stringify(result) }] };
     }
   );
 

@@ -3,11 +3,10 @@ const { z } = require("zod");
 const { generateEmbedding, calculateCosineSimilarity } = require("../services/embeddingService");
 
 const SearchMessagesSchema = z.object({
-  query: z.string().optional(),
-  keyword: z.string().optional(),
+  searchTerm: z.string().optional(),
   project: z.string().optional(),
-}).refine(data => data.query || data.keyword || data.project, {
-  message: "Se requiere al menos uno de: query, keyword, o project",
+}).refine(data => data.searchTerm || data.project, {
+  message: "Se requiere al menos uno de: searchTerm o project",
 });
 
 /**
@@ -15,11 +14,12 @@ const SearchMessagesSchema = z.object({
  */
 async function searchMessages(params) {
   const validatedParams = SearchMessagesSchema.parse(params);
-  const { query, keyword, project } = validatedParams;
+  const { searchTerm, project } = validatedParams;
 
   try {
-    let sql = `SELECT c.* ${query ? ", me.embedding" : ""} FROM conversations c`;
-    if (query) {
+    // Si searchTerm está presente, realizamos búsqueda semántica (embedding) + LIKE
+    let sql = `SELECT c.* ${searchTerm ? ", me.embedding" : ""} FROM conversations c`;
+    if (searchTerm) {
       sql += ` JOIN message_embeddings me ON c.id = me.message_id`;
     }
 
@@ -31,9 +31,9 @@ async function searchMessages(params) {
       dbParams.push(project);
     }
 
-    if (keyword) {
+    if (searchTerm) {
       whereClauses.push(`c.content LIKE ?`);
-      dbParams.push(`%${keyword}%`);
+      dbParams.push(`%${searchTerm}%`);
     }
 
     if (whereClauses.length > 0) {
@@ -41,11 +41,15 @@ async function searchMessages(params) {
     }
 
     const rows = await db.allAsync(sql, dbParams);
-    if (!query) {
+    
+    // Si no hay búsqueda semántica pedida (podríamos decidir si searchTerm siempre implica búsqueda semántica)
+    // Actualmente el código original hacía embedding SI query existía. Mantendremos esa lógica adaptada.
+    if (!searchTerm) {
       return rows;
     }
 
-    const queryEmbeddingJson = await generateEmbedding(query);
+    // Aquí mantenemos la lógica original de semejanza si searchTerm existe
+    const queryEmbeddingJson = await generateEmbedding(searchTerm);
     const queryEmbedding = JSON.parse(queryEmbeddingJson);
 
     if (!Array.isArray(queryEmbedding)) {

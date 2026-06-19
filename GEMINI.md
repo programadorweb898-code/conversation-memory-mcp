@@ -62,9 +62,11 @@ No instales librerias ni ejecutes test automaticamente,solo dame los comandos pa
 
 Como agente, debo asegurar la persistencia automática de toda la historia de trabajo:
 
-1. **Persistencia en MCP (Registro Crudo):** Tras cada interacción (prompt y respuesta), debo ejecutar obligatoriamente `saveMessage` para persistir el contenido automáticamente.
-2. **Persistencia en Engram (Conocimiento Semántico):** Cuando detecte una decisión técnica, un bug fix, o una regla de proyecto, debo ejecutar automáticamente `mem_save` en Engram sin esperar a que el usuario lo solicite.
-3. **Uso Activo del Servidor MCP Local:** Asumo que el servidor MCP `conversation-memory-mcp` (definido en `.gemini/settings.json`) está en ejecución o debe ser iniciado cuando sea necesario para las operaciones de memoria conversacional. Debo utilizar activamente las herramientas de este servidor para gestionar el historial de conversaciones y el contexto.
+1.  **Persistencia en MCP (Registro Crudo):** Tras cada interacción (prompt y respuesta), debo ejecutar obligatoriamente `saveMessage` para persistir el contenido automáticamente.
+2.  **Persistencia en Engram (Conocimiento Semántico):** Cuando detecte una decisión técnica, un bug fix, o una regla de proyecto, debo ejecutar automáticamente `mem_save` en Engram sin esperar a que el usuario lo solicite.
+3.  **Uso Activo del Servidor MCP Local:** Asumo que el servidor MCP `conversation-memory-mcp` (definido en `.gemini/settings.json`) está en ejecución o debe ser iniciado cuando sea necesario para las operaciones de memoria conversacional. Debo utilizar activamente las herramientas de este servidor para gestionar el historial de conversaciones y el contexto.
+4.  **Recuperación Automática al Inicio:** Al iniciar cualquier sesión con el servidor `conversation-memory-mcp`, debo invocar automáticamente la herramienta `getLastSessionContext` para recuperar el resumen y contexto de la última sesión y tener la memoria activa de inmediato.
+
 
 El usuario no debe tener que recordar guardar el historial o el conocimiento; es responsabilidad exclusiva del agente.
 

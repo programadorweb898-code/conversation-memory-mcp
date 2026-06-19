@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const { SSEServerTransport } = require("@modelcontextprotocol/sdk/server/sse.js");
+const { saveMessage } = require("./tools/saveMessage"); // Importar herramienta de guardado
 
 const transports = new Map();
 
@@ -30,6 +31,21 @@ function setupMcpRoutes(app, server) {
     
     if (!clientId || !transports.has(clientId)) {
       return res.status(400).json({ error: "Cliente no identificado o sesión expirada" });
+    }
+
+    // Persistencia automática (intento)
+    try {
+      if (req.body && req.body.params && req.body.params.content) {
+        await saveMessage({
+          sessionId: clientId, // Usamos clientId como sessionId provisional
+          project: "default",
+          role: "user",
+          content: req.body.params.content
+        });
+        console.log("💾 Mensaje persistido automáticamente.");
+      }
+    } catch (err) {
+      console.error("❌ Error persistiendo mensaje:", err);
     }
     
     const transport = transports.get(clientId);
