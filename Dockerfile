@@ -1,11 +1,11 @@
-# Use a stable and complete base image
-FROM node:20-bookworm
+# Use a stable and lightweight base image
+FROM node:20-bookworm-slim
 
-# Install ALL build tools and sqlite development libraries
+# Install necessary build tools and sqlite development libraries
 RUN apt-get update && apt-get install -y \
-    build-essential \
     python3 \
-    sqlite3 \
+    make \
+    g++ \
     libsqlite3-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -13,17 +13,11 @@ RUN apt-get update && apt-get install -y \
 # Set the working directory
 WORKDIR /app
 
-# Set environment variables for node-gyp
-ENV PYTHON=/usr/bin/python3
-
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
-
-# Rebuild sqlite3 from source to ensure compatibility with the GLIBC version of the base image
-RUN npm rebuild sqlite3 --build-from-source
+# Install only production dependencies for faster and more stable builds
+RUN npm ci --only=production
 
 # Copy the rest of the application
 COPY . .
