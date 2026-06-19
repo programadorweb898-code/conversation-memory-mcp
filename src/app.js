@@ -14,6 +14,9 @@ const app = express();
 // Esto es necesario para que express-rate-limit identifique correctamente la IP del cliente
 app.set("trust proxy", 1);
 
+// Middleware para parsear JSON
+app.use(express.json());
+
 // Create server
 const server = new McpServer({
   name: "conversation-memory-mcp",
