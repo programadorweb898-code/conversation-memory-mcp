@@ -74,6 +74,11 @@ db.allAsync = (sql, params = []) =>
     });
   });
 
+let dbReadyResolve;
+const dbReadyPromise = new Promise((resolve) => {
+  dbReadyResolve = resolve;
+});
+
 db.serialize(() => {
   db.run(`
     CREATE TABLE IF NOT EXISTS conversations (
@@ -138,8 +143,9 @@ db.serialize(() => {
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    console.timeEnd("⏱️ Database initialization");
+    dbReadyResolve();
   });
-  console.timeEnd("⏱️ Database initialization");
 });
 
-module.exports = db;
+module.exports = { db, dbReadyPromise };

@@ -1,10 +1,14 @@
 const { startWorker } = require("./services/embeddingWorker"); // Import the worker
 const { startSessionMonitor } = require("./services/sessionManager"); // Import the session monitor
 const app = require("./app"); // Import the assembled Express app
+const { dbReadyPromise } = require("./database");
 
 async function startServer() {
   console.time("⏱️ Startup total");
   
+  await dbReadyPromise;
+  console.log("Database is ready.");
+
   console.time("Starting worker");
   startWorker(); // Start the embedding background worker
   console.timeEnd("Starting worker");
