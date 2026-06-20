@@ -109,15 +109,17 @@ db.serialize(() => {
     db.run(`CREATE INDEX IF NOT EXISTS idx_conversations_project ON conversations(project)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_conversations_session_id ON conversations(session_id)`);
     
-    // FTS5 Initialization
+    // FTS5 Initialization - Asegurar ejecución forzada
+    console.log("Intentando crear FTS5...");
     db.run(`CREATE VIRTUAL TABLE IF NOT EXISTS conversations_fts USING fts5(id UNINDEXED, content);`, (err) => {
       if (err) {
         console.error("CRITICAL ERROR: Failed to create FTS5 table:", err.message);
-        process.exit(1);
+        // No exit, let's see if other things run
+      } else {
+        console.log("FTS5 table ready.");
       }
-      console.log("FTS5 table ready.");
     });
-    
+
     db.run(`
       CREATE TRIGGER IF NOT EXISTS conversations_ai AFTER INSERT ON conversations BEGIN
         INSERT INTO conversations_fts(id, content) VALUES (new.id, new.content);
