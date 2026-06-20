@@ -1,4 +1,4 @@
-const db = require("../database");
+const { db, dbReadyPromise } = require("../database");
 
 /**
  * Elimina todos los mensajes y sus embeddings asociados para una sesion especifica.
@@ -6,6 +6,7 @@ const db = require("../database");
  * @returns {Promise<void>}
  */
 async function deleteSession(sessionId) {
+  await dbReadyPromise;
   try {
     const embeddingResult = await db.runAsync(
       "DELETE FROM message_embeddings WHERE message_id IN (SELECT id FROM conversations WHERE session_id = ?)",

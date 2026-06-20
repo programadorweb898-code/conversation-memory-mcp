@@ -1,6 +1,6 @@
 // src/services/embeddingService.js
 
-const db = require("../database");
+const { db, dbReadyPromise } = require("../database");
 
 // Specify the model and ensure it's quantized for efficiency
 const model = "Xenova/all-MiniLM-L6-v2";
@@ -74,6 +74,7 @@ async function saveEmbedding(messageId, embedding) {
 }
 
 async function getEmbedding(messageId) {
+  await dbReadyPromise;
   const row = await db.getAsync(
     `SELECT embedding FROM message_embeddings WHERE message_id = ?`,
     [messageId]

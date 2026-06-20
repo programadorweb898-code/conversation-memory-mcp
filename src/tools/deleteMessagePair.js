@@ -1,4 +1,4 @@
-const db = require("../database");
+const { db, dbReadyPromise } = require("../database");
 
 /**
  * Elimina un mensaje y su mensaje relacionado (pregunta o respuesta)
@@ -7,12 +7,13 @@ const db = require("../database");
  * @returns {Promise<void>}
  */
 async function deleteMessagePair(messageId) {
+  await dbReadyPromise;
   try {
     const targetMessage = await db.getAsync(
       "SELECT session_id, id FROM conversations WHERE id = ?",
       [messageId]
     );
-
+// ...
     if (!targetMessage) {
       console.log(`Message ${messageId} not found.`);
       return;

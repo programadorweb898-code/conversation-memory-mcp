@@ -1,4 +1,4 @@
-const db = require("../database");
+const { db, dbReadyPromise } = require("../database");
 const { z } = require("zod");
 const { generateEmbedding, calculateCosineSimilarity } = require("../services/embeddingService");
 const removeStopwords = require("../services/stopwords");
@@ -15,16 +15,16 @@ const SearchMessagesSchema = z.object({
  * Busca mensajes en la base de datos usando un enfoque híbrido.
  */
 async function searchMessages(params) {
+  await dbReadyPromise;
   const validatedParams = SearchMessagesSchema.parse(params);
   const { searchTerm, project, threshold } = validatedParams;
 
   try {
     // Obtenemos todos los mensajes candidatos. 
-    // Si hay searchTerm, traemos también los embeddings y unimos con FTS5.
+    // Si hay searchTerm, traemos también los embeddings.
     let sql = `SELECT c.* ${searchTerm ? ", me.embedding" : ""} FROM conversations c`;
     if (searchTerm) {
       sql += ` LEFT JOIN message_embeddings me ON c.id = me.message_id`;
-      sql += ` JOIN conversations_fts fts ON c.id = fts.id`;
     }
 
     const dbParams = [];
@@ -36,8 +36,8 @@ async function searchMessages(params) {
     }
 
     if (searchTerm) {
-      whereClauses.push(`fts.content MATCH ?`);
-      dbParams.push(searchTerm);
+      whereClauses.push(`c.content LIKE ?`);
+      dbParams.push(`%${searchTerm}%`);
     }
 
     if (whereClauses.length > 0) {

@@ -1,9 +1,10 @@
-const db = require("../database");
+const { db, dbReadyPromise } = require("../database");
 const { generateEmbedding, calculateCosineSimilarity } = require("../services/embeddingService");
 
 async function semanticSearchMessages({ query, project, limit = 5 }) {
+  await dbReadyPromise;
   if (!query) throw new Error("La consulta no puede estar vacía.");
-
+// ...
   const queryEmbeddingJson = await generateEmbedding(query);
   const queryEmbedding = JSON.parse(queryEmbeddingJson); // Esto es un array de floats
 

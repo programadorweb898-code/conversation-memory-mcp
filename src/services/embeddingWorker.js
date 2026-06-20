@@ -2,7 +2,7 @@
 
 const embeddingQueue = require("./embeddingQueue");
 const embeddingService = require("./embeddingService");
-const db = require("../database");
+const { db, dbReadyPromise } = require("../database");
 
 const workerIntervalMs = 5000; // Poll the database/queue every 5 seconds
 
@@ -18,6 +18,7 @@ async function processNextEmbeddingTask() {
 
     // Si la cola en memoria está vacía, buscamos en la base de datos mensajes sin embedding
     if (!task) {
+      await dbReadyPromise;
       const pendingMessage = await db.getAsync(`
         SELECT id, content, role FROM conversations 
         WHERE id NOT IN (SELECT message_id FROM message_embeddings)
@@ -28,7 +29,7 @@ async function processNextEmbeddingTask() {
         task = { messageId: pendingMessage.id, content: pendingMessage.content, role: pendingMessage.role };
       }
     }
-
+// ... (rest of the file) ...
     if (task) {
       const { messageId, content, role } = task;
       console.log(`Processing embedding for message: ${messageId}`);

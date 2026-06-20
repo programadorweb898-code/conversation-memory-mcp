@@ -1,4 +1,4 @@
-const db = require("../database");
+const { db, dbReadyPromise } = require("../database");
 const { randomUUID } = require("crypto");
 const { z } = require("zod");
 const embeddingService = require("../services/embeddingService");
@@ -13,6 +13,7 @@ const SaveMessageSchema = z.object({
 });
 
 async function saveMessage(params) {
+  await dbReadyPromise;
   const validatedParams = SaveMessageSchema.parse(params);
   const { sessionId, project, role, content, agentId } = validatedParams;
   const messageId = randomUUID();

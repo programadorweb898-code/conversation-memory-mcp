@@ -1,4 +1,4 @@
-const db = require("../database");
+const { db, dbReadyPromise } = require("../database");
 
 /**
  * Recupera el contenido de un mensaje especifico y su contexto para ser guardado en Engram.
@@ -7,13 +7,14 @@ const db = require("../database");
  * @returns {Promise<Object>} - El contenido del mensaje y su contexto.
  */
 async function pushToEngram({ messageId }) {
+  await dbReadyPromise;
   try {
     const sql = `
       SELECT c.*
       FROM conversations c
       WHERE c.id = ?
     `;
-    const row = await db.getAsync(sql, [messageId]);
+// ...
 
     if (!row) {
       throw new Error("Mensaje no encontrado");
