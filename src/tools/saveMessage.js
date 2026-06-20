@@ -31,7 +31,7 @@ async function saveMessage(params) {
   }
 
   // Add embedding generation to the queue
-  embeddingQueue.addTask({ messageId, content });
+  embeddingQueue.addTask({ messageId, content, role });
   console.log(`Embedding task for message ${messageId} queued.`);
 
   return true;

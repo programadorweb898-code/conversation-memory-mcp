@@ -5,8 +5,9 @@ let processing = false; // Flag to prevent multiple workers processing the queue
 
 /**
  * Adds a task to the embedding queue.
- * @param {object} task - The task to add, containing messageId and content.
+ * @param {object} task - The task to add, containing messageId, role, and content.
  * @param {string} task.messageId
+ * @param {string} task.role
  * @param {string} task.content
  */
 function addTask(task) {

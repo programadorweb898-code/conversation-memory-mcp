@@ -103,6 +103,27 @@ db.serialize(() => {
 
     db.run(`CREATE INDEX IF NOT EXISTS idx_conversations_project ON conversations(project)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_conversations_session_id ON conversations(session_id)`);
+    
+    // FTS5 Initialization
+    db.run(`CREATE VIRTUAL TABLE IF NOT EXISTS conversations_fts USING fts5(id UNINDEXED, content);`);
+    db.run(`
+      CREATE TRIGGER IF NOT EXISTS conversations_ai AFTER INSERT ON conversations BEGIN
+        INSERT INTO conversations_fts(id, content) VALUES (new.id, new.content);
+      END;
+    `);
+    db.run(`
+      CREATE TRIGGER IF NOT EXISTS conversations_ad AFTER DELETE ON conversations BEGIN
+        DELETE FROM conversations_fts WHERE id = old.id;
+      END;
+    `);
+    db.run(`
+      CREATE TRIGGER IF NOT EXISTS conversations_au AFTER UPDATE ON conversations BEGIN
+        UPDATE conversations_fts SET content = new.content WHERE id = new.id;
+      END;
+    `);
+    // Populate FTS5 if empty
+    db.run(`INSERT INTO conversations_fts(id, content) SELECT id, content FROM conversations WHERE NOT EXISTS(SELECT 1 FROM conversations_fts);`);
+
     db.run(`
       CREATE TABLE IF NOT EXISTS message_embeddings (
         message_id TEXT PRIMARY KEY,

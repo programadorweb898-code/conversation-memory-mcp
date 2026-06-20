@@ -1,26 +1,30 @@
 const db = require("../database");
 const { z } = require("zod");
 const { generateEmbedding, calculateCosineSimilarity } = require("../services/embeddingService");
+const removeStopwords = require("../services/stopwords");
 
 const SearchMessagesSchema = z.object({
   searchTerm: z.string().optional(),
   project: z.string().optional(),
+  threshold: z.number().min(0).max(1).optional().default(0.6),
 }).refine(data => data.searchTerm || data.project, {
   message: "Se requiere al menos uno de: searchTerm o project",
 });
 
 /**
- * Busca mensajes en la base de datos.
+ * Busca mensajes en la base de datos usando un enfoque híbrido.
  */
 async function searchMessages(params) {
   const validatedParams = SearchMessagesSchema.parse(params);
-  const { searchTerm, project } = validatedParams;
+  const { searchTerm, project, threshold } = validatedParams;
 
   try {
-    // Si searchTerm está presente, realizamos búsqueda semántica (embedding) + LIKE
+    // Obtenemos todos los mensajes candidatos. 
+    // Si hay searchTerm, traemos también los embeddings y unimos con FTS5.
     let sql = `SELECT c.* ${searchTerm ? ", me.embedding" : ""} FROM conversations c`;
     if (searchTerm) {
-      sql += ` JOIN message_embeddings me ON c.id = me.message_id`;
+      sql += ` LEFT JOIN message_embeddings me ON c.id = me.message_id`;
+      sql += ` JOIN conversations_fts fts ON c.id = fts.id`;
     }
 
     const dbParams = [];
@@ -32,8 +36,8 @@ async function searchMessages(params) {
     }
 
     if (searchTerm) {
-      whereClauses.push(`c.content LIKE ?`);
-      dbParams.push(`%${searchTerm}%`);
+      whereClauses.push(`fts.content MATCH ?`);
+      dbParams.push(searchTerm);
     }
 
     if (whereClauses.length > 0) {
@@ -42,29 +46,39 @@ async function searchMessages(params) {
 
     const rows = await db.allAsync(sql, dbParams);
     
-    // Si no hay búsqueda semántica pedida (podríamos decidir si searchTerm siempre implica búsqueda semántica)
-    // Actualmente el código original hacía embedding SI query existía. Mantendremos esa lógica adaptada.
+    // Si no hay búsqueda semántica, devolvemos filtrado por proyecto
     if (!searchTerm) {
       return rows;
     }
 
-    // Aquí mantenemos la lógica original de semejanza si searchTerm existe
-    const queryEmbeddingJson = await generateEmbedding(searchTerm);
+    // --- RERANKING HÍBRIDO ---
+    // Limpiamos el término de búsqueda de stopwords para el embedding semántico
+    const semanticSearchTerm = removeStopwords(searchTerm);
+    
+    // Pasamos un objeto mensaje simulado para que coincida con el formato enriquecido
+    const queryEmbeddingJson = await generateEmbedding({ role: "query", content: semanticSearchTerm });
     const queryEmbedding = JSON.parse(queryEmbeddingJson);
-
-    if (!Array.isArray(queryEmbedding)) {
-      throw new Error("No se pudo generar el embedding valido para la consulta.");
-    }
+    const searchTermLower = searchTerm.toLowerCase();
 
     const scoredResults = rows.map((row) => {
-      const embedding = JSON.parse(row.embedding);
-      const similarity = calculateCosineSimilarity(queryEmbedding, embedding);
-      return { ...row, similarity };
+      // 1. Score Semántico (0 a 1)
+      let semanticScore = 0;
+      if (row.embedding) {
+        const embedding = JSON.parse(row.embedding);
+        semanticScore = calculateCosineSimilarity(queryEmbedding, embedding);
+      }
+
+      // 2. Score Léxico (0 o 1)
+      const lexicalScore = row.content.toLowerCase().includes(searchTermLower) ? 1 : 0;
+
+      // 3. Score Compuesto (Pesos: 70% semántico, 30% léxico)
+      const finalScore = (semanticScore * 0.7) + (lexicalScore * 0.3);
+
+      return { ...row, similarity: finalScore };
     });
 
-    const SIMILARITY_THRESHOLD = 0.5;
     return scoredResults
-      .filter((result) => result.similarity > SIMILARITY_THRESHOLD)
+      .filter((result) => result.similarity >= threshold)
       .sort((a, b) => b.similarity - a.similarity);
   } catch (err) {
     console.error("Error searching messages:", err.message);

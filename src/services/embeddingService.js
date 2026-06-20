@@ -33,19 +33,21 @@ async function initializeEmbeddingPipeline() {
 }
 
 /**
- * Generates an embedding for a given text using Hugging Face Transformers.js.
- * @param {string} text The text to embed.
- * @returns {string} A JSON string representation of the embedding vector.
+ * Genera un embedding enriquecido para un objeto de mensaje dado.
+ * @param {Object} message - El objeto de mensaje que contiene 'role' y 'content'.
+ * @returns {Promise<string>} A JSON string representation of the embedding vector.
  */
-async function generateEmbedding(text) {
+async function generateEmbedding(message) {
   if (!extractor) {
     // Ensure the pipeline is initialized before use.
-    // In a production app, initializeEmbeddingPipeline should be called once at startup.
     await initializeEmbeddingPipeline();
   }
 
+  // Enriquecer: concatenamos rol + contenido para dar más contexto semántico
+  const enrichedText = `${message.role}: ${message.content}`;
+
   // Generate embeddings
-  const output = await extractor(text, { pooling: "mean", normalize: true });
+  const output = await extractor(enrichedText, { pooling: "mean", normalize: true });
   // The output is typically a Tensor. Convert it to a plain array.
   const embedding = output.data; // This gets the raw data from the Tensor
   return JSON.stringify(Array.from(embedding)); // Convert TypedArray to standard Array and then to JSON string

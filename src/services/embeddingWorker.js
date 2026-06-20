@@ -19,23 +19,23 @@ async function processNextEmbeddingTask() {
     // Si la cola en memoria está vacía, buscamos en la base de datos mensajes sin embedding
     if (!task) {
       const pendingMessage = await db.getAsync(`
-        SELECT id, content FROM conversations 
+        SELECT id, content, role FROM conversations 
         WHERE id NOT IN (SELECT message_id FROM message_embeddings)
         LIMIT 1
       `);
 
       if (pendingMessage) {
-        task = { messageId: pendingMessage.id, content: pendingMessage.content };
+        task = { messageId: pendingMessage.id, content: pendingMessage.content, role: pendingMessage.role };
       }
     }
 
     if (task) {
-      const { messageId, content } = task;
+      const { messageId, content, role } = task;
       console.log(`Processing embedding for message: ${messageId}`);
       
       // Ensure embedding pipeline is initialized before use
       await embeddingService.initializeEmbeddingPipeline();
-      const generatedEmbedding = await embeddingService.generateEmbedding(content);
+      const generatedEmbedding = await embeddingService.generateEmbedding({ role, content });
       await embeddingService.saveEmbedding(messageId, generatedEmbedding);
       console.log(`Successfully processed and saved embedding for message: ${messageId}`);
     }
