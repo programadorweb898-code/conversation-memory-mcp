@@ -2,7 +2,7 @@ const { expect } = require('chai');
 const saveSessionSummary = require("../src/tools/saveSessionSummary");
 const getSessionSummary = require("../src/tools/getSessionSummary");
 const saveMessage = require("../src/tools/saveMessage"); // Import saveMessage
-const db = require("../src/database");
+const { db } = require("../src/database");
 
 describe('Session Summaries Tool', () => {
   const testSessionId = "test-session-summary-123";

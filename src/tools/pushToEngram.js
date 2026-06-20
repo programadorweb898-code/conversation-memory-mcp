@@ -14,7 +14,7 @@ async function pushToEngram({ messageId }) {
       FROM conversations c
       WHERE c.id = ?
     `;
-// ...
+    const row = await db.getAsync(sql, [messageId]);
 
     if (!row) {
       throw new Error("Mensaje no encontrado");

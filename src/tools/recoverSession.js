@@ -11,7 +11,7 @@ async function recoverSession({ sessionId }) {
   try {
     const sql = `SELECT * FROM conversations WHERE session_id = ? ORDER BY timestamp ASC`;
     return await db.allAsync(sql, [sessionId]);
-// ...
+  } catch (err) { 
     console.error("Error recovering session:", err.message);
     throw err;
   }

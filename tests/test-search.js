@@ -1,7 +1,7 @@
 const { expect } = require('chai');
 const searchMessages = require("../src/tools/searchMessages");
 const saveMessage = require("../src/tools/saveMessage");
-const db = require("../src/database"); // Import the database connection
+const { db } = require("../src/database"); // Import the database connection
 const {
   generateEmbedding,
   initializeEmbeddingPipeline,

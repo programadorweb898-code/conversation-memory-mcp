@@ -12,7 +12,7 @@ async function getSessionSummary({ sessionId }) {
     const sql = `SELECT summary, timestamp FROM session_summaries WHERE session_id = ?`;
     const row = await db.getAsync(sql, [sessionId]);
     return row || null;
-// ...
+  } catch (err) {
     console.error("Error retrieving session summary:", err.message);
     throw err;
   }

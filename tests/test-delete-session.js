@@ -1,6 +1,6 @@
 const { expect } = require('chai');
 const deleteSession = require('../src/tools/deleteSession');
-const db = require('../src/database');
+const { db } = require('../src/database');
 const { v4: uuidv4 } = require('uuid');
 
 describe('Delete Session Tool', () => {

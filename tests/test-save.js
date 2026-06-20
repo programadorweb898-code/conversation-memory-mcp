@@ -6,7 +6,7 @@ const { v4: uuidv4 } = require('uuid');
 process.env.DATABASE_PATH = ':memory:';
 
 // Import db and saveMessage AFTER setting the environment variable
-const db = require('../src/database');
+const { db } = require('../src/database');
 const saveMessage = require('../src/tools/saveMessage');
 
 describe('saveMessage', () => {

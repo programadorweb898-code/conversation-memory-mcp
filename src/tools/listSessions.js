@@ -16,7 +16,7 @@ async function listSessions() {
 
     const rows = await db.allAsync(sql);
     return rows || [];
-// ...
+  } catch (err) {
     console.error("Error listing sessions:", err.message);
     throw err;
   }

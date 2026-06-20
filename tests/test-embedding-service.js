@@ -1,7 +1,7 @@
 // tests/test-embedding-service.js
 
 const { initializeEmbeddingPipeline, generateEmbedding, saveEmbedding, getEmbedding } = require("../src/services/embeddingService");
-const db = require("../src/database"); // Import the database connection
+const { db } = require("../src/database"); // Import the database connection
 
 async function runTests() {
   console.log("Iniciando pruebas para embeddingService.js");

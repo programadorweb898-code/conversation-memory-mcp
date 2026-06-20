@@ -116,7 +116,7 @@ describe('Server HTTP layer', () => {
       .send({ hello: 'world' });
 
     expect(response.status).to.equal(400);
-    expect(response.body).to.deep.equal({ error: 'Cliente no identificado o sesión expirada' });
+    expect(response.body).to.deep.equal({ error: 'Cliente no identificado o sesion expirada' });
   });
 
   it('should forward POST /messages to the transport for a registered client', async () => {

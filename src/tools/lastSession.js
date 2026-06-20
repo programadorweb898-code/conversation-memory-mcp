@@ -10,7 +10,7 @@ async function lastSession() {
     const sql = `SELECT session_id FROM conversations ORDER BY timestamp DESC, rowid DESC LIMIT 1`;
     const row = await db.getAsync(sql);
     return row ? row.session_id : null;
-// ...
+  } catch (err) { 
     console.error("Error retrieving last session:", err.message);
     throw err;
   }

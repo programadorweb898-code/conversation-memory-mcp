@@ -1,7 +1,7 @@
 const { expect } = require('chai');
 const pushToEngram = require("../src/tools/pushToEngram");
 const saveMessage = require("../src/tools/saveMessage");
-const db = require("../src/database");
+const { db } = require("../src/database");
 
 describe('Push To Engram Tool', () => {
   it('debería recuperar un mensaje específico por su ID', async () => {

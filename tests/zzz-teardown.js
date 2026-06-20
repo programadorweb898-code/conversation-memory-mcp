@@ -1,6 +1,6 @@
 // tests/zzz-teardown.js
 // Global teardown: close DB after all tests have finished
-const db = require('../src/database');
+const { db } = require('../src/database');
 
 after(function(done) {
   db.close((err) => {

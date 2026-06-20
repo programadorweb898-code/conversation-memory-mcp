@@ -5,10 +5,11 @@ const removeStopwords = require("../services/stopwords");
 
 const SearchMessagesSchema = z.object({
   searchTerm: z.string().optional(),
+  query: z.string().optional(),
   project: z.string().optional(),
   threshold: z.number().min(0).max(1).optional().default(0.6),
-}).refine(data => data.searchTerm || data.project, {
-  message: "Se requiere al menos uno de: searchTerm o project",
+}).refine(data => data.searchTerm || data.query || data.project, {
+  message: "Se requiere al menos uno de: searchTerm, query o project",
 });
 
 /**
@@ -17,7 +18,8 @@ const SearchMessagesSchema = z.object({
 async function searchMessages(params) {
   await dbReadyPromise;
   const validatedParams = SearchMessagesSchema.parse(params);
-  const { searchTerm, project, threshold } = validatedParams;
+  const { project, threshold } = validatedParams;
+  const searchTerm = validatedParams.searchTerm || validatedParams.query;
 
   try {
     // Obtenemos todos los mensajes candidatos. 
@@ -35,11 +37,6 @@ async function searchMessages(params) {
       dbParams.push(project);
     }
 
-    if (searchTerm) {
-      whereClauses.push(`c.content LIKE ?`);
-      dbParams.push(`%${searchTerm}%`);
-    }
-
     if (whereClauses.length > 0) {
       sql += ` WHERE ` + whereClauses.join(` AND `);
     }
@@ -54,11 +51,14 @@ async function searchMessages(params) {
     // --- RERANKING HÍBRIDO ---
     // Limpiamos el término de búsqueda de stopwords para el embedding semántico
     const semanticSearchTerm = removeStopwords(searchTerm);
+    const queryTokens = semanticSearchTerm
+      .toLowerCase()
+      .split(/\W+/)
+      .filter((token) => token.length > 2);
     
     // Pasamos un objeto mensaje simulado para que coincida con el formato enriquecido
     const queryEmbeddingJson = await generateEmbedding({ role: "query", content: semanticSearchTerm });
     const queryEmbedding = JSON.parse(queryEmbeddingJson);
-    const searchTermLower = searchTerm.toLowerCase();
 
     const scoredResults = rows.map((row) => {
       // 1. Score Semántico (0 a 1)
@@ -69,16 +69,18 @@ async function searchMessages(params) {
       }
 
       // 2. Score Léxico (0 o 1)
-      const lexicalScore = row.content.toLowerCase().includes(searchTermLower) ? 1 : 0;
+      const contentLower = row.content.toLowerCase();
+      const matchedTokens = queryTokens.filter((token) => contentLower.includes(token));
+      const lexicalScore = queryTokens.length > 0 ? matchedTokens.length / queryTokens.length : 0;
 
       // 3. Score Compuesto (Pesos: 70% semántico, 30% léxico)
       const finalScore = (semanticScore * 0.7) + (lexicalScore * 0.3);
 
-      return { ...row, similarity: finalScore };
+      return { ...row, similarity: finalScore, lexicalScore, semanticScore };
     });
 
     return scoredResults
-      .filter((result) => result.similarity >= threshold)
+      .filter((result) => result.lexicalScore > 0 || result.semanticScore >= threshold)
       .sort((a, b) => b.similarity - a.similarity);
   } catch (err) {
     console.error("Error searching messages:", err.message);
