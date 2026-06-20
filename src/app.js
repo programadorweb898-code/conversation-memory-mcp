@@ -17,6 +17,11 @@ app.set("trust proxy", 1);
 // Middleware para parsear JSON
 app.use(express.json());
 
+// Endpoint de health check para Render
+app.get("/health", (req, res) => {
+  res.status(200).send("OK");
+});
+
 // Create server
 const server = new McpServer({
   name: "conversation-memory-mcp",
