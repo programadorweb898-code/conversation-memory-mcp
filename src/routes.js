@@ -1,4 +1,5 @@
 const { SSEServerTransport } = require("@modelcontextprotocol/sdk/server/sse.js");
+const { StreamableHTTPServerTransport } = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
 const { saveMessage } = require("./tools/saveMessage");
 
 const transports = new Map();
@@ -7,7 +8,43 @@ function createSessionId() {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function setupMcpRoutes(app, server) {
+function requireBearerToken(req, res, next) {
+  const expectedToken = process.env.MCP_BEARER_TOKEN;
+
+  if (!expectedToken) {
+    return next();
+  }
+
+  const authorization = req.get("authorization") || "";
+  const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+
+  if (token !== expectedToken) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  return next();
+}
+
+function setupMcpRoutes(app, { httpServer, sseServer }) {
+  const streamableHttpTransport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+  });
+
+  let httpTransportReady;
+
+  app.all("/mcp", requireBearerToken, async (req, res, next) => {
+    try {
+      if (!httpTransportReady) {
+        httpTransportReady = httpServer.connect(streamableHttpTransport);
+      }
+
+      await httpTransportReady;
+      await streamableHttpTransport.handleRequest(req, res, req.body);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.get("/sse", async (req, res) => {
     console.log("Client connecting to SSE...");
 
@@ -25,7 +62,7 @@ function setupMcpRoutes(app, server) {
     });
 
     console.log("Connecting MCP server to transport...");
-    await server.connect(transport);
+    await sseServer.connect(transport);
     console.log("MCP server connected to transport");
   });
 

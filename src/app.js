@@ -22,15 +22,22 @@ app.get("/health", (req, res) => {
   res.status(200).send("OK");
 });
 
-// Create server
-const server = new McpServer({
-  name: "conversation-memory-mcp",
-  version: "1.0.0",
-});
+function createMcpServer() {
+  const server = new McpServer({
+    name: "conversation-memory-mcp",
+    version: "1.0.0",
+  });
+
+  registerMcpTools(server);
+  return server;
+}
+
+// Create servers for the modern HTTP transport and the legacy SSE transport.
+const httpServer = createMcpServer();
+const sseServer = createMcpServer();
 
 applyMiddleware(app);
-registerMcpTools(server);
-setupMcpRoutes(app, server);
+setupMcpRoutes(app, { httpServer, sseServer });
 
 // Coloca el middleware de errores después de todas las rutas y middleware para que capture los errores.
 app.use(errorHandler);
