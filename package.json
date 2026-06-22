@@ -1,7 +1,7 @@
 {
   "name": "conversation-memory-mcp",
   "version": "1.0.0",
-  "description": "Servidor MCP para almacenar y recuperar el historial de conversaciones de forma persistente mediante SQLite.",
+  "description": "Servidor MCP para almacenar y recuperar el historial de conversaciones de forma persistente mediante PostgreSQL.",
   "main": "server.js",
   "scripts": {
     "start": "node src/server.js",
