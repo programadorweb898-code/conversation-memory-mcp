@@ -44,7 +44,7 @@ function registerMcpTools(server) {
     },
     async ({ searchTerm, project }) => {
       const results = await searchMessages({ searchTerm, project });
-      return { content: [{ type: "text", text: JSON.stringify({ results }, null, 2) }], structuredContent: { results } };
+      return { content: [{ type: "text", text: JSON.stringify({ results }, null, 2) }], structuredContent: { "data": results } };
     }
   );
 
@@ -59,7 +59,7 @@ function registerMcpTools(server) {
     },
     async ({ query, project, limit }) => {
       const results = await semanticSearchMessages({ query, project, limit });
-      return { content: [{ type: "text", text: JSON.stringify({ results }, null, 2) }], structuredContent: { results } };
+      return { content: [{ type: "text", text: JSON.stringify({ results }, null, 2) }], structuredContent: { "data": results } };
     }
   );
 
