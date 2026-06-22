@@ -1,4 +1,4 @@
-const { db, dbReadyPromise } = require("../database");
+const { db } = require("../database");
 const { z } = require("zod");
 const { generateEmbedding, calculateCosineSimilarity } = require("../services/embeddingService");
 const removeStopwords = require("../services/stopwords");
@@ -16,7 +16,6 @@ const SearchMessagesSchema = z.object({
  * Busca mensajes en la base de datos usando un enfoque híbrido.
  */
 async function searchMessages(params) {
-  await dbReadyPromise;
   const validatedParams = SearchMessagesSchema.parse(params);
   const { project, threshold } = validatedParams;
   const searchTerm = validatedParams.searchTerm || validatedParams.query;
@@ -33,8 +32,8 @@ async function searchMessages(params) {
     const whereClauses = [];
 
     if (project) {
-      whereClauses.push(`c.project = ?`);
       dbParams.push(project);
+      whereClauses.push(`c.project = $${dbParams.length}`);
     }
 
     if (whereClauses.length > 0) {

@@ -1,4 +1,4 @@
-const { db, dbReadyPromise } = require("../database");
+const { db } = require("../database");
 const finalizeSession = require("../tools/finalizeSession");
 const getSessionSummary = require("../tools/getSessionSummary");
 
@@ -9,7 +9,6 @@ async function checkAndFinalizeInactiveSessions() {
   console.log("Revisando sesiones inactivas para finalización automática...");
 
   try {
-    await dbReadyPromise;
     // 1. Buscar las últimas sesiones activas (mensajes en la última hora por eficiencia)
     // que no tengan un resumen ya guardado en session_summaries.
     const activeSessions = await db.allAsync(`

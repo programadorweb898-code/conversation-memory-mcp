@@ -1,4 +1,4 @@
-const { db, dbReadyPromise } = require("../database");
+const { db } = require("../database");
 
 /**
  * Elimina un mensaje y su mensaje relacionado (pregunta o respuesta)
@@ -7,20 +7,19 @@ const { db, dbReadyPromise } = require("../database");
  * @returns {Promise<void>}
  */
 async function deleteMessagePair(messageId) {
-  await dbReadyPromise;
   try {
     const targetMessage = await db.getAsync(
-      "SELECT session_id, id FROM conversations WHERE id = ?",
+      "SELECT session_id, id FROM conversations WHERE id = $1",
       [messageId]
     );
-// ...
+
     if (!targetMessage) {
       console.log(`Message ${messageId} not found.`);
       return;
     }
 
     const messages = await db.allAsync(
-      "SELECT id FROM conversations WHERE session_id = ? ORDER BY timestamp ASC, rowid ASC",
+      "SELECT id FROM conversations WHERE session_id = $1 ORDER BY timestamp ASC, ctid ASC",
       [targetMessage.session_id]
     );
 
@@ -30,7 +29,7 @@ async function deleteMessagePair(messageId) {
     if (index > 0) idsToDelete.push(messages[index - 1].id);
     else if (index < messages.length - 1) idsToDelete.push(messages[index + 1].id);
 
-    const placeholders = idsToDelete.map(() => "?").join(",");
+    const placeholders = idsToDelete.map((_, i) => "$" + (i + 1)).join(",");
     await db.runAsync(`DELETE FROM message_embeddings WHERE message_id IN (${placeholders})`, idsToDelete);
     await db.runAsync(`DELETE FROM conversations WHERE id IN (${placeholders})`, idsToDelete);
 

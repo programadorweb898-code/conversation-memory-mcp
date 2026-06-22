@@ -1,4 +1,4 @@
-const { db, dbReadyPromise } = require("../database");
+const { db } = require("../database");
 
 /**
  * Recupera todos los mensajes de una sesión específica, ordenados cronológicamente.
@@ -7,9 +7,8 @@ const { db, dbReadyPromise } = require("../database");
  * @returns {Promise<Array>} - Lista de mensajes de la sesión.
  */
 async function recoverSession({ sessionId }) {
-  await dbReadyPromise;
   try {
-    const sql = `SELECT * FROM conversations WHERE session_id = ? ORDER BY timestamp ASC`;
+    const sql = `SELECT * FROM conversations WHERE session_id = $1 ORDER BY timestamp ASC`;
     return await db.allAsync(sql, [sessionId]);
   } catch (err) { 
     console.error("Error recovering session:", err.message);

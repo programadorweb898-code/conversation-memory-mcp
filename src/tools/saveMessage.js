@@ -1,4 +1,4 @@
-const { db, dbReadyPromise } = require("../database");
+const { db } = require("../database");
 const { randomUUID } = require("crypto");
 const { z } = require("zod");
 const embeddingService = require("../services/embeddingService");
@@ -13,7 +13,6 @@ const SaveMessageSchema = z.object({
 });
 
 async function saveMessage(params) {
-  await dbReadyPromise;
   const validatedParams = SaveMessageSchema.parse(params);
   const { sessionId, project, role, content, agentId } = validatedParams;
   const messageId = randomUUID();
@@ -22,7 +21,7 @@ async function saveMessage(params) {
     const sql = `
       INSERT INTO conversations
       (id, session_id, timestamp, project, role, content, agent_id)
-      VALUES (?, ?, datetime('now'), ?, ?, ?, ?)
+      VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6)
     `;
 
     await db.runAsync(sql, [messageId, sessionId, project ?? null, role, content, agentId ?? null]);

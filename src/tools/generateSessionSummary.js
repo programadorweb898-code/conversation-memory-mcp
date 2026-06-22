@@ -1,4 +1,4 @@
-const { db, dbReadyPromise } = require("../database");
+const { db } = require("../database");
 
 /**
  * Genera un resumen estructurado de una sesión.
@@ -7,15 +7,14 @@ const { db, dbReadyPromise } = require("../database");
  * @returns {Promise<string>} - El resumen formateado.
  */
 async function generateSessionSummary({ sessionId }) {
-  await dbReadyPromise;
   try {
     const rows = await db.allAsync(
       `SELECT role, content, timestamp, project FROM conversations 
-       WHERE session_id = ? 
-       ORDER BY timestamp ASC, rowid ASC`,
+       WHERE session_id = $1 
+       ORDER BY timestamp ASC, ctid ASC`,
       [sessionId]
     );
-// ...
+
     if (rows.length === 0) {
       return "No hay mensajes en esta sesión para resumir.";
     }

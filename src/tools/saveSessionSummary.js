@@ -1,4 +1,4 @@
-const { db, dbReadyPromise } = require("../database");
+const { db } = require("../database");
 const generateSessionSummary = require("./generateSessionSummary");
 
 /**
@@ -8,15 +8,14 @@ const generateSessionSummary = require("./generateSessionSummary");
  * @returns {Promise<boolean>}
  */
 async function saveSessionSummary({ sessionId }) {
-  await dbReadyPromise;
   try {
     const summary = await generateSessionSummary({ sessionId });
     const sql = `
       INSERT INTO session_summaries (session_id, summary, timestamp)
-      VALUES (?, ?, datetime('now'))
+      VALUES ($1, $2, CURRENT_TIMESTAMP)
       ON CONFLICT(session_id) DO UPDATE SET
-        summary = excluded.summary,
-        timestamp = excluded.timestamp
+        summary = EXCLUDED.summary,
+        timestamp = EXCLUDED.timestamp
     `;
 
     await db.runAsync(sql, [sessionId, summary]);

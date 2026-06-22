@@ -1,6 +1,6 @@
 // src/services/embeddingService.js
 
-const { db, dbReadyPromise } = require("../database");
+const { db } = require("../database");
 
 // Specify the model and ensure it's quantized for efficiency
 const model = "Xenova/all-MiniLM-L6-v2";
@@ -63,7 +63,8 @@ async function saveEmbedding(messageId, embedding) {
   try {
     // The 'embedding' parameter is already a JSON string from generateEmbedding
     await db.runAsync(
-      `INSERT OR REPLACE INTO message_embeddings (message_id, embedding) VALUES (?, ?)`,
+      `INSERT INTO message_embeddings (message_id, embedding) VALUES ($1, $2)
+       ON CONFLICT(message_id) DO UPDATE SET embedding = EXCLUDED.embedding`,
       [messageId, embedding] // embedding ya viene como JSON string
     );
     console.log(`Embedding for message ${messageId} saved to message_embeddings.`);
@@ -74,9 +75,8 @@ async function saveEmbedding(messageId, embedding) {
 }
 
 async function getEmbedding(messageId) {
-  await dbReadyPromise;
   const row = await db.getAsync(
-    `SELECT embedding FROM message_embeddings WHERE message_id = ?`,
+    `SELECT embedding FROM message_embeddings WHERE message_id = $1`,
     [messageId]
   );
   return row ? row.embedding : null;

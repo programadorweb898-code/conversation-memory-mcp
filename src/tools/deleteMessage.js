@@ -1,4 +1,4 @@
-const { db, dbReadyPromise } = require("../database");
+const { db } = require("../database");
 
 /**
  * Elimina un mensaje especifico y su embedding asociado de la base de datos.
@@ -6,12 +6,11 @@ const { db, dbReadyPromise } = require("../database");
  * @returns {Promise<void>}
  */
 async function deleteMessage(messageId) {
-  await dbReadyPromise;
   try {
-    await db.runAsync("DELETE FROM message_embeddings WHERE message_id = ?", [messageId]);
+    await db.runAsync("DELETE FROM message_embeddings WHERE message_id = $1", [messageId]);
     console.log(`Embedding for message ${messageId} deleted (if existed).`);
 
-    const result = await db.runAsync("DELETE FROM conversations WHERE id = ?", [messageId]);
+    const result = await db.runAsync("DELETE FROM conversations WHERE id = $1", [messageId]);
     if (result.changes > 0) {
       console.log(`Message ${messageId} deleted successfully.`);
     } else {

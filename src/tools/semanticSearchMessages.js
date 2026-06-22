@@ -1,8 +1,7 @@
-const { db, dbReadyPromise } = require("../database");
+const { db } = require("../database");
 const { generateEmbedding, calculateCosineSimilarity } = require("../services/embeddingService");
 
 async function semanticSearchMessages({ query, project, limit = 5 }) {
-  await dbReadyPromise;
   if (!query) throw new Error("La consulta no puede estar vacía.");
 // ...
   const queryEmbeddingJson = await generateEmbedding(query);
@@ -24,7 +23,7 @@ async function semanticSearchMessages({ query, project, limit = 5 }) {
   const params = [];
 
   if (project) {
-    sql += ` WHERE c.project = ?`;
+    sql += ` WHERE c.project = $1`;
     params.push(project);
   }
 
@@ -51,4 +50,3 @@ async function semanticSearchMessages({ query, project, limit = 5 }) {
 }
 
 module.exports = semanticSearchMessages;
-
