@@ -83,7 +83,7 @@ function registerMcpTools(server) {
     },
     async ({ sessionId }) => {
       const messages = await recoverSession({ sessionId });
-      return { content: [{ type: "text", text: JSON.stringify(messages, null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify({ messages }, null, 2) }], structuredContent: { messages } };
     }
   );
 
