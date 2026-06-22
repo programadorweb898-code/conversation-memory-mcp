@@ -94,7 +94,7 @@ function registerMcpTools(server) {
     {},
     async () => {
       const sessions = await listSessions();
-      return { content: [{ type: "text", text: JSON.stringify(sessions, null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify({ data: sessions }, null, 2) }] };
     }
   );
 
