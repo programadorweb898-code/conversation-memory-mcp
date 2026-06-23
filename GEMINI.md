@@ -59,10 +59,17 @@ Responde siempre en español.
 No instales librerias ni ejecutes test automaticamente, solo dame los comandos para ejecutarlos manualmente.
 
 ### Regla de Orientación al Inicio (Obligatorio)
-Al iniciar cualquier sesión, lo PRIMERO que debo hacer es:
-1. Leer las 'Capacidades del Proyecto' para saber qué hace el sistema.
-2. Consultar Engram (`mem_context`) para saber en qué punto nos quedamos.
-3. Esto garantiza que no declararé como 'faltante' algo que ya está construido.
+Al iniciar cualquier sesión, seguiré este protocolo estrictamente para obtener contexto:
+
+1. **Intento Inicial (Postgres - Resumen):** Consultar `getLastSessionContext` para obtener el resumen de la última sesión. Si este resumen responde a la pregunta del usuario, finaliza aquí.
+2. **Búsqueda Inteligente Escalonada (Postgres - Historial Completo):** Si el resumen es insuficiente o no responde a la pregunta, realizaré automáticamente búsquedas (`searchMessages` o `semanticSearchMessages`) en todo el historial crudo (todas las sesiones) usando el tema de la pregunta actual como criterio de búsqueda.
+3. **Fallback Estratégico (Engram):** Si la base de datos (Postgres) es inaccesible, está vacía, o no contiene información relevante tras la búsqueda, consultar Engram (`mem_context`, `mem_search`) para obtener el estado actual del proyecto.
+
+Esto garantiza que el contexto sea siempre relevante para la consulta actual, explorando más allá de la última sesión si es necesario.
+
+### Reglas de Interacción y Búsqueda
+- **Protocolo de Inicialización:** Seguir el escalonamiento (Resumen -> Historial -> Engram) al iniciar la sesión para obtener contexto.
+- **Protocolo de Búsqueda Fallida:** Si el usuario consulta sobre algo del pasado y, tras realizar la búsqueda escalonada, la información no se encuentra, el asistente DEBE responder explícitamente: "Eso no lo hablamos", seguido de la respuesta basada en conocimiento general o razonamiento actual.
 
 ## Capacidades del Proyecto
 El sistema ya cuenta con las siguientes funcionalidades terminadas:

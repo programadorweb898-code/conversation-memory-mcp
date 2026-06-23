@@ -10,8 +10,9 @@ async function lastSession() {
     const row = await db.getAsync(sql);
     return row ? row.session_id : null;
   } catch (err) {
-    console.error("Error retrieving last session:", err.message);
-    throw err;
+    console.error("Error retrieving last session (DB inaccessible):", err.message);
+    // Lanzar error específico para que el llamante pueda identificar el fallo de conexión
+    throw new Error("DB_CONNECTION_FAILURE");
   }
 }
 
