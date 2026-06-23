@@ -1,17 +1,18 @@
 const lastSession = require("./lastSession");
-const recoverSession = require("./recoverSession");
+const getSessionSummary = require("./getSessionSummary");
 
 /**
- * Recupera el ID de la última sesión y todos sus mensajes en una sola llamada.
- * @returns {Promise<Object>} - El ID de la sesión y los mensajes.
+ * Recupera el ID de la última sesión y su resumen.
+ * El historial completo se recupera bajo demanda.
+ * @returns {Promise<Object>} - El ID de la sesión y el resumen.
  */
 async function getLastSessionContext() {
   const sessionId = await lastSession();
   if (!sessionId) {
-    return { sessionId: null, messages: [] };
+    return { sessionId: null, summary: null };
   }
-  const messages = await recoverSession({ sessionId });
-  return { sessionId, messages };
+  const summaryData = await getSessionSummary({ sessionId });
+  return { sessionId, summary: summaryData ? summaryData.summary : null };
 }
 
 module.exports = getLastSessionContext;

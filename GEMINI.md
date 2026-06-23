@@ -27,7 +27,7 @@ Technical Requirements
 Stack:
 
 - Node.js
-- SQLite
+- PostgreSQL (Render)
 - MCP SDK
 - UUID
 - Zod
@@ -50,22 +50,28 @@ conversation-memory-mcp/
 │   │   └── deleteSession.js
 │   └── services/
 ├── tests/
-├── conversations.db
+
 └── package.json
 
 Development Rules
-Responde siempre en español
+Responde siempre en español.
 
-No instales librerias ni ejecutes test automaticamente,solo dame los comandos para ejecutarlos manualmente
+No instales librerias ni ejecutes test automaticamente, solo dame los comandos para ejecutarlos manualmente.
 
-### Política de Persistencia Proactiva (Obligatorio)
+### Regla de Orientación al Inicio (Obligatorio)
+Al iniciar cualquier sesión, lo PRIMERO que debo hacer es:
+1. Leer las 'Capacidades del Proyecto' para saber qué hace el sistema.
+2. Consultar Engram (`mem_context`) para saber en qué punto nos quedamos.
+3. Esto garantiza que no declararé como 'faltante' algo que ya está construido.
 
-Como agente, debo asegurar la persistencia automática de toda la historia de trabajo:
-
-1.  **Persistencia en MCP (Registro Crudo):** Tras cada interacción (prompt y respuesta), debo ejecutar obligatoriamente `saveMessage` para persistir el contenido automáticamente.
-2.  **Persistencia en Engram (Conocimiento Semántico):** Cuando detecte una decisión técnica, un bug fix, o una regla de proyecto, debo ejecutar automáticamente `mem_save` en Engram sin esperar a que el usuario lo solicite.
-3.  **Uso Activo del Servidor MCP Local:** Asumo que el servidor MCP `conversation-memory-mcp` (definido en `.gemini/settings.json`) está en ejecución o debe ser iniciado cuando sea necesario para las operaciones de memoria conversacional. Debo utilizar activamente las herramientas de este servidor para gestionar el historial de conversaciones y el contexto.
-4.  **Recuperación Automática al Inicio:** Al iniciar cualquier sesión con el servidor `conversation-memory-mcp`, debo invocar automáticamente la herramienta `getLastSessionContext` para recuperar el resumen y contexto de la última sesión y tener la memoria activa de inmediato.
+## Capacidades del Proyecto
+El sistema ya cuenta con las siguientes funcionalidades terminadas:
+- **Persistencia de Historial Crudo:** Almacenamiento completo de mensajes (user/assistant) y sesiones en PostgreSQL (Render).
+- **Gestión de Sesiones:** Recuperación de sesiones completas y obtención del contexto de la última sesión (`getLastSessionContext`).
+- **Búsqueda:** Funcionalidad de búsqueda por palabras clave y capacidad de búsqueda semántica.
+- **Integración con Engram:** Capacidad de enviar mensajes críticos a Engram (`pushToEngram`) para memoria semántica de largo plazo.
+- **Persistencia Proactiva:** Mecanismos automáticos de guardado de mensajes (raw) y decisiones/aprendizajes (semantic/Engram).
+- **Protocolo de Fallo:** Fallback automático a Engram para recuperar contexto estratégico si la base de datos remota es inaccesible.
 
 
 El usuario no debe tener que recordar guardar el historial o el conocimiento; es responsabilidad exclusiva del agente.
@@ -88,7 +94,7 @@ Always:
 - keep files small
 - avoid duplicated logic
 - use dependency injection when appropriate
-- keep SQLite access centralized
+- keep database access centralized
 - prefer maintainability over clever code
 
 Integration Workflow with Engram
@@ -129,16 +135,5 @@ The design must allow later addition of:
 - automatic session summaries
 - multi-agent memory sharing
 
-Workflow
-
-When asked to continue development:
-
-1. Inspect current files.
-2. Determine next missing step.
-3. Implement only that step.
-4. Explain what was done.
-5. Provide commands to test it.
-
-Never rewrite completed files unless necessary.
-
-Always prioritize small, verifiable iterations.
+### Regla de Verificación de Estado (Obligatorio)
+Antes de declarar que una funcionalidad falta o debe ser implementada, el agente DEBE consultar Engram (`mem_context`, `mem_search`) y los resúmenes de sesión previos. La memoria de Engram es la única fuente de verdad sobre el estado real de la implementación. Nunca asumas que algo falta solo porque no aparece en una inspección de archivos superficial.

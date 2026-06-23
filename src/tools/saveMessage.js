@@ -15,8 +15,28 @@ const SaveMessageSchema = z.object({
 async function saveMessage(params) {
   const validatedParams = SaveMessageSchema.parse(params);
   const { sessionId, project, role, content, agentId } = validatedParams;
-  const messageId = randomUUID();
 
+  // Filtrado de mensajes de infraestructura MCP
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed.jsonrpc === "2.0") {
+      const ignoredMethods = [
+        "initialize",
+        "notifications/initialized",
+        "tools/list",
+        "tools/call",
+        "$/cancelRequest"
+      ];
+      if (parsed.method && ignoredMethods.includes(parsed.method)) {
+        console.log(`Skipping MCP protocol message: ${parsed.method}`);
+        return true;
+      }
+    }
+  } catch (e) {
+    // No es JSON, asumimos que es texto plano de conversación
+  }
+
+  const messageId = randomUUID();
   try {
     const sql = `
       INSERT INTO conversations
