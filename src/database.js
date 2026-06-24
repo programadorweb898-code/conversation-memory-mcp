@@ -9,6 +9,12 @@ const pool = new Pool({
   }
 });
 
+// Sin este listener, un error en una conexión idle del pool puede tirar
+// el proceso completo (uncaughtException) en vez de solo loguearse.
+pool.on('error', (err) => {
+  console.error('Error inesperado en el pool de Postgres (conexión idle):', err.message);
+});
+
 // Interfaz compatible con nuestras promesas anteriores
 const db = {
   query: (sql, params) => pool.query(sql, params),
@@ -76,6 +82,6 @@ async function initDb() {
   }
 }
 
-initDb();
+const dbReady = initDb();
 
-module.exports = { db };
+module.exports = { db, dbReady };

@@ -1,0 +1,96 @@
+diff --git a/package.json b/package.json
+index 2b1eabc..816499e 100644
+--- a/package.json
++++ b/package.json
+@@ -15,6 +15,7 @@
+   "type": "commonjs",
+   "dependencies": {
+     "@modelcontextprotocol/sdk": "^1.29.0",
++    "@xenova/transformers": "^2.17.2",
+     "dotenv": "^17.4.2",
+     "express": "^5.2.1",
+     "express-rate-limit": "^8.5.2",
+diff --git a/src/database.js b/src/database.js
+index 9a52083..6f4b3f6 100644
+--- a/src/database.js
++++ b/src/database.js
+@@ -9,6 +9,12 @@ const pool = new Pool({
+   }
+ });
+ 
++// Sin este listener, un error en una conexión idle del pool puede tirar
++// el proceso completo (uncaughtException) en vez de solo loguearse.
++pool.on('error', (err) => {
++  console.error('Error inesperado en el pool de Postgres (conexión idle):', err.message);
++});
++
+ // Interfaz compatible con nuestras promesas anteriores
+ const db = {
+   query: (sql, params) => pool.query(sql, params),
+@@ -76,6 +82,6 @@ async function initDb() {
+   }
+ }
+ 
+-initDb();
++const dbReady = initDb();
+ 
+-module.exports = { db };
++module.exports = { db, dbReady };
+diff --git a/src/tools/getLastSessionContext.js b/src/tools/getLastSessionContext.js
+index 6c67206..4e1af71 100644
+--- a/src/tools/getLastSessionContext.js
++++ b/src/tools/getLastSessionContext.js
+@@ -1,19 +1,20 @@
+ const lastSession = require("./lastSession");
+ const getSessionSummary = require("./getSessionSummary");
++const recoverSession = require("./recoverSession");
+ 
+ /**
+- * Recupera el ID de la última sesión y su resumen.
+- * El historial completo se recupera bajo demanda.
+- * @returns {Promise<Object>} - El ID de la sesión y el resumen.
++ * Recupera el ID de la última sesión, su resumen y sus mensajes.
++ * @returns {Promise<Object>} - El ID de la sesión, el resumen y los mensajes.
+  */
+ async function getLastSessionContext() {
+   try {
+-    const sessionId = await lastSession();
++    const sessionId = await lastSession.lastSession();
+     if (!sessionId) {
+-      return { sessionId: null, summary: null };
++      return { sessionId: null, summary: null, messages: [] };
+     }
+     const summaryData = await getSessionSummary({ sessionId });
+-    return { sessionId, summary: summaryData ? summaryData.summary : null };
++    const messages = await recoverSession({ sessionId });
++    return { sessionId, summary: summaryData ? summaryData.summary : null, messages };
+   } catch (err) {
+     if (err.message === "DB_CONNECTION_FAILURE") {
+       console.warn("DB inaccessible, signaling Engram fallback.");
+diff --git a/src/tools/lastSession.js b/src/tools/lastSession.js
+index 9305acc..47f82ab 100644
+--- a/src/tools/lastSession.js
++++ b/src/tools/lastSession.js
+@@ -17,3 +17,4 @@ async function lastSession() {
+ }
+ 
+ module.exports = lastSession;
++module.exports.lastSession = lastSession;
+diff --git a/tests/test-helper.js b/tests/test-helper.js
+index cdf5d1d..621ef37 100644
+--- a/tests/test-helper.js
++++ b/tests/test-helper.js
+@@ -1,4 +1,4 @@
+-const { db } = require('../src/database');
++const { db, dbReady } = require('../src/database');
+ 
+ /**
+  * Helper para estandarizar la conexión y operaciones de BD en tests.
+@@ -6,5 +6,6 @@ const { db } = require('../src/database');
+  */
+ 
+ module.exports = {
+-  db
++  db,
++  dbReady
+ };

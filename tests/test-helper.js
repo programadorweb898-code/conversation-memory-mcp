@@ -1,4 +1,4 @@
-const { db } = require('../src/database');
+const { db, dbReady } = require('../src/database');
 
 /**
  * Helper para estandarizar la conexión y operaciones de BD en tests.
@@ -6,5 +6,6 @@ const { db } = require('../src/database');
  */
 
 module.exports = {
-  db
+  db,
+  dbReady
 };

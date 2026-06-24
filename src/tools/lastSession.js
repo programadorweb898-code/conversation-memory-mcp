@@ -17,3 +17,4 @@ async function lastSession() {
 }
 
 module.exports = lastSession;
+module.exports.lastSession = lastSession;

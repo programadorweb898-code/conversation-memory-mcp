@@ -1,19 +1,20 @@
 const lastSession = require("./lastSession");
 const getSessionSummary = require("./getSessionSummary");
+const recoverSession = require("./recoverSession");
 
 /**
- * Recupera el ID de la última sesión y su resumen.
- * El historial completo se recupera bajo demanda.
- * @returns {Promise<Object>} - El ID de la sesión y el resumen.
+ * Recupera el ID de la última sesión, su resumen y sus mensajes.
+ * @returns {Promise<Object>} - El ID de la sesión, el resumen y los mensajes.
  */
 async function getLastSessionContext() {
   try {
-    const sessionId = await lastSession();
+    const sessionId = await lastSession.lastSession();
     if (!sessionId) {
-      return { sessionId: null, summary: null };
+      return { sessionId: null, summary: null, messages: [] };
     }
     const summaryData = await getSessionSummary({ sessionId });
-    return { sessionId, summary: summaryData ? summaryData.summary : null };
+    const messages = await recoverSession({ sessionId });
+    return { sessionId, summary: summaryData ? summaryData.summary : null, messages };
   } catch (err) {
     if (err.message === "DB_CONNECTION_FAILURE") {
       console.warn("DB inaccessible, signaling Engram fallback.");
