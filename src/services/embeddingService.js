@@ -82,44 +82,9 @@ async function getEmbedding(messageId) {
   return row ? row.embedding : null;
 }
 
-/**
- * Calculates the cosine similarity between two embedding vectors.
- * @param {number[]} vecA The first embedding vector.
- * @param {number[]} vecB The second embedding vector.
- * @returns {number} The cosine similarity between the two vectors.
- */
-function calculateCosineSimilarity(vecA, vecB) {
-  if (!vecA || !vecB || vecA.length !== vecB.length) {
-    throw new Error("Vectors must be non-empty and have the same dimensions.");
-  }
-
-  let dotProduct = 0;
-  let magnitudeA = 0;
-  let magnitudeB = 0;
-
-  for (let i = 0; i < vecA.length; i++) {
-    dotProduct += vecA[i] * vecB[i];
-    magnitudeA += vecA[i] * vecA[i];
-    magnitudeB += vecB[i] * vecB[i];
-  }
-
-  magnitudeA = Math.sqrt(magnitudeA);
-  magnitudeB = Math.sqrt(magnitudeB);
-
-  if (magnitudeA === 0 || magnitudeB === 0) {
-    return 0; // Avoid division by zero, return 0 similarity for zero vectors
-  }
-
-  return dotProduct / (magnitudeA * magnitudeB);
-}
-
-
 module.exports = {
-  initializeEmbeddingPipeline, // Export the initialization function
+  initializeEmbeddingPipeline,
   generateEmbedding,
   saveEmbedding,
   getEmbedding,
-  calculateCosineSimilarity, // Export the new function
 };
-
-// TODO: migrar a pgvector o sqlite-vss si supera 500k mensajes

@@ -1,52 +1,43 @@
 const { db } = require("../database");
-const { generateEmbedding, calculateCosineSimilarity } = require("../services/embeddingService");
+const { generateEmbedding } = require("../services/embeddingService");
 
 async function semanticSearchMessages({ query, project, limit = 5 }) {
   if (!query) throw new Error("La consulta no puede estar vacía.");
-// ...
-  const queryEmbeddingJson = await generateEmbedding(query);
-  const queryEmbedding = JSON.parse(queryEmbeddingJson); // Esto es un array de floats
 
+  // Generar embedding de la consulta
+  const queryEmbeddingJson = await generateEmbedding({ role: "search", content: query });
+  
+  // pgvector espera el formato '[x,y,z]' que es lo que devuelve generateEmbedding
+  // SQL: <-> es distancia euclidiana, <=> es distancia coseno.
+  // pgvector utiliza la distancia de coseno (1 - similitud).
+  // Ordenamos por distancia ascendente (menor distancia = mayor similitud).
+  
   let sql = `
     SELECT
-      me.message_id,
-      me.embedding AS message_embedding_json,
+      c.id AS message_id,
       c.content,
       c.session_id,
       c.project,
       c.role,
       c.timestamp,
-      c.agent_id
+      c.agent_id,
+      (1 - (me.embedding <=> $1::vector)) AS similarity
     FROM message_embeddings AS me
     JOIN conversations AS c ON me.message_id = c.id
   `;
-  const params = [];
+  const params = [queryEmbeddingJson];
 
   if (project) {
-    sql += ` WHERE c.project = $1`;
+    sql += ` WHERE c.project = $2`;
     params.push(project);
   }
 
-  const allMessagesWithEmbeddings = await db.allAsync(sql, params);
+  sql += ` ORDER BY me.embedding <=> $1::vector ASC LIMIT $${params.length + 1}`;
+  params.push(limit);
 
-  const resultsWithSimilarity = allMessagesWithEmbeddings.map((row) => {
-    const messageEmbedding = JSON.parse(row.message_embedding_json);
-    const similarity = calculateCosineSimilarity(queryEmbedding, messageEmbedding);
-    return {
-      message_id: row.message_id,
-      content: row.content,
-      session_id: row.session_id,
-      project: row.project,
-      role: row.role,
-      timestamp: row.timestamp,
-      agent_id: row.agent_id,
-      similarity: similarity,
-    };
-  });
+  const results = await db.allAsync(sql, params);
 
-  resultsWithSimilarity.sort((a, b) => b.similarity - a.similarity);
-
-  return resultsWithSimilarity.slice(0, limit);
+  return results;
 }
 
 module.exports = semanticSearchMessages;
