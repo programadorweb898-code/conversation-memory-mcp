@@ -2,60 +2,39 @@ const { expect } = require('chai');
 const sinon = require('sinon');
 const { v4: uuidv4 } = require('uuid');
 
-// Set up in-memory database for testing
-process.env.DATABASE_PATH = ':memory:';
-
-// Import db and saveMessage AFTER setting the environment variable
-const { db } = require('../src/database');
+const { db } = require('./test-helper');
 const saveMessage = require('../src/tools/saveMessage');
 
 describe('saveMessage', () => {
   let queueStub;
+  const testSessionIds = [];
 
-  beforeEach((done) => {
+  beforeEach(async () => {
     queueStub = sinon.stub();
     sinon.replace(require('../src/services/embeddingQueue'), 'addTask', queueStub);
-
-    db.serialize(() => {
-      db.run(`DROP TABLE IF EXISTS conversations`);
-      db.run(`DROP TABLE IF EXISTS message_embeddings`);
-      db.run(`DROP TABLE IF EXISTS session_summaries`);
-      db.run(`
-        CREATE TABLE conversations (
-          id TEXT PRIMARY KEY,
-          session_id TEXT NOT NULL,
-          timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-          project TEXT,
-          role TEXT NOT NULL,
-          content TEXT NOT NULL,
-          agent_id TEXT
-        )
-      `);
-      db.run(`
-        CREATE TABLE message_embeddings (
-          message_id TEXT PRIMARY KEY,
-          embedding TEXT NOT NULL,
-          FOREIGN KEY(message_id) REFERENCES conversations(id)
-        )
-      `);
-      db.run(`
-        CREATE TABLE session_summaries (
-          session_id TEXT PRIMARY KEY,
-          summary TEXT NOT NULL,
-          timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `, done); // `done` is called after the last run
-    });
   });
 
-  afterEach((done) => {
+  afterEach(async () => {
     sinon.restore(); // Restore all stubs
-    done();
+    
+    // Limpieza segura: eliminar solo las sesiones generadas en los tests
+    for (const sessionId of testSessionIds) {
+      try {
+        await db.runAsync(`DELETE FROM message_embeddings WHERE message_id IN (SELECT id FROM conversations WHERE session_id = $1)`, [sessionId]);
+        await db.runAsync(`DELETE FROM conversations WHERE session_id = $1`, [sessionId]);
+      } catch (err) {
+        console.error("Error en limpieza de test-save:", err.message);
+      }
+    }
+    testSessionIds.length = 0; // Vaciar array
   });
 
   it('should save a message successfully with required fields', async () => {
+    const sessionId = uuidv4();
+    testSessionIds.push(sessionId);
+
     const params = {
-      sessionId: uuidv4(),
+      sessionId,
       project: 'test-project',
       role: 'user',
       content: 'Hello, world!',
@@ -63,24 +42,22 @@ describe('saveMessage', () => {
 
     await saveMessage(params);
 
-    const retrievedMessage = await new Promise((resolve, reject) => {
-      db.get(`SELECT * FROM conversations WHERE session_id = ?`, [params.sessionId], (err, row) => {
-        if (err) return reject(err);
-        resolve(row);
-      });
-    });
+    const retrievedMessage = await db.getAsync(`SELECT * FROM conversations WHERE session_id = $1`, [sessionId]);
 
     expect(retrievedMessage).to.exist;
     expect(retrievedMessage.project).to.equal(params.project);
     expect(retrievedMessage.role).to.equal(params.role);
     expect(retrievedMessage.content).to.equal(params.content);
-    expect(retrievedMessage.agent_id).to.be.null; // agentId is optional, should be null by default
-    expect(queueStub.calledOnce).to.be.true; // Check if embedding task was queued
+    expect(retrievedMessage.agent_id).to.be.null; 
+    expect(queueStub.calledOnce).to.be.true; 
   });
 
   it('should save a message successfully with all fields including agentId', async () => {
+    const sessionId = uuidv4();
+    testSessionIds.push(sessionId);
+
     const params = {
-      sessionId: uuidv4(),
+      sessionId,
       project: 'another-project',
       role: 'assistant',
       content: 'I am an assistant.',
@@ -89,12 +66,7 @@ describe('saveMessage', () => {
 
     await saveMessage(params);
 
-    const retrievedMessage = await new Promise((resolve, reject) => {
-      db.get(`SELECT * FROM conversations WHERE session_id = ?`, [params.sessionId], (err, row) => {
-        if (err) return reject(err);
-        resolve(row);
-      });
-    });
+    const retrievedMessage = await db.getAsync(`SELECT * FROM conversations WHERE session_id = $1`, [sessionId]);
 
     expect(retrievedMessage).to.exist;
     expect(retrievedMessage.project).to.equal(params.project);
@@ -120,32 +92,28 @@ describe('saveMessage', () => {
 
     expect(error).to.exist;
     expect(error.name).to.equal('ZodError');
-    expect(queueStub.called).to.be.false; // Embedding should not be queued if validation fails
+    expect(queueStub.called).to.be.false; 
   });
 
   it('should resolve true even if embedding generation fails, but message is saved', async () => {
-    // Temporarily restore original generateEmbedding to control its behavior
+    const sessionId = uuidv4();
+    testSessionIds.push(sessionId);
+
     sinon.restore(); 
     sinon.stub(require('../src/services/embeddingService'), 'generateEmbedding').rejects(new Error('Embedding generation failed'));
     sinon.replace(require('../src/services/embeddingService'), 'saveEmbedding', sinon.stub().resolves(true));
 
-
     const params = {
-      sessionId: uuidv4(),
+      sessionId,
       project: 'error-project',
       role: 'user',
       content: 'Message with embedding error',
     };
 
     const result = await saveMessage(params);
-    expect(result).to.be.true; // Should still resolve true
+    expect(result).to.be.true; 
 
-    const retrievedMessage = await new Promise((resolve, reject) => {
-      db.get(`SELECT * FROM conversations WHERE session_id = ?`, [params.sessionId], (err, row) => {
-        if (err) return reject(err);
-        resolve(row);
-      });
-    });
-    expect(retrievedMessage).to.exist; // Message should still be in DB
+    const retrievedMessage = await db.getAsync(`SELECT * FROM conversations WHERE session_id = $1`, [sessionId]);
+    expect(retrievedMessage).to.exist; 
   });
 });

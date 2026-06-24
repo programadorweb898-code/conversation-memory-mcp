@@ -1,7 +1,7 @@
 const { expect } = require('chai');
 const searchMessages = require("../src/tools/searchMessages");
 const saveMessage = require("../src/tools/saveMessage");
-const { db } = require("../src/database"); // Import the database connection
+const { db } = require("./test-helper"); // Import the updated helper
 const {
   generateEmbedding,
   initializeEmbeddingPipeline,
@@ -13,7 +13,7 @@ describe('Semantic Search Messages Tool', () => {
   const testProject = "semantic-search-project";
 
   before(async function() {
-    this.timeout(20000); // Increase timeout for model loading
+    this.timeout(30000); // Increased timeout for pipeline + DB operations
 
     console.log("Initializing embedding pipeline for tests...");
     await initializeEmbeddingPipeline();
@@ -27,7 +27,7 @@ describe('Semantic Search Messages Tool', () => {
     await saveMessage({ sessionId: testSessionId, project: "other-project", role: "user", content: "El precio de las acciones subió hoy." });
 
     const savedMessages = await db.allAsync(
-      `SELECT id, content FROM conversations WHERE session_id = ?`,
+      `SELECT id, content FROM conversations WHERE session_id = $1`,
       [testSessionId]
     );
 
@@ -39,15 +39,14 @@ describe('Semantic Search Messages Tool', () => {
     console.log("Test messages saved for semantic search.");
   });
 
-  after(function(done) {
-    // Cleanup: Delete test messages (do not close DB here)
-    db.run(`DELETE FROM message_embeddings WHERE message_id IN (SELECT id FROM conversations WHERE session_id = ?)`, [testSessionId], (err) => {
-      if (err) console.error("Error cleaning up message_embeddings:", err.message);
-      db.run(`DELETE FROM conversations WHERE session_id = ?`, [testSessionId], (err) => {
-        if (err) console.error("Error cleaning up conversations:", err.message);
-        done();
-      });
-    });
+  after(async () => {
+    // Cleanup: Delete test messages using async/await
+    try {
+      await db.runAsync(`DELETE FROM message_embeddings WHERE message_id IN (SELECT id FROM conversations WHERE session_id = $1)`, [testSessionId]);
+      await db.runAsync(`DELETE FROM conversations WHERE session_id = $1`, [testSessionId]);
+    } catch (err) {
+      console.error("Error cleaning up test data:", err.message);
+    }
   });
 
   it('debería encontrar mensajes semánticamente similares a una consulta', async () => {

@@ -1,7 +1,7 @@
 // tests/test-embedding-service.js
 
 const { initializeEmbeddingPipeline, generateEmbedding, saveEmbedding, getEmbedding } = require("../src/services/embeddingService");
-const { db } = require("../src/database"); // Import the database connection
+const { db } = require("./test-helper"); // Import the database connection
 
 async function runTests() {
   console.log("Iniciando pruebas para embeddingService.js");
@@ -58,11 +58,13 @@ async function runTests() {
   } catch (error) {
     console.error("❌ Ocurrió un error durante las pruebas:", error);
   } finally {
-    // Limpieza: eliminar embedding de prueba (no cerrar la BD aquí)
-    db.run(`DELETE FROM message_embeddings WHERE message_id = ?`, [testMessageId], (err) => {
-      if (err) console.error("Error limpiando message_embeddings:", err.message);
-      else console.log("Embedding de prueba eliminado.");
-    });
+    // Limpieza asíncrona segura del embedding de prueba
+    try {
+      await db.runAsync(`DELETE FROM message_embeddings WHERE message_id = $1`, [testMessageId]);
+      console.log("Embedding de prueba eliminado.");
+    } catch (err) {
+      console.error("Error limpiando message_embeddings:", err.message);
+    }
     console.log("Pruebas finalizadas.");
   }
 }

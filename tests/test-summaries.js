@@ -2,7 +2,7 @@ const { expect } = require('chai');
 const saveSessionSummary = require("../src/tools/saveSessionSummary");
 const getSessionSummary = require("../src/tools/getSessionSummary");
 const saveMessage = require("../src/tools/saveMessage"); // Import saveMessage
-const { db } = require("../src/database");
+const { db } = require('./test-helper');
 
 describe('Session Summaries Tool', () => {
   const testSessionId = "test-session-summary-123";
@@ -11,40 +11,29 @@ describe('Session Summaries Tool', () => {
   const testMessage3 = { sessionId: testSessionId, project: "test", role: "user", content: "Necesito un resumen de esta conversación." };
 
   beforeEach(async () => {
-    // Limpiar mensajes y resúmenes de sesiones anteriores
-    await new Promise((resolve, reject) => {
-      db.run(`DELETE FROM conversations WHERE session_id = ?`, [testSessionId], (err) => {
-        if (err) reject(err);
-        resolve();
-      });
-    });
-    await new Promise((resolve, reject) => {
-      db.run(`DELETE FROM session_summaries WHERE session_id = ?`, [testSessionId], (err) => {
-        if (err) reject(err);
-        resolve();
-      });
-    });
+    // Limpiar mensajes y resúmenes de sesiones anteriores de forma asíncrona
+    try {
+      await db.runAsync(`DELETE FROM conversations WHERE session_id = $1`, [testSessionId]);
+      await db.runAsync(`DELETE FROM session_summaries WHERE session_id = $1`, [testSessionId]);
+    } catch (err) {
+      console.error("Error en limpieza inicial de test-summaries:", err.message);
+    }
+
     // Guardar mensajes de prueba
     await saveMessage(testMessage1);
     await saveMessage(testMessage2);
     await saveMessage(testMessage3);
-  });
+  }).timeout(10000);
 
   afterEach(async () => {
-    // Limpiar mensajes y resúmenes después de cada prueba
-    await new Promise((resolve, reject) => {
-      db.run(`DELETE FROM conversations WHERE session_id = ?`, [testSessionId], (err) => {
-        if (err) reject(err);
-        resolve();
-      });
-    });
-    await new Promise((resolve, reject) => {
-      db.run(`DELETE FROM session_summaries WHERE session_id = ?`, [testSessionId], (err) => {
-        if (err) reject(err);
-        resolve();
-      });
-    });
-  });
+    // Limpiar mensajes y resúmenes después de cada prueba de forma asíncrona
+    try {
+      await db.runAsync(`DELETE FROM conversations WHERE session_id = $1`, [testSessionId]);
+      await db.runAsync(`DELETE FROM session_summaries WHERE session_id = $1`, [testSessionId]);
+    } catch (err) {
+      console.error("Error en limpieza final de test-summaries:", err.message);
+    }
+  }).timeout(10000);
 
   it('debería generar y guardar un resumen de sesión correctamente', async () => {
     await saveSessionSummary({ sessionId: testSessionId });

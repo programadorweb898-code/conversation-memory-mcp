@@ -28,6 +28,10 @@ const db = {
   allAsync: async (sql, params = []) => {
     const result = await pool.query(sql, params);
     return result.rows;
+  },
+  
+  close: async () => {
+    await pool.end();
   }
 };
 
