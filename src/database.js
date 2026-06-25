@@ -60,10 +60,11 @@ async function initDb() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_conversations_project ON conversations(project)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_conversations_session_id ON conversations(session_id)`);
     
+    await client.query(`CREATE EXTENSION IF NOT EXISTS vector;`);
     await client.query(`
       CREATE TABLE IF NOT EXISTS message_embeddings (
         message_id TEXT PRIMARY KEY,
-        embedding TEXT NOT NULL,
+        embedding vector(384) NOT NULL,
         FOREIGN KEY(message_id) REFERENCES conversations(id)
       )
     `);
