@@ -1,7 +1,7 @@
 const { startWorker, stopWorker } = require("./services/embeddingWorker");
 const { startSessionMonitor, stopSessionMonitor } = require("./services/sessionManager");
 const app = require("./app");
-const { dbReadyPromise } = require("./database");
+const { dbReady } = require("./database");
 
 let httpServer;
 
@@ -12,7 +12,7 @@ function shouldStartEmbeddingWorker() {
 async function startServer() {
   console.time("Startup total");
 
-  await dbReadyPromise;
+  await dbReady;
   console.log("Database is ready.");
 
   const PORT = process.env.PORT || 3000;
