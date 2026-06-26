@@ -2,6 +2,7 @@ const { expect } = require('chai');
 const deleteMessage = require('../src/tools/deleteMessage');
 const { db } = require('./test-helper');
 const { v4: uuidv4 } = require('uuid');
+const fakeEmbedding = require('./helpers/fakeEmbedding');
 
 describe('Delete Message Tool', () => {
   let testMessageId;
@@ -22,7 +23,7 @@ describe('Delete Message Tool', () => {
     // También insertamos un embedding para probar la eliminación en cascada
     await db.runAsync(
       `INSERT INTO message_embeddings (message_id, embedding) VALUES ($1, $2)`,
-      [testMessageId, JSON.stringify([0.1, 0.2, 0.3])]
+      [testMessageId, fakeEmbedding(0.1)]
     );
   });
 

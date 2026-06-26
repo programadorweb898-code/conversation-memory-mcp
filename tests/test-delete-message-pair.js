@@ -2,6 +2,7 @@ const { expect } = require('chai');
 const deleteMessagePair = require('../src/tools/deleteMessagePair');
 const { db } = require('./test-helper');
 const { v4: uuidv4 } = require('uuid');
+const fakeEmbedding = require('./helpers/fakeEmbedding');
 
 describe('Delete Message Pair Tool', () => {
   let testSessionId;
@@ -24,8 +25,8 @@ describe('Delete Message Pair Tool', () => {
     );
     
     // Añadir embeddings simulados
-    await db.runAsync(`INSERT INTO message_embeddings (message_id, embedding) VALUES ($1, $2)`, [msgId1, '[0.1]']);
-    await db.runAsync(`INSERT INTO message_embeddings (message_id, embedding) VALUES ($1, $2)`, [msgId2, '[0.2]']);
+    await db.runAsync(`INSERT INTO message_embeddings (message_id, embedding) VALUES ($1, $2)`, [msgId1, fakeEmbedding(0.1)]);
+    await db.runAsync(`INSERT INTO message_embeddings (message_id, embedding) VALUES ($1, $2)`, [msgId2, fakeEmbedding(0.2)]);
   });
 
   afterEach(async () => {
