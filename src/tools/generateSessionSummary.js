@@ -1,47 +1,65 @@
-const { db } = require("../database");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+// Inicializar Gemini
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 /**
- * Genera un resumen estructurado de una sesión.
- * @param {Object} params
- * @param {string} params.sessionId - El ID de la sesión para resumir.
- * @returns {Promise<string>} - El resumen formateado.
+ * Genera un resumen incremental de una sesión utilizando LLM.
  */
-async function generateSessionSummary({ sessionId }) {
-  try {
-    const rows = await db.allAsync(
-      `SELECT role, content, timestamp, project FROM conversations 
-       WHERE session_id = $1 
-       ORDER BY timestamp ASC, ctid ASC`,
-      [sessionId]
-    );
+async function generateSessionSummary({ sessionId, previousSummary, newMessages }) {
+  if (!newMessages || newMessages.length === 0) return previousSummary;
 
-    if (rows.length === 0) {
-      return "No hay mensajes en esta sesión para resumir.";
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+  const transcript = newMessages
+    .map((row) => `[${new Date(row.timestamp).toLocaleTimeString()}] ${row.role.toUpperCase()}: ${row.content}`)
+    .join("\n");
+
+  // Attempt to parse previousSummary to JSON, or use a default structure if invalid
+  let previousJson;
+  try {
+    previousJson = typeof previousSummary === 'string' ? JSON.parse(previousSummary) : previousSummary;
+  } catch (e) {
+    previousJson = { goal: "", discoveries: [], accomplished: [], next_steps: [] };
+  }
+
+  const prompt = `
+    Eres un experto en síntesis de conversaciones.
+    Toma el resumen anterior (en formato JSON) y los nuevos mensajes, y genera un ÚNICO resumen actualizado (en formato JSON) integrando todo.
+
+    ESTRUCTURA REQUERIDA (JSON):
+    {
+      "goal": "string",
+      "discoveries": ["string", ...],
+      "accomplished": ["string", ...],
+      "next_steps": ["string", ...]
     }
 
-    const firstMsg = rows[0];
-    const lastMsg = rows[rows.length - 1];
-    const project = firstMsg.project || "Sin proyecto";
-    const startTime = new Date(firstMsg.timestamp).toLocaleString();
-    const endTime = new Date(lastMsg.timestamp).toLocaleString();
+    Reglas de fusión:
+    1. 'goal': Mantén el original, actualiza solo si el contexto indica un nuevo objetivo.
+    2. 'discoveries' y 'accomplished': Combina los del resumen previo con los nuevos mensajes, elimina duplicados.
+    3. 'next_steps': Reemplaza completamente con los nuevos pasos derivados de la conversación.
+    4. NO incluyas introducciones, solo el objeto JSON puro.
 
-    let summary = `=== RESUMEN DE SESIÓN ===\n`;
-    summary += `ID: ${sessionId}\n`;
-    summary += `Proyecto: ${project}\n`;
-    summary += `Inicio: ${startTime}\n`;
-    summary += `Fin: ${endTime}\n`;
-    summary += `Total mensajes: ${rows.length}\n`;
-    summary += `=========================\n\n`;
-    summary += `TRANSCRIPCIÓN:\n`;
+    Resumen previo:
+    ${JSON.stringify(previousJson, null, 2)}
 
-    const transcript = rows
-      .map((row) => `[${new Date(row.timestamp).toLocaleTimeString()}] ${row.role.toUpperCase()}: ${row.content}`)
-      .join("\n");
+    Nuevos mensajes:
+    ${transcript}
+  `;
 
-    return summary + transcript;
+  try {
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    // Clean potential markdown formatting
+    const jsonString = text.replace(/```json\n?|\n?```/g, '').trim();
+    // Validate parsing
+    JSON.parse(jsonString);
+    return jsonString;
   } catch (err) {
-    console.error("Error generating session summary:", err.message);
-    throw err;
+    console.error("Error generating incremental summary with LLM:", err.message);
+    // Fallback: si falla el LLM, mantenemos el resumen previo
+    return JSON.stringify(previousJson);
   }
 }
 

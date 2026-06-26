@@ -75,6 +75,10 @@ async function initDb() {
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await client.query(`
+      ALTER TABLE session_summaries 
+      ADD COLUMN IF NOT EXISTS last_processed_message_id TEXT;
+    `);
     console.log("Tablas inicializadas correctamente en Postgres.");
   } catch (err) {
     console.error("Error inicializando tablas:", err);
