@@ -56,7 +56,22 @@ function setupMcpRoutes(app, { httpServer, sseServer }) {
 
     console.log("SSE transport created for session:", sessionId);
 
+    // Workaround para un bug conocido del SDK de MCP: el stream SSE se corta
+    // solo a los ~5 minutos de inactividad de mensajes reales, aunque la conexión
+    // TCP siga abierta. Mandamos un comentario SSE (":ping") cada 2 minutos para
+    // mantener el stream activo y evitar que Render lo cuente como inactividad,
+    // y evitar que el sessionId se pierda del Map por una reconexión forzada.
+    const keepAliveInterval = setInterval(() => {
+      try {
+        res.write(":ping\n\n");
+      } catch (err) {
+        console.error("Error enviando keep-alive SSE:", err.message);
+        clearInterval(keepAliveInterval);
+      }
+    }, 2 * 60 * 1000);
+
     res.on("close", () => {
+      clearInterval(keepAliveInterval);
       transports.delete(sessionId);
       console.log(`Sesion ${sessionId} desconectada. Transports activos: ${transports.size}`);
     });
