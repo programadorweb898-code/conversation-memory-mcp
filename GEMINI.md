@@ -70,6 +70,7 @@ Esto garantiza que el contexto sea siempre relevante para la consulta actual, ex
 ### Reglas de Interacción y Búsqueda
 - **Protocolo de Inicialización:** Seguir el escalonamiento (Resumen -> Historial -> Engram) al iniciar la sesión para obtener contexto.
 - **Protocolo de Búsqueda Fallida:** Si el usuario consulta sobre algo del pasado y, tras realizar la búsqueda escalonada, la información no se encuentra, el asistente DEBE responder explícitamente: "Eso no lo hablamos", seguido de la respuesta basada en conocimiento general o razonamiento actual.
+- **Consulta de Recursos:** Siempre que tengas que consultar a la base de datos para obtener recursos, hazlo exclusivamente con las herramientas del MCP `conversation-memory-mcp`.
 
 ## Capacidades del Proyecto
 El sistema ya cuenta con las siguientes funcionalidades terminadas:
