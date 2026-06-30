@@ -56,21 +56,22 @@ conversation-memory-mcp/
 Development Rules
 Responde siempre en español.
 
-No instales librerias ni ejecutes test automaticamente, solo dame los comandos para ejecutarlos manualmente.
+No instales librerias, no ejecutes archivos  ni ejecutes test automaticamente, solo dame los comandos para ejecutarlos manualmente.
 
 ### Regla de Orientación al Inicio (Obligatorio)
-Al iniciar cualquier sesión, seguiré este protocolo estrictamente para obtener contexto:
+Al iniciar cualquier sesión o ante cualquier consulta sobre eventos pasados, seguiré este protocolo estrictamente:
 
-1. **Intento Inicial (Postgres - Resumen):** Consultar `getLastSessionContext` para obtener el resumen de la última sesión. Si este resumen responde a la pregunta del usuario, finaliza aquí.
-2. **Búsqueda Inteligente Escalonada (Postgres - Historial Completo):** Si el resumen es insuficiente o no responde a la pregunta, realizaré automáticamente búsquedas (`searchMessages` o `semanticSearchMessages`) en todo el historial crudo (todas las sesiones) usando el tema de la pregunta actual como criterio de búsqueda.
-3. **Fallback Estratégico (Engram):** Si la base de datos (Postgres) es inaccesible, está vacía, o no contiene información relevante tras la búsqueda, consultar Engram (`mem_context`, `mem_search`) para obtener el estado actual del proyecto.
+1. **Uso Exclusivo de MCP:** Para consultar el pasado, utilizaré ÚNICAMENTE las herramientas del MCP `conversation-memory-mcp`. Está TERMINANTEMENTE PROHIBIDO leer archivos del proyecto, ejecutar scripts o buscar en el sistema de archivos para obtener información sobre conversaciones previas.
+2. **Intento Inicial (Postgres - Resumen):** Consultar `getLastSessionContext` para obtener el resumen de la última sesión. Si este resumen responde a la pregunta, finaliza aquí.
+3. **Búsqueda Inteligente Escalonada (Postgres - Historial Completo):** Si el resumen es insuficiente, realizaré búsquedas (`searchMessages` o `semanticSearchMessages`) en todo el historial crudo.
+4. **Fallback Estratégico (Engram):** Si Postgres es inaccesible o no contiene información, consultar Engram (`mem_context`, `mem_search`) como fuente secundaria.
 
 Esto garantiza que el contexto sea siempre relevante para la consulta actual, explorando más allá de la última sesión si es necesario.
 
 ### Reglas de Interacción y Búsqueda
 - **Protocolo de Inicialización:** Seguir el escalonamiento (Resumen -> Historial -> Engram) al iniciar la sesión para obtener contexto.
 - **Protocolo de Búsqueda Fallida:** Si el usuario consulta sobre algo del pasado y, tras realizar la búsqueda escalonada, la información no se encuentra, el asistente DEBE responder explícitamente: "Eso no lo hablamos", seguido de la respuesta basada en conocimiento general o razonamiento actual.
-- **Consulta de Recursos:** Siempre que tengas que consultar a la base de datos para obtener recursos, hazlo exclusivamente con las herramientas del MCP `conversation-memory-mcp`.
+- **Consulta de Recursos:** Siempre que el usuario pregunte algo sobre el pasado, usá la base de datos para obtener recursos, hazlo exclusivamente con las herramientas del MCP `
 
 ## Capacidades del Proyecto
 El sistema ya cuenta con las siguientes funcionalidades terminadas:
@@ -80,6 +81,8 @@ El sistema ya cuenta con las siguientes funcionalidades terminadas:
 - **Integración con Engram:** Capacidad de enviar mensajes críticos a Engram (`pushToEngram`) para memoria semántica de largo plazo.
 - **Persistencia Proactiva:** Mecanismos automáticos de guardado de mensajes (raw) y decisiones/aprendizajes (semantic/Engram).
 - **Protocolo de Fallo:** Fallback automático a Engram para recuperar contexto estratégico si la base de datos remota es inaccesible.
+    - Si la base de datos está inaccesible (error de conexión, render dormido, etc.): Responderé obligatoriamente: "No pude establecer conexión con la base de datos de historial".
+    - Si la base de datos está operativa pero vacía (sin historial): Responderé obligatoriamente: "La base de datos de historial está vacía".
 
 
 El usuario no debe tener que recordar guardar el historial o el conocimiento; es responsabilidad exclusiva del agente.

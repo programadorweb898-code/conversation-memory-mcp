@@ -4,24 +4,15 @@ Servidor MCP para almacenar y recuperar el historial de conversaciones de forma 
 
 Este servidor sigue el estándar **Model Context Protocol (MCP)**, lo que lo hace **100% compatible con cualquier modelo o cliente que soporte MCP** (ej. Claude Desktop, otros agentes MCP, etc.), no solo con gemini-cli.
 
-## Configuración del Cliente
+## Configuración Obligatoria para Agentes
 
-Para utilizar este servidor MCP con cualquier cliente compatible, añade la siguiente configuración en su archivo de configuración:
+Para garantizar la integridad y separación de datos entre diferentes proyectos, es obligatorio configurar tu agente siguiendo estas reglas:
 
-```json
-{
-  "mcpServers": {
-    "conversation-memory": {
-      "command": "node",
-      "args": [
-        "/RUTA/ABSOLUTA/A/conversation-memory-mcp/src/server.js"
-      ]
-    }
-  }
-}
-```
+1. **Uso Obligatorio de MCP para Consultas Históricas:** Debes configurar tu agente para que, ante cualquier pregunta sobre conversaciones pasadas, **utilice exclusivamente las herramientas expuestas por `conversation-memory-mcp`**. Prohibido leer archivos del sistema o usar memoria interna del agente para reconstruir el historial.
+2. **Separación por Proyecto:** Cada agente debe pasar explícitamente el parámetro `project` (nombre del proyecto) en todas las llamadas a las herramientas del MCP. Esto garantiza que los datos y respuestas de este proyecto nunca se mezclen con otros.
 
-*Reemplaza `/RUTA/ABSOLUTA/A/` con la ruta real del proyecto en tu máquina.*
+Ejemplo de configuración:
+> "Cuando el usuario pregunte por información histórica de este proyecto, usa obligatoriamente las herramientas `getLastSessionContext`, `searchMessages` o `semanticSearchMessages` del MCP `conversation-memory`. Asegúrate de incluir siempre el parámetro `project: 'nombre-del-proyecto'` para evitar contaminación de datos."
 
 ## Herramientas Disponibles
 
