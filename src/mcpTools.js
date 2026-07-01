@@ -4,6 +4,7 @@ const { z } = require("zod");
 const { saveMessage } = require("./tools/saveMessage");
 const searchMessages = require("./tools/searchMessages");
 const semanticSearchMessages = require("./tools/semanticSearchMessages");
+const searchSessionsBySummary = require("./tools/searchSessionsBySummary");
 const lastSession = require("./tools/lastSession");
 const recoverSession = require("./tools/recoverSession");
 const listSessions = require("./tools/listSessions");
@@ -60,6 +61,19 @@ function registerMcpTools(server) {
     async ({ query, project, limit }) => {
       const results = await semanticSearchMessages({ query, project, limit });
       return { content: [{ type: "text", text: JSON.stringify({ results }, null, 2) }], structuredContent: { "data": results } };
+    }
+  );
+
+  // 2.6. searchSessionsBySummary
+  server.tool(
+    "searchSessionsBySummary",
+    "Busca sesiones relevantes mediante su resumen semántico y recupera todo su historial",
+    {
+      query: z.string().describe("La consulta de búsqueda"),
+    },
+    async ({ query }) => {
+      const history = await searchSessionsBySummary({ query });
+      return { content: [{ type: "text", text: JSON.stringify({ history }, null, 2) }], structuredContent: { history } };
     }
   );
 

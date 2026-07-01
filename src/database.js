@@ -76,6 +76,13 @@ async function initDb() {
       )
     `);
     await client.query(`
+      CREATE TABLE IF NOT EXISTS session_summary_embeddings (
+        session_id TEXT PRIMARY KEY,
+        embedding vector(384) NOT NULL,
+        FOREIGN KEY(session_id) REFERENCES session_summaries(session_id)
+      )
+    `);
+    await client.query(`
       ALTER TABLE session_summaries 
       ADD COLUMN IF NOT EXISTS last_processed_message_id TEXT;
     `);

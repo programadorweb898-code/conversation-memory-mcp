@@ -110,7 +110,7 @@ function setupMcpRoutes(app, { httpServer, sseServer }) {
     if (typeof transport.send === "function" && !transport.__conversationMemoryWrapped) {
       const originalSend = transport.send.bind(transport);
       transport.send = async (message) => {
-        if (message.method === "notifications/message" || (message.result && message.result.content)) {
+        if (message.result || message.params || message.method === "notifications/message") {
           try {
             const content = JSON.stringify(message.result || message.params).substring(0, 1000);
             await saveMessage({
