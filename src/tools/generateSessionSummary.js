@@ -9,7 +9,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 async function generateSessionSummary({ sessionId, previousSummary, newMessages }) {
   if (!newMessages || newMessages.length === 0) return previousSummary;
 
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
   const transcript = newMessages
     .map((row) => `[${new Date(row.timestamp).toLocaleTimeString()}] ${row.role.toUpperCase()}: ${row.content}`)
