@@ -2,6 +2,7 @@ const { z } = require("zod");
 
 // Import tools
 const { saveMessage } = require("./tools/saveMessage");
+const { generateEmbedding, saveEmbedding } = require("./services/embeddingService");
 const searchMessages = require("./tools/searchMessages");
 const semanticSearchMessages = require("./tools/semanticSearchMessages");
 const searchSessionsBySummary = require("./tools/searchSessionsBySummary");
@@ -238,10 +239,11 @@ en el futuro.`,              // descripción (esto es lo que ve el agente)
     {
       messageId: z.string().describe("ID del mensaje al que se asociará el embedding"),
       text: z.string().describe("El texto del cual generar el embedding"),
+      role: z.string().describe("Rol del emisor (user/assistant)"),
     },
-    async ({ messageId, text }) => {
+    async ({ messageId, text, role }) => {
       try {
-        const generatedEmbedding = await generateEmbedding(text);
+        const generatedEmbedding = await generateEmbedding({ role, content: text });
         await saveEmbedding(messageId, generatedEmbedding);
         return { content: [{ type: "text", text: `Embedding generado y guardado para el mensaje ${messageId}.` }] };
       } catch (error) {
