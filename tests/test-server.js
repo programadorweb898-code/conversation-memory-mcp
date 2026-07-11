@@ -37,6 +37,9 @@ function openSse(server) {
       {
         port,
         path: '/sse',
+        headers: {
+          authorization: 'Bearer test-token',
+        },
       },
       (res) => {
         resolve({ req, res });
@@ -129,11 +132,24 @@ describe('Server HTTP layer', () => {
     const response = await request(httpServer)
       .post('/messages')
       .set('content-type', 'application/json')
+      .set('authorization', 'Bearer test-token') // Added token
       .set('x-client-id', clientId)
       .send({ hello: 'world' });
 
     expect(response.status).to.equal(200);
     expect(transportInstance.handlePostMessage.calledOnce).to.be.true;
+  });
+
+  it('should reject requests without token', async () => {
+    const { app } = require('../src/server');
+    const response = await request(app).get('/mcp');
+    expect(response.status).to.equal(401);
+  });
+
+  it('should allow /health without token', async () => {
+    const { app } = require('../src/server');
+    const response = await request(app).get('/health');
+    expect(response.status).to.equal(200);
   });
 });
 

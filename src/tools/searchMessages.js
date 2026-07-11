@@ -1,6 +1,6 @@
 const { db } = require("../database");
 const { z } = require("zod");
-const { generateEmbedding, calculateCosineSimilarity } = require("../services/embeddingService");
+const { generateEmbedding } = require("../services/embeddingService");
 const removeStopwords = require("../services/stopwords");
 
 const SearchMessagesSchema = z.object({
@@ -21,30 +21,22 @@ async function searchMessages(params) {
   const searchTerm = validatedParams.searchTerm || validatedParams.query;
 
   try {
-    // Obtenemos todos los mensajes candidatos. 
-    // Si hay searchTerm, traemos también los embeddings.
-    let sql = `SELECT c.* ${searchTerm ? ", me.embedding" : ""} FROM conversations c`;
-    if (searchTerm) {
-      sql += ` LEFT JOIN message_embeddings me ON c.id = me.message_id`;
-    }
-
-    const dbParams = [];
-    const whereClauses = [];
-
-    if (project) {
-      dbParams.push(project);
-      whereClauses.push(`c.project = $${dbParams.length}`);
-    }
-
-    if (whereClauses.length > 0) {
-      sql += ` WHERE ` + whereClauses.join(` AND `);
-    }
-
-    const rows = await db.allAsync(sql, dbParams);
-    
     // Si no hay búsqueda semántica, devolvemos filtrado por proyecto
     if (!searchTerm) {
-      return rows;
+      let sql = `SELECT c.* FROM conversations c`;
+      const dbParams = [];
+      const whereClauses = [];
+
+      if (project) {
+        dbParams.push(project);
+        whereClauses.push(`c.project = $${dbParams.length}`);
+      }
+
+      if (whereClauses.length > 0) {
+        sql += ` WHERE ` + whereClauses.join(` AND `);
+      }
+
+      return await db.allAsync(sql, dbParams);
     }
 
     // --- RERANKING HÍBRIDO ---
@@ -57,15 +49,35 @@ async function searchMessages(params) {
     
     // Pasamos un objeto mensaje simulado para que coincida con el formato enriquecido
     const queryEmbeddingJson = await generateEmbedding({ role: "query", content: semanticSearchTerm });
-    const queryEmbedding = JSON.parse(queryEmbeddingJson);
+
+    // pgvector: el operador <=> calcula la distancia de coseno.
+    // La similitud de coseno se obtiene con: 1 - distancia_coseno
+    let sql = `
+      SELECT c.*, (1 - (me.embedding <=> $1::vector)) AS semantic_score
+      FROM conversations c
+      INNER JOIN message_embeddings me ON c.id = me.message_id
+    `;
+
+    const dbParams = [queryEmbeddingJson];
+    const whereClauses = [];
+
+    if (project) {
+      dbParams.push(project);
+      whereClauses.push(`c.project = $${dbParams.length}`);
+    }
+
+    if (whereClauses.length > 0) {
+      sql += ` WHERE ` + whereClauses.join(` AND `);
+    }
+
+    // Ordenamos por distancia de coseno ascendente (mayor similitud primero) y limitamos a los top 100
+    sql += ` ORDER BY me.embedding <=> $1::vector ASC LIMIT 100`;
+
+    const rows = await db.allAsync(sql, dbParams);
 
     const scoredResults = rows.map((row) => {
-      // 1. Score Semántico (0 a 1)
-      let semanticScore = 0;
-      if (row.embedding) {
-        const embedding = JSON.parse(row.embedding);
-        semanticScore = calculateCosineSimilarity(queryEmbedding, embedding);
-      }
+      // 1. Score Semántico viene ya calculado de Postgres
+      const semanticScore = parseFloat(row.semantic_score) || 0;
 
       // 2. Score Léxico (0 o 1)
       const contentLower = row.content.toLowerCase();

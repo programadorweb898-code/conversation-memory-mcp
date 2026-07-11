@@ -12,6 +12,11 @@ function shouldStartEmbeddingWorker() {
 async function startServer() {
   console.time("Startup total");
 
+  if (!process.env.MCP_BEARER_TOKEN) {
+    console.error("Fatal error: MCP_BEARER_TOKEN environment variable is required.");
+    process.exit(1);
+  }
+
   await dbReady;
   console.log("Database is ready.");
 

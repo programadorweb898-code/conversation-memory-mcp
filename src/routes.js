@@ -8,23 +8,6 @@ function createSessionId() {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function requireBearerToken(req, res, next) {
-  const expectedToken = process.env.MCP_BEARER_TOKEN;
-
-  if (!expectedToken) {
-    return next();
-  }
-
-  const authorization = req.get("authorization") || "";
-  const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
-
-  if (token !== expectedToken) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
-  return next();
-}
-
 function setupMcpRoutes(app, { httpServer, sseServer }) {
   const streamableHttpTransport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
@@ -32,7 +15,7 @@ function setupMcpRoutes(app, { httpServer, sseServer }) {
 
   let httpTransportReady;
 
-  app.all("/mcp", requireBearerToken, async (req, res, next) => {
+  app.all("/mcp", async (req, res, next) => {
     try {
       if (!httpTransportReady) {
         httpTransportReady = httpServer.connect(streamableHttpTransport);
@@ -88,21 +71,6 @@ function setupMcpRoutes(app, { httpServer, sseServer }) {
 
     if (!sessionId || !transports.has(sessionId)) {
       return res.status(400).json({ error: "Cliente no identificado o sesion expirada" });
-    }
-
-    try {
-      console.log("Intentando persistir mensaje...");
-      if (req.body) {
-        await saveMessage({
-          sessionId,
-          project: "default",
-          role: "user",
-          content: JSON.stringify(req.body).substring(0, 500),
-        });
-        console.log("Mensaje persistido automaticamente.");
-      }
-    } catch (err) {
-      console.error("Error persistiendo mensaje:", err);
     }
 
     const transport = transports.get(sessionId);

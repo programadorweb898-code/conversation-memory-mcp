@@ -10,11 +10,12 @@ const SaveMessageSchema = z.object({
   role: z.enum(["user", "assistant", "system"]),
   content: z.string().min(1),
   agentId: z.string().optional(),
+  relatedMessageId: z.string().optional().nullable(),
 });
 
 async function saveMessage(params) {
   const validatedParams = SaveMessageSchema.parse(params);
-  const { sessionId, project, role, content, agentId } = validatedParams;
+  const { sessionId, project, role, content, agentId, relatedMessageId } = validatedParams;
 
   // Filtrado de mensajes de infraestructura MCP
   try {
@@ -40,11 +41,11 @@ async function saveMessage(params) {
   try {
     const sql = `
       INSERT INTO conversations
-      (id, session_id, timestamp, project, role, content, agent_id)
-      VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6)
+      (id, session_id, timestamp, project, role, content, agent_id, related_message_id)
+      VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6, $7)
     `;
 
-    await db.runAsync(sql, [messageId, sessionId, project ?? null, role, content, agentId ?? null]);
+    await db.runAsync(sql, [messageId, sessionId, project ?? null, role, content, agentId ?? null, relatedMessageId ?? null]);
   } catch (err) {
     console.error("Error saving message:", err.message);
     throw err;

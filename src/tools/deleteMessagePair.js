@@ -9,7 +9,7 @@ const { db } = require("../database");
 async function deleteMessagePair(messageId) {
   try {
     const targetMessage = await db.getAsync(
-      "SELECT session_id, id FROM conversations WHERE id = $1",
+      "SELECT id, related_message_id FROM conversations WHERE id = $1",
       [messageId]
     );
 
@@ -18,16 +18,14 @@ async function deleteMessagePair(messageId) {
       return;
     }
 
-    const messages = await db.allAsync(
-      "SELECT id FROM conversations WHERE session_id = $1 ORDER BY timestamp ASC, ctid ASC",
-      [targetMessage.session_id]
+    // Buscar el par: o el mensaje actual apunta a otro, o otro apunta al actual
+    const pairMessage = await db.getAsync(
+      "SELECT id FROM conversations WHERE id = $1 OR related_message_id = $2 AND id != $3",
+      [targetMessage.related_message_id, messageId, messageId]
     );
 
-    const index = messages.findIndex((message) => message.id === messageId);
     const idsToDelete = [messageId];
-
-    if (index > 0) idsToDelete.push(messages[index - 1].id);
-    else if (index < messages.length - 1) idsToDelete.push(messages[index + 1].id);
+    if (pairMessage) idsToDelete.push(pairMessage.id);
 
     const placeholders = idsToDelete.map((_, i) => "$" + (i + 1)).join(",");
     await db.runAsync(`DELETE FROM message_embeddings WHERE message_id IN (${placeholders})`, idsToDelete);

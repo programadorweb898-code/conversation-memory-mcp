@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const rateLimit = require("express-rate-limit");
 const helmet = require("helmet");
 
@@ -19,6 +20,33 @@ const messagesLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+function requireBearerToken(req, res, next) {
+  if (req.path === "/health") {
+    return next();
+  }
+
+  const authorization = req.get("authorization") || "";
+  const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  const expectedToken = process.env.MCP_BEARER_TOKEN || "";
+
+  const tokenBuffer = Buffer.from(token);
+  const expectedBuffer = Buffer.from(expectedToken);
+
+  if (tokenBuffer.length !== expectedBuffer.length) {
+    // Para mitigar ataques de temporización, comparar con un buffer dummy
+    // del mismo tamaño para que la operación tome un tiempo constante.
+    const dummy = Buffer.alloc(tokenBuffer.length);
+    crypto.timingSafeEqual(dummy, dummy);
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  if (!crypto.timingSafeEqual(tokenBuffer, expectedBuffer)) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  next();
+}
+
 function requireJson(req, res, next) {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
     return next();
@@ -36,19 +64,17 @@ function requireJson(req, res, next) {
 }
 
 function applyMiddleware(app) {
-  app.use(helmet({
-    contentSecurityPolicy: false,
-    crossOriginEmbedderPolicy: false,
-    xPoweredBy: true,
-  }));
+  app.use(helmet());
   app.use(sseLimiter);
   app.use(messagesLimiter);
+  app.use(requireBearerToken);
   app.use(requireJson);
 }
 
 module.exports = {
   sseLimiter,
   messagesLimiter,
+  requireBearerToken,
   requireJson,
   applyMiddleware,
 };

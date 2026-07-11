@@ -86,6 +86,11 @@ async function initDb() {
       ALTER TABLE session_summaries 
       ADD COLUMN IF NOT EXISTS last_processed_message_id TEXT;
     `);
+    await client.query(`
+      ALTER TABLE conversations 
+      ADD COLUMN IF NOT EXISTS related_message_id TEXT 
+      REFERENCES conversations(id);
+    `);
     console.log("Tablas inicializadas correctamente en Postgres.");
   } catch (err) {
     console.error("Error inicializando tablas:", err);
