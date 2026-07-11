@@ -1,6 +1,5 @@
 const { SSEServerTransport } = require("@modelcontextprotocol/sdk/server/sse.js");
 const { StreamableHTTPServerTransport } = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
-const { saveMessage } = require("./tools/saveMessage");
 
 const transports = new Map();
 
@@ -74,34 +73,6 @@ function setupMcpRoutes(app, { httpServer, sseServer }) {
     }
 
     const transport = transports.get(sessionId);
-
-    if (typeof transport.send === "function" && !transport.__conversationMemoryWrapped) {
-      const originalSend = transport.send.bind(transport);
-      transport.send = async (message) => {
-        // Solo guardar si hay contenido de conversación real (result o params con contenido)
-        const isConversationMessage = 
-          (message.result && Object.keys(message.result).length > 0) ||
-          (message.params && message.params.content) ||
-          (message.method === "notifications/message");
-          
-        if (isConversationMessage) {
-          try {
-            const content = JSON.stringify(message.result || message.params).substring(0, 1000);
-            await saveMessage({
-              sessionId,
-              project: "default",
-              role: "assistant",
-              content,
-            });
-            console.log("Respuesta del asistente persistida automaticamente.");
-          } catch (err) {
-            console.error("Error persistiendo respuesta del asistente:", err);
-          }
-        }
-        return originalSend(message);
-      };
-      transport.__conversationMemoryWrapped = true;
-    }
 
     await transport.handlePostMessage(req, res, req.body);
   });

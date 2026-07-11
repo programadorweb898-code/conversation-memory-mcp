@@ -4,3 +4,5 @@ dist/
 build/
 conversations.db
 test-output.txt
+11.16.0
+temp_check_last.js

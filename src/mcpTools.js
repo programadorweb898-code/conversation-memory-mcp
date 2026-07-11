@@ -24,24 +24,23 @@ function registerMcpTools(server) {
   server.tool(
   "saveMessage",           // nombre de la tool
   `Guarda un mensaje en la memoria persistente de conversaciones.
-REGLA PROACTIVA: Llamá a saveMessage inmediatamente después de cualquier
-turno de conversación relevante — sin esperar a que el usuario te lo pida.
-Guardá siempre en pares: primero el mensaje del usuario (role: "user"),
-luego tu respuesta (role: "assistant"). Usá el mismo sessionId durante
-toda la sesión activa.
-No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes
-sin contenido sustancioso. Guardá cuando haya una pregunta real, una
-decisión, un análisis, o cualquier intercambio que sea valioso recuperar
-en el futuro.`,              // descripción (esto es lo que ve el agente)
+REGLA PROACTIVA: Llamá a saveMessage inmediatamente después de cualquier turno de conversación relevante — sin esperar a que el usuario te lo pida.
+Guardá siempre en pares: primero el mensaje del usuario (role: "user"), anotando el messageId que devuelve esta tool en la respuesta; después guardá tu respuesta (role: "assistant") pasando ese mismo ID como relatedMessageId.
+Usá el mismo sessionId durante toda la sesión activa.
+No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin contenido sustancioso. Guardá cuando haya una pregunta real, una decisión, un análisis, o cualquier intercambio que sea valioso recuperar en el futuro.`,              // descripción (esto es lo que ve el agente)
   {
     sessionId: z.string().describe("ID de la sesión"),
     project: z.string().optional().describe("Nombre del proyecto"),
     role: z.string().describe("Rol del emisor (user/assistant)"),
     content: z.string().describe("Contenido del mensaje"),
+    relatedMessageId: z.string().optional().describe("ID del mensaje relacionado (pregunta/respuesta)"),
   },
-  async ({ sessionId, project, role, content }) => {
-    await saveMessage({ sessionId, project, role, content });
-    return { content: [{ type: "text", text: "Mensaje guardado correctamente." }] };
+  async ({ sessionId, project, role, content, relatedMessageId }) => {
+    const result = await saveMessage({ sessionId, project, role, content, relatedMessageId });
+    const text = result?.messageId
+      ? `Mensaje guardado correctamente. ID: ${result.messageId}`
+      : "Mensaje guardado correctamente.";
+    return { content: [{ type: "text", text }] };
   }
 );
 

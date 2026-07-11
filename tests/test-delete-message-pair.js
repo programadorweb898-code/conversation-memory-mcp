@@ -13,17 +13,18 @@ describe('Delete Message Pair Tool', () => {
     msgId1 = uuidv4();
     msgId2 = uuidv4();
     const project = "test-project-pair";
-    
-    // Insertar un par de mensajes (pregunta y respuesta) de forma asíncrona y segura
-    await db.runAsync(
-      `INSERT INTO conversations (id, session_id, project, role, content, timestamp) VALUES ($1, $2, $3, $4, $5, NOW())`,
-      [msgId1, testSessionId, project, 'user', 'Pregunta']
-    );
+
+    // Insertar un par de mensajes (pregunta y respuesta) y enlazarlos explícitamente.
+    // El helper de borrado de pareja usa related_message_id para encontrar el mensaje relacionado.
     await db.runAsync(
       `INSERT INTO conversations (id, session_id, project, role, content, timestamp) VALUES ($1, $2, $3, $4, $5, NOW() + INTERVAL '1 second')`,
       [msgId2, testSessionId, project, 'assistant', 'Respuesta']
     );
-    
+    await db.runAsync(
+      `INSERT INTO conversations (id, session_id, project, role, content, timestamp, related_message_id) VALUES ($1, $2, $3, $4, $5, NOW(), $6)`,
+      [msgId1, testSessionId, project, 'user', 'Pregunta', msgId2]
+    );
+
     // Añadir embeddings simulados
     await db.runAsync(`INSERT INTO message_embeddings (message_id, embedding) VALUES ($1, $2)`, [msgId1, fakeEmbedding(0.1)]);
     await db.runAsync(`INSERT INTO message_embeddings (message_id, embedding) VALUES ($1, $2)`, [msgId2, fakeEmbedding(0.2)]);

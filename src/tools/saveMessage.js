@@ -30,7 +30,7 @@ async function saveMessage(params) {
       ];
       if (parsed.method && ignoredMethods.includes(parsed.method)) {
         console.log(`Skipping MCP protocol message: ${parsed.method}`);
-        return true;
+        return { success: true, messageId: null };
       }
     }
   } catch (e) {
@@ -55,7 +55,7 @@ async function saveMessage(params) {
   embeddingQueue.addTask({ messageId, content, role });
   console.log(`Embedding task for message ${messageId} queued.`);
 
-  return true;
+  return { success: true, messageId };
 }
 
 module.exports = saveMessage;
