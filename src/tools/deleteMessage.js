@@ -17,6 +17,11 @@ async function deleteMessage(messageId) {
       console.log(`Message ${messageId} not found.`);
     }
   } catch (err) {
+    if (err.code === '23503') {
+      const friendlyError = new Error("No se puede eliminar el mensaje porque está siendo referenciado por otros mensajes.");
+      friendlyError.code = 'FK_VIOLATION';
+      throw friendlyError;
+    }
     console.error("Error deleting message:", err.message);
     throw err;
   }

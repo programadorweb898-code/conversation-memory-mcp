@@ -91,6 +91,42 @@ async function initDb() {
       ADD COLUMN IF NOT EXISTS related_message_id TEXT 
       REFERENCES conversations(id);
     `);
+
+    // Buscar y actualizar la FK de related_message_id para que sea ON DELETE SET NULL
+    const fkRes = await client.query(`
+      SELECT 
+          tc.constraint_name,
+          rc.delete_rule
+      FROM 
+          information_schema.table_constraints AS tc 
+          JOIN information_schema.key_column_usage AS kcu
+            ON tc.constraint_name = kcu.constraint_name
+            AND tc.table_schema = kcu.table_schema
+          JOIN information_schema.referential_constraints AS rc
+            ON tc.constraint_name = rc.constraint_name
+            AND tc.constraint_schema = rc.constraint_schema
+      WHERE 
+          tc.constraint_type = 'FOREIGN KEY' 
+          AND tc.table_name = 'conversations'
+          AND kcu.column_name = 'related_message_id';
+    `);
+
+    for (const row of fkRes.rows) {
+      if (row.delete_rule !== 'SET NULL') {
+        const constraintName = row.constraint_name;
+        console.log(`Actualizando FK ${constraintName} de 'conversations' a ON DELETE SET NULL...`);
+        await client.query(\`ALTER TABLE conversations DROP CONSTRAINT \${constraintName}\`);
+        await client.query(\`
+          ALTER TABLE conversations 
+          ADD CONSTRAINT \${constraintName} 
+          FOREIGN KEY (related_message_id) 
+          REFERENCES conversations(id) 
+          ON DELETE SET NULL
+        \`);
+        console.log(`FK \${constraintName} actualizada exitosamente.`);
+      }
+    }
+
     console.log("Tablas inicializadas correctamente en Postgres.");
   } catch (err) {
     console.error("Error inicializando tablas:", err);
