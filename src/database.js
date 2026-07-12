@@ -83,10 +83,6 @@ async function initDb() {
       )
     `);
     await client.query(`
-      ALTER TABLE session_summaries 
-      ADD COLUMN IF NOT EXISTS last_processed_message_id TEXT;
-    `);
-    await client.query(`
       ALTER TABLE conversations 
       ADD COLUMN IF NOT EXISTS related_message_id TEXT 
       REFERENCES conversations(id);
