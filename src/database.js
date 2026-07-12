@@ -139,6 +139,11 @@ async function initDb() {
     `);
 
     await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_conversations_session_id_sequence_id
+      ON conversations (session_id, sequence_id);
+    `);
+
+    await client.query(`
       ALTER TABLE session_summaries
       ADD COLUMN IF NOT EXISTS last_processed_seq_id BIGINT;
     `);

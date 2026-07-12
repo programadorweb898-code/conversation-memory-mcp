@@ -9,11 +9,16 @@ async function checkAndFinalizeInactiveSessions() {
   console.log("Revisando sesiones inactivas para finalización automática...");
 
   try {
-    // 1. Buscar todas las sesiones que tienen actividad y su última marca de tiempo
+    // 1. Buscar solo las sesiones que aún podrían necesitar un finalize: las que
+    // nunca tuvieron resumen, o las que tienen mensajes nuevos por encima del
+    // último sequence_id ya resumido.
     const activeSessions = await db.allAsync(`
-      SELECT session_id, MAX(timestamp) as last_activity
-      FROM conversations
-      GROUP BY session_id
+      SELECT c.session_id, MAX(c.timestamp) AS last_activity
+      FROM conversations c
+      LEFT JOIN session_summaries ss ON ss.session_id = c.session_id
+      WHERE ss.session_id IS NULL
+        OR COALESCE(c.sequence_id, -1) > COALESCE(ss.last_processed_seq_id, -1)
+      GROUP BY c.session_id
     `);
 
 // ...
