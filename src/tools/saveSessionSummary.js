@@ -6,21 +6,21 @@ const { generateEmbedding, saveEmbedding } = require("../services/embeddingServi
  * @param {Object} params
  * @param {string} params.sessionId - El ID de la sesión.
  * @param {string} params.summary - El resumen generado.
- * @param {string} params.lastProcessedMessageId - El ID del último mensaje procesado.
+ * @param {string} params.lastProcessedSeqId - El ID secuencial del último mensaje procesado.
  * @returns {Promise<boolean>}
  */
-async function saveSessionSummary({ sessionId, summary, lastProcessedMessageId }) {
+async function saveSessionSummary({ sessionId, summary, lastProcessedSeqId }) {
   try {
     const sql = `
-      INSERT INTO session_summaries (session_id, summary, last_processed_message_id, timestamp)
+      INSERT INTO session_summaries (session_id, summary, last_processed_seq_id, timestamp)
       VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
       ON CONFLICT(session_id) DO UPDATE SET
         summary = EXCLUDED.summary,
-        last_processed_message_id = EXCLUDED.last_processed_message_id,
+        last_processed_seq_id = EXCLUDED.last_processed_seq_id,
         timestamp = EXCLUDED.timestamp
     `;
 
-    await db.runAsync(sql, [sessionId, summary, lastProcessedMessageId]);
+    await db.runAsync(sql, [sessionId, summary, lastProcessedSeqId]);
 
     // Generar y guardar el embedding del resumen
     const embedding = await generateEmbedding({ role: "session_summary", content: summary });
