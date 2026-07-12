@@ -88,6 +88,52 @@ async function initDb() {
       REFERENCES conversations(id);
     `);
 
+    await client.query(`
+      ALTER TABLE conversations
+      ADD COLUMN IF NOT EXISTS sequence_id BIGINT;
+    `);
+
+    await client.query(`
+      UPDATE conversations
+      SET sequence_id = subquery.new_seq
+      FROM (
+        SELECT id, row_number() OVER (ORDER BY timestamp ASC, id ASC) AS new_seq
+        FROM conversations
+      ) AS subquery
+      WHERE conversations.id = subquery.id
+        AND conversations.sequence_id IS NULL;
+    `);
+
+    await client.query(`
+      CREATE SEQUENCE IF NOT EXISTS conversations_seq;
+    `);
+
+    const nextSequenceValue = await client.query(`
+      SELECT COALESCE(MAX(sequence_id), 0) + 1 AS next_val
+      FROM conversations;
+    `);
+    await client.query(`SELECT setval('conversations_seq', ${nextSequenceValue.rows[0].next_val});`);
+
+    await client.query(`
+      ALTER TABLE conversations
+      ALTER COLUMN sequence_id SET DEFAULT nextval('conversations_seq');
+    `);
+
+    await client.query(`
+      ALTER TABLE conversations
+      ALTER COLUMN sequence_id SET NOT NULL;
+    `);
+
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_sequence
+      ON conversations (sequence_id);
+    `);
+
+    await client.query(`
+      ALTER TABLE session_summaries
+      ADD COLUMN IF NOT EXISTS last_processed_seq_id BIGINT;
+    `);
+
     // Buscar y actualizar la FK de related_message_id para que sea ON DELETE SET NULL
     const fkRes = await client.query(`
       SELECT 
