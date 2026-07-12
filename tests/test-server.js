@@ -116,6 +116,7 @@ describe('Server HTTP layer', () => {
     const response = await request(app)
       .post('/messages')
       .set('content-type', 'application/json')
+      .set('authorization', 'Bearer test-token')
       .send({ hello: 'world' });
 
     expect(response.status).to.equal(400);

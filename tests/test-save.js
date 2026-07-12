@@ -111,7 +111,8 @@ describe('saveMessage', () => {
     };
 
     const result = await saveMessage(params);
-    expect(result).to.be.true; 
+    expect(result.success).to.be.true;
+    expect(result.messageId).to.exist;
 
     const retrievedMessage = await db.getAsync(`SELECT * FROM conversations WHERE session_id = $1`, [sessionId]);
     expect(retrievedMessage).to.exist; 
