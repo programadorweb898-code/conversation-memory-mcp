@@ -69,6 +69,15 @@ async function initDb() {
       )
     `);
     await client.query(`
+      CREATE TABLE IF NOT EXISTS embedding_failures (
+        message_id TEXT PRIMARY KEY,
+        attempts INT NOT NULL DEFAULT 0,
+        last_error TEXT,
+        last_attempt_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(message_id) REFERENCES conversations(id) ON DELETE CASCADE
+      )
+    `);
+    await client.query(`
       CREATE TABLE IF NOT EXISTS session_summaries (
         session_id TEXT PRIMARY KEY,
         summary TEXT NOT NULL,
