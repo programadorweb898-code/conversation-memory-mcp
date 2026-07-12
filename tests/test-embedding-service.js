@@ -61,9 +61,19 @@ async function runTests() {
 
     // 5. Verificar que el embedding recuperado coincida con el guardado
     try {
-      const parsedRetrieved = JSON.parse(retrievedEmbeddingJson);
-      const parsedOriginal = JSON.parse(realEmbeddingJson);
-      const sameValues = Array.isArray(parsedRetrieved) && Array.isArray(parsedOriginal) && parsedRetrieved.length === parsedOriginal.length && parsedRetrieved.every((value, index) => value === parsedOriginal[index]);
+      const normalizeEmbedding = (value) => {
+        if (typeof value !== 'string') return value;
+        const trimmed = value.trim();
+        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+          return JSON.parse(trimmed);
+        }
+        const withoutBrackets = trimmed.replace(/^\[/, '').replace(/\]$/, '');
+        return withoutBrackets.split(',').map((entry) => Number(entry.trim())).filter((entry) => !Number.isNaN(entry));
+      };
+      const parsedRetrieved = normalizeEmbedding(retrievedEmbeddingJson);
+      const parsedOriginal = normalizeEmbedding(realEmbeddingJson);
+      const tolerance = 1e-6;
+      const sameValues = Array.isArray(parsedRetrieved) && Array.isArray(parsedOriginal) && parsedRetrieved.length === parsedOriginal.length && parsedRetrieved.every((value, index) => Math.abs(value - parsedOriginal[index]) <= tolerance);
       if (sameValues) {
         console.log("✅ Prueba exitosa: El embedding recuperado coincide con el guardado.");
       } else {

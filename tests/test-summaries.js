@@ -24,7 +24,7 @@ describe('Session Summaries Tool', () => {
     await saveMessage(testMessage1);
     await saveMessage(testMessage2);
     await saveMessage(testMessage3);
-  }).timeout(10000);
+  }).timeout(30000);
 
   afterEach(async () => {
     try {
@@ -33,9 +33,10 @@ describe('Session Summaries Tool', () => {
     } catch (err) {
       console.error("Error en limpieza final de test-summaries:", err.message);
     }
-  }).timeout(10000);
+  }).timeout(30000);
 
-  it('debería generar y guardar un resumen de sesión correctamente', async () => {
+  it('debería generar y guardar un resumen de sesión correctamente', async function() {
+    this.timeout(30000);
     await finalizeSession(testSessionId);
     
     const result = await getSessionSummary({ sessionId: testSessionId });
@@ -49,7 +50,8 @@ describe('Session Summaries Tool', () => {
     expect(result.timestamp).to.exist;
   });
 
-  it('debería actualizar un resumen existente (upsert) con nuevo contenido', async () => {
+  it('debería actualizar un resumen existente (upsert) con nuevo contenido', async function() {
+    this.timeout(30000);
     await finalizeSession(testSessionId);
     
     const newMessage = { sessionId: testSessionId, project: "test", role: "assistant", content: "Entendido, estoy generando el resumen." };

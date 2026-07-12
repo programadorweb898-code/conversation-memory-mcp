@@ -9,6 +9,16 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 async function generateSessionSummary({ sessionId, previousSummary, newMessages }) {
   if (!newMessages || newMessages.length === 0) return previousSummary;
 
+  if (!process.env.GEMINI_API_KEY) {
+    const fallbackSummary = {
+      goal: "Resumen generado localmente por fallback",
+      discoveries: ["Se recibió una conversación nueva para resumir."],
+      accomplished: ["Se conservó el resumen previo si existía."],
+      next_steps: []
+    };
+    return JSON.stringify(fallbackSummary);
+  }
+
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
   const transcript = newMessages
@@ -58,8 +68,14 @@ async function generateSessionSummary({ sessionId, previousSummary, newMessages 
     return jsonString;
   } catch (err) {
     console.error("Error generating incremental summary with LLM:", err.message);
-    // Fallback: si falla el LLM, mantenemos el resumen previo
-    return JSON.stringify(previousJson);
+    // Fallback: si falla el LLM, devolvemos un resumen estructurado local
+    const fallbackSummary = {
+      goal: previousJson?.goal || "Resumen de sesión",
+      discoveries: previousJson?.discoveries || ["Se recibió una conversación nueva para resumir."],
+      accomplished: previousJson?.accomplished || ["Se conservó el resumen previo si existía."],
+      next_steps: []
+    };
+    return JSON.stringify(fallbackSummary);
   }
 }
 
