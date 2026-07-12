@@ -134,6 +134,31 @@ async function initDb() {
       ADD COLUMN IF NOT EXISTS last_processed_seq_id BIGINT;
     `);
 
+    const sessionSummaryFkRes = await client.query(`
+      SELECT tc.constraint_name
+      FROM information_schema.table_constraints AS tc
+      JOIN information_schema.key_column_usage AS kcu
+        ON tc.constraint_name = kcu.constraint_name
+        AND tc.table_schema = kcu.table_schema
+      WHERE tc.constraint_type = 'FOREIGN KEY'
+        AND tc.table_name = 'session_summary_embeddings'
+        AND kcu.column_name = 'session_id';
+    `);
+
+    for (const row of sessionSummaryFkRes.rows) {
+      const constraintName = row.constraint_name;
+      console.log(`Actualizando FK ${constraintName} de 'session_summary_embeddings' a ON DELETE CASCADE...`);
+      await client.query(`ALTER TABLE session_summary_embeddings DROP CONSTRAINT ${constraintName}`);
+      await client.query(`
+        ALTER TABLE session_summary_embeddings
+        ADD CONSTRAINT ${constraintName}
+        FOREIGN KEY (session_id)
+        REFERENCES session_summaries(session_id)
+        ON DELETE CASCADE
+      `);
+      console.log(`FK ${constraintName} actualizada exitosamente.`);
+    }
+
     // Buscar y actualizar la FK de related_message_id para que sea ON DELETE SET NULL
     const fkRes = await client.query(`
       SELECT 

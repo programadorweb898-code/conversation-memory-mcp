@@ -39,21 +39,38 @@ async function runTests() {
     }
 
 
-    // 2. Guardar el embedding
+    // 2. Asegurar que exista la conversación de referencia para la FK
+    await db.runAsync(
+      `INSERT INTO conversations (id, session_id, project, role, content, timestamp)
+       VALUES ($1, $2, $3, $4, $5, NOW())
+       ON CONFLICT (id) DO NOTHING`,
+      [testMessageId, "test-session-embedding", "test-project", "user", sampleText]
+    );
+
+    // 3. Guardar el embedding
     console.log(`Guardando embedding para messageId: ${testMessageId}`);
     await saveEmbedding(testMessageId, realEmbeddingJson);
     console.log("Embedding guardado correctamente.");
 
-    // 3. Recuperar el embedding
+    // 4. Recuperar el embedding
+
+    // 4. Recuperar el embedding
     console.log(`Recuperando embedding para messageId: ${testMessageId}`);
     const retrievedEmbeddingJson = await getEmbedding(testMessageId);
     console.log("Embedding recuperado:", retrievedEmbeddingJson.substring(0, 50) + "...");
 
-    // 4. Verificar que el embedding recuperado coincida con el guardado
-    if (retrievedEmbeddingJson === realEmbeddingJson) {
-      console.log("✅ Prueba exitosa: El embedding recuperado coincide con el guardado.");
-    } else {
-      console.error("❌ Prueba fallida: El embedding recuperado NO coincide con el guardado.");
+    // 5. Verificar que el embedding recuperado coincida con el guardado
+    try {
+      const parsedRetrieved = JSON.parse(retrievedEmbeddingJson);
+      const parsedOriginal = JSON.parse(realEmbeddingJson);
+      const sameValues = Array.isArray(parsedRetrieved) && Array.isArray(parsedOriginal) && parsedRetrieved.length === parsedOriginal.length && parsedRetrieved.every((value, index) => value === parsedOriginal[index]);
+      if (sameValues) {
+        console.log("✅ Prueba exitosa: El embedding recuperado coincide con el guardado.");
+      } else {
+        console.error("❌ Prueba fallida: El embedding recuperado NO coincide con el guardado.");
+      }
+    } catch (parseError) {
+      console.error("❌ Prueba fallida: No se pudo comparar el embedding recuperado.", parseError);
     }
   } catch (error) {
     console.error("❌ Ocurrió un error durante las pruebas:", error);

@@ -61,11 +61,13 @@ async function generateEmbedding(message) {
  */
 async function saveEmbedding(messageId, embedding) {
   try {
-    // The 'embedding' parameter is already a JSON string from generateEmbedding
+    const parsedEmbedding = typeof embedding === "string" ? JSON.parse(embedding) : embedding;
+    const embeddingValue = Array.isArray(parsedEmbedding) ? `[${parsedEmbedding.join(",")}]` : embedding;
+
     await db.runAsync(
       `INSERT INTO message_embeddings (message_id, embedding) VALUES ($1, $2)
        ON CONFLICT(message_id) DO UPDATE SET embedding = EXCLUDED.embedding`,
-      [messageId, embedding] // embedding ya viene como JSON string
+      [messageId, embeddingValue]
     );
     console.log(`Embedding for message ${messageId} saved to message_embeddings.`);
   } catch (err) {
@@ -76,7 +78,7 @@ async function saveEmbedding(messageId, embedding) {
 
 async function getEmbedding(messageId) {
   const row = await db.getAsync(
-    `SELECT embedding FROM message_embeddings WHERE message_id = $1`,
+    `SELECT embedding::text AS embedding FROM message_embeddings WHERE message_id = $1`,
     [messageId]
   );
   return row ? row.embedding : null;
