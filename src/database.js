@@ -115,15 +115,15 @@ async function initDb() {
       if (row.delete_rule !== 'SET NULL') {
         const constraintName = row.constraint_name;
         console.log(`Actualizando FK ${constraintName} de 'conversations' a ON DELETE SET NULL...`);
-        await client.query(\`ALTER TABLE conversations DROP CONSTRAINT \${constraintName}\`);
-        await client.query(\`
+        await client.query(`ALTER TABLE conversations DROP CONSTRAINT ${constraintName}`);
+        await client.query(`
           ALTER TABLE conversations 
-          ADD CONSTRAINT \${constraintName} 
+          ADD CONSTRAINT ${constraintName} 
           FOREIGN KEY (related_message_id) 
           REFERENCES conversations(id) 
           ON DELETE SET NULL
-        \`);
-        console.log(`FK \${constraintName} actualizada exitosamente.`);
+        `);
+        console.log(`FK ${constraintName} actualizada exitosamente.`);
       }
     }
 
