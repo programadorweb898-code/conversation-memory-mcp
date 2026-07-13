@@ -27,16 +27,18 @@ function registerMcpTools(server) {
 REGLA PROACTIVA: Llamá a saveMessage inmediatamente después de cualquier turno de conversación relevante — sin esperar a que el usuario te lo pida.
 Guardá siempre en pares: primero el mensaje del usuario (role: "user"), anotando el messageId que devuelve esta tool en la respuesta; después guardá tu respuesta (role: "assistant") pasando ese mismo ID como relatedMessageId.
 Usá el mismo sessionId durante toda la sesión activa.
+Identificate pasando tu propio nombre en agentId en cada llamada (por ejemplo 'gemini-cli', 'github-copilot-cli'), para que la memoria pueda filtrarse por agente más adelante.
 No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin contenido sustancioso. Guardá cuando haya una pregunta real, una decisión, un análisis, o cualquier intercambio que sea valioso recuperar en el futuro.`,              // descripción (esto es lo que ve el agente)
   {
     sessionId: z.string().describe("ID de la sesión"),
     project: z.string().optional().describe("Nombre del proyecto"),
     role: z.string().describe("Rol del emisor (user/assistant)"),
     content: z.string().describe("Contenido del mensaje"),
+    agentId: z.string().optional().describe("Identificador único del agente que genera el mensaje"),
     relatedMessageId: z.string().optional().describe("ID del mensaje relacionado (pregunta/respuesta)"),
   },
-  async ({ sessionId, project, role, content, relatedMessageId }) => {
-    const result = await saveMessage({ sessionId, project, role, content, relatedMessageId });
+  async ({ sessionId, project, role, content, agentId, relatedMessageId }) => {
+    const result = await saveMessage({ sessionId, project, role, content, agentId, relatedMessageId });
     const text = result?.messageId
       ? `Mensaje guardado correctamente. ID: ${result.messageId}`
       : "Mensaje guardado correctamente.";
