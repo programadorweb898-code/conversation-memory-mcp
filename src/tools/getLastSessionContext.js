@@ -4,16 +4,18 @@ const recoverSession = require("./recoverSession");
 
 /**
  * Recupera el ID de la última sesión, su resumen y sus mensajes.
+ * @param {Object} [params] - Parámetros opcionales.
+ * @param {string} [params.agentId] - ID del agente para filtrar.
  * @returns {Promise<Object>} - El ID de la sesión, el resumen y los mensajes.
  */
-async function getLastSessionContext() {
+async function getLastSessionContext({ agentId } = {}) {
   try {
-    const sessionId = await lastSession.lastSession();
+    const sessionId = await lastSession.lastSession({ agentId });
     if (!sessionId) {
       return { sessionId: null, summary: null, messages: [] };
     }
     const summaryData = await getSessionSummary({ sessionId });
-    const messages = await recoverSession({ sessionId });
+    const messages = await recoverSession({ sessionId, agentId });
     return { sessionId, summary: summaryData ? summaryData.summary : null, messages };
   } catch (err) {
     if (err.message === "DB_CONNECTION_FAILURE") {

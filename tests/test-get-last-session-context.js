@@ -14,4 +14,17 @@ describe('Get Last Session Context Tool', () => {
     expect(context.messages).to.have.lengthOf(1);
     expect(context.messages[0].content).to.equal("Mensaje 1");
   });
+
+  it('debería recuperar el contexto filtrado por agentId', async () => {
+    const sessionId = `test-session-${Date.now()}`;
+    const agentId = 'agent-1';
+
+    await saveMessage({ sessionId, project: "test", role: "user", content: "Mensaje 1", agentId });
+
+    const context = await getLastSessionContext({ agentId });
+    
+    expect(context.sessionId).to.equal(sessionId);
+    expect(context.messages).to.have.lengthOf(1);
+    expect(context.messages[0].agent_id).to.equal(agentId);
+  });
 });

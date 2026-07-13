@@ -51,9 +51,10 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
     {
       searchTerm: z.string().describe("Término de búsqueda (palabra clave o consulta semántica)"),
       project: z.string().optional().describe("Filtrar por proyecto"),
+      agentId: z.string().optional().describe("Filtrar por ID de agente"),
     },
-    async ({ searchTerm, project }) => {
-      const results = await searchMessages({ searchTerm, project });
+    async ({ searchTerm, project, agentId }) => {
+      const results = await searchMessages({ searchTerm, project, agentId });
       return { content: [{ type: "text", text: JSON.stringify({ results }, null, 2) }], structuredContent: { "data": results } };
     }
   );
@@ -65,10 +66,11 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
     {
       query: z.string().describe("La consulta de búsqueda"),
       project: z.string().optional().describe("Filtrar por proyecto"),
+      agentId: z.string().optional().describe("Filtrar por ID de agente"),
       limit: z.number().optional().describe("Número máximo de resultados (por defecto: 5)"),
     },
-    async ({ query, project, limit }) => {
-      const results = await semanticSearchMessages({ query, project, limit });
+    async ({ query, project, agentId, limit }) => {
+      const results = await semanticSearchMessages({ query, project, agentId, limit });
       return { content: [{ type: "text", text: JSON.stringify({ results }, null, 2) }], structuredContent: { "data": results } };
     }
   );
@@ -90,9 +92,11 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
   server.tool(
     "lastSession",
     "Recupera el ID de la última sesión",
-    {},
-    async () => {
-      const sessionId = await lastSession();
+    {
+      agentId: z.string().optional().describe("Filtrar por ID de agente"),
+    },
+    async ({ agentId }) => {
+      const sessionId = await lastSession({ agentId });
       return { content: [{ type: "text", text: sessionId || "No hay sesiones previas." }] };
     }
   );
@@ -103,9 +107,10 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
     "Recupera todos los mensajes de una sesión",
     {
       sessionId: z.string().describe("ID de la sesión a recuperar"),
+      agentId: z.string().optional().describe("Filtrar por ID de agente"),
     },
-    async ({ sessionId }) => {
-      const messages = await recoverSession({ sessionId });
+    async ({ sessionId, agentId }) => {
+      const messages = await recoverSession({ sessionId, agentId });
       return { content: [{ type: "text", text: JSON.stringify({ messages }, null, 2) }], structuredContent: { messages } };
     }
   );
@@ -114,9 +119,11 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
   server.tool(
     "listSessions",
     "Lista todas las sesiones disponibles",
-    {},
-    async () => {
-      const sessions = await listSessions();
+    {
+      agentId: z.string().optional().describe("Filtrar por ID de agente"),
+    },
+    async ({ agentId }) => {
+      const sessions = await listSessions({ agentId });
       return { content: [{ type: "text", text: JSON.stringify({ data: sessions }, null, 2) }] };
     }
   );
@@ -138,9 +145,11 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
   server.tool(
     "getLastSessionContext",
     "Recupera el historial completo de la última sesión",
-    {},
-    async () => {
-      const context = await getLastSessionContext();
+    {
+      agentId: z.string().optional().describe("Filtrar por ID de agente"),
+    },
+    async ({ agentId }) => {
+      const context = await getLastSessionContext({ agentId });
       return { content: [{ type: "text", text: JSON.stringify(context, null, 2) }] };
     }
   );

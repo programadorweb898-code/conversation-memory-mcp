@@ -17,4 +17,20 @@ describe('List Sessions Tool', () => {
     expect(sessionIds).to.include(sessionId1);
     expect(sessionIds).to.include(sessionId2);
   });
+
+  it('debería listar sesiones filtradas por agentId', async () => {
+    const sessionId1 = `session-1-${Date.now()}`;
+    const sessionId2 = `session-2-${Date.now()}`;
+    const agentId = 'agent-1';
+
+    await saveMessage({ sessionId: sessionId1, project: "test", role: "user", content: "M1", agentId });
+    await saveMessage({ sessionId: sessionId2, project: "test", role: "user", content: "M2", agentId: 'other-agent' });
+
+    const sessions = await listSessions({ agentId });
+    
+    // Verificamos que solo la sesión del agente esté en la lista
+    const sessionIds = sessions.map(s => s.session_id);
+    expect(sessionIds).to.include(sessionId1);
+    expect(sessionIds).to.not.include(sessionId2);
+  });
 });
