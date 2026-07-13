@@ -31,6 +31,22 @@ async function recordEmbeddingFailure(messageId, error) {
   }
 }
 
+async function processBatchSerially(batchTasks) {
+  for (const task of batchTasks) {
+    const messageId = task.messageId;
+    try {
+      const generatedEmbedding = await embeddingService.generateEmbedding({ role: task.role, content: task.content });
+      console.log(`Processing embedding for message: ${messageId}`);
+      await embeddingService.saveEmbedding(messageId, generatedEmbedding);
+      await db.runAsync(`DELETE FROM embedding_failures WHERE message_id = $1`, [messageId]);
+      console.log(`Successfully processed and saved embedding for message: ${messageId}`);
+    } catch (error) {
+      await recordEmbeddingFailure(messageId, error);
+      console.error(`Error processing embedding for message ${messageId}:`, error);
+    }
+  }
+}
+
 async function processNextEmbeddingTask() {
   if (embeddingQueue.getProcessingStatus()) {
     return;
@@ -95,6 +111,7 @@ async function processNextEmbeddingTask() {
     }
   } catch (error) {
     console.error(`Error in embedding worker batch:`, error);
+    await processBatchSerially(batchTasks);
   } finally {
     embeddingQueue.setProcessingStatus(false);
   }
