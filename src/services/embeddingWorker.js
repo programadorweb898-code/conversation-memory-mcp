@@ -54,8 +54,9 @@ async function processNextEmbeddingTask() {
 
   embeddingQueue.setProcessingStatus(true);
 
+  let batchTasks = [];
+
   try {
-    const batchTasks = [];
 
     while (batchTasks.length < batchSize) {
       const queuedTask = embeddingQueue.getNextTask();
