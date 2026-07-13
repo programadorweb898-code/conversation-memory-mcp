@@ -68,6 +68,7 @@ async function initDb() {
         FOREIGN KEY(message_id) REFERENCES conversations(id)
       )
     `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_message_embeddings_hnsw_cosine ON message_embeddings USING hnsw (embedding vector_cosine_ops);`);
     await client.query(`
       CREATE TABLE IF NOT EXISTS embedding_failures (
         message_id TEXT PRIMARY KEY,
@@ -91,6 +92,7 @@ async function initDb() {
         FOREIGN KEY(session_id) REFERENCES session_summaries(session_id)
       )
     `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_session_summary_embeddings_hnsw_cosine ON session_summary_embeddings USING hnsw (embedding vector_cosine_ops);`);
     await client.query(`
       ALTER TABLE conversations 
       ADD COLUMN IF NOT EXISTS related_message_id TEXT 
