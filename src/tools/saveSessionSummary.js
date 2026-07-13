@@ -1,5 +1,5 @@
 const { db } = require("../database");
-const { generateEmbedding, saveEmbedding } = require("../services/embeddingService");
+const { generateEmbedding } = require("../services/embeddingService");
 
 /**
  * Guarda o actualiza el resumen de una sesión específica y su embedding.

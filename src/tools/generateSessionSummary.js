@@ -29,7 +29,7 @@ async function generateSessionSummary({ sessionId, previousSummary, newMessages 
   let previousJson;
   try {
     previousJson = typeof previousSummary === 'string' ? JSON.parse(previousSummary) : previousSummary;
-  } catch (e) {
+  } catch {
     previousJson = { goal: "", discoveries: [], accomplished: [], next_steps: [] };
   }
 

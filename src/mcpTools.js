@@ -206,13 +206,13 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
   // 11. deleteSession
   server.tool(
     "deleteSession",
-    "Elimina todos los mensajes y embeddings de una sesión específica",
+    "Elimina todos los mensajes, embeddings y el resumen de una sesión específica",
     {
       sessionId: z.string().describe("ID de la sesión a eliminar"),
     },
     async ({ sessionId }) => {
       await deleteSession(sessionId);
-      return { content: [{ type: "text", text: `Sesión ${sessionId} y sus mensajes eliminados correctamente.` }] };
+      return { content: [{ type: "text", text: `Sesión ${sessionId}, sus mensajes y resumen eliminados correctamente.` }] };
     }
   );
 

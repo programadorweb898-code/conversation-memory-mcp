@@ -1,7 +1,6 @@
 const { db } = require("../database");
 const { randomUUID } = require("crypto");
 const { z } = require("zod");
-const embeddingService = require("../services/embeddingService");
 const embeddingQueue = require("../services/embeddingQueue");
 
 const SaveMessageSchema = z.object({
@@ -33,7 +32,7 @@ async function saveMessage(params) {
         return { success: true, messageId: null };
       }
     }
-  } catch (e) {
+  } catch {
     // No es JSON, asumimos que es texto plano de conversación
   }
 

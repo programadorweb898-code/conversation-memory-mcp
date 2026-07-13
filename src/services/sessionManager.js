@@ -1,6 +1,5 @@
 const { db } = require("../database");
 const finalizeSession = require("../tools/finalizeSession");
-const getSessionSummary = require("../tools/getSessionSummary");
 
 const INACTIVITY_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutos
 const CHECK_INTERVAL_MS = 1 * 60 * 1000; // Revisar cada minuto

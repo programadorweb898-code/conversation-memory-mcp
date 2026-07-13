@@ -1,6 +1,5 @@
 const express = require("express");
 const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
-const { z } = require("zod"); // Although not directly used in app.js, it's used by mcpTools.js, so it's good to keep track
 const { applyMiddleware } = require("./middleware");
 const { registerMcpTools } = require("./mcpTools");
 const { setupMcpRoutes } = require("./routes");
