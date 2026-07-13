@@ -7,9 +7,10 @@ const SearchMessagesSchema = z.object({
   searchTerm: z.string().optional(),
   query: z.string().optional(),
   project: z.string().optional(),
+  agentId: z.string().optional(),
   threshold: z.number().min(0).max(1).optional().default(0.6),
-}).refine(data => data.searchTerm || data.query || data.project, {
-  message: "Se requiere al menos uno de: searchTerm, query o project",
+}).refine(data => data.searchTerm || data.query || data.project || data.agentId, {
+  message: "Se requiere al menos uno de: searchTerm, query, project o agentId",
 });
 
 /**
@@ -17,11 +18,11 @@ const SearchMessagesSchema = z.object({
  */
 async function searchMessages(params) {
   const validatedParams = SearchMessagesSchema.parse(params);
-  const { project, threshold } = validatedParams;
+  const { project, agentId, threshold } = validatedParams;
   const searchTerm = validatedParams.searchTerm || validatedParams.query;
 
   try {
-    // Si no hay búsqueda semántica, devolvemos filtrado por proyecto
+    // Si no hay búsqueda semántica, devolvemos filtrado por proyecto y/o agente
     if (!searchTerm) {
       let sql = `SELECT c.* FROM conversations c`;
       const dbParams = [];
@@ -30,6 +31,11 @@ async function searchMessages(params) {
       if (project) {
         dbParams.push(project);
         whereClauses.push(`c.project = $${dbParams.length}`);
+      }
+
+      if (agentId) {
+        dbParams.push(agentId);
+        whereClauses.push(`c.agent_id = $${dbParams.length}`);
       }
 
       if (whereClauses.length > 0) {
@@ -66,6 +72,11 @@ async function searchMessages(params) {
       whereClauses.push(`c.project = $${dbParams.length}`);
     }
 
+    if (agentId) {
+      dbParams.push(agentId);
+      whereClauses.push(`c.agent_id = $${dbParams.length}`);
+    }
+
     if (whereClauses.length > 0) {
       sql += ` WHERE ` + whereClauses.join(` AND `);
     }
@@ -98,5 +109,6 @@ async function searchMessages(params) {
     throw err;
   }
 }
+
 
 module.exports = searchMessages;

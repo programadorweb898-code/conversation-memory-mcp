@@ -1,12 +1,13 @@
 const { expect } = require('chai');
 const searchMessages = require("../src/tools/searchMessages");
+const semanticSearchMessages = require("../src/tools/semanticSearchMessages");
 const saveMessage = require("../src/tools/saveMessage");
-const { db } = require("./test-helper"); // Import the updated helper
+const { db } = require("./test-helper");
 const {
   generateEmbedding,
   initializeEmbeddingPipeline,
   saveEmbedding,
-} = require("../src/services/embeddingService"); // Import for initialization
+} = require("../src/services/embeddingService");
 
 describe('Semantic Search Messages Tool', () => {
   const testSessionId = `test-session-semantic-${Date.now()}`;
@@ -80,6 +81,48 @@ describe('Semantic Search Messages Tool', () => {
     const contents = results.map(r => r.content);
     expect(contents).to.include("Los perros son mascotas leales y amigables.");
     expect(contents).to.include("Los gatos prefieren la soledad y son cazadores hábiles.");
+  }).timeout(10000);
+
+  it('debería filtrar los resultados por agentId correctamente', async () => {
+    // Agregar un mensaje con un agente específico
+    await saveMessage({ 
+      sessionId: testSessionId, 
+      project: testProject, 
+      role: "assistant", 
+      content: "Mensaje generado por un agente específico.",
+      agentId: "test-agent"
+    });
+
+    // Buscar filtrando por ese agente
+    const results = await searchMessages({ agentId: "test-agent" });
+
+    expect(results).to.be.an('array');
+    expect(results).to.have.length.at.least(1);
+    expect(results.every(r => r.agent_id === "test-agent")).to.be.true;
+    expect(results.map(r => r.content)).to.include("Mensaje generado por un agente específico.");
+  }).timeout(10000);
+
+  it('debería filtrar los resultados por agentId correctamente en semanticSearchMessages', async () => {
+    // Agregar un mensaje con un agente específico
+    const msg = await saveMessage({ 
+      sessionId: testSessionId, 
+      project: testProject, 
+      role: "assistant", 
+      content: "Mensaje semántico generado por un agente específico.",
+      agentId: "test-agent-semantic"
+    });
+
+    // Crear embedding para el nuevo mensaje
+    const embedding = await generateEmbedding("Mensaje semántico generado por un agente específico.");
+    await saveEmbedding(msg.messageId, embedding);
+
+    // Buscar filtrando por ese agente
+    const results = await semanticSearchMessages({ query: "agente específico", agentId: "test-agent-semantic" });
+
+    expect(results).to.be.an('array');
+    expect(results).to.have.length.at.least(1);
+    expect(results.every(r => r.agent_id === "test-agent-semantic")).to.be.true;
+    expect(results.map(r => r.content)).to.include("Mensaje semántico generado por un agente específico.");
   }).timeout(10000);
 
   it('no debería encontrar mensajes de otros proyectos al filtrar', async () => {
