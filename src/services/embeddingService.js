@@ -53,6 +53,31 @@ async function generateEmbedding(message) {
   return JSON.stringify(Array.from(embedding)); // Convert TypedArray to standard Array and then to JSON string
 }
 
+async function generateEmbeddings(messages) {
+  if (!extractor) {
+    await initializeEmbeddingPipeline();
+  }
+
+  const enrichedTexts = messages.map((message) => `${message.role}: ${message.content}`);
+  const output = await extractor(enrichedTexts, { pooling: "mean", normalize: true });
+
+  const rows = Array.isArray(output?.data) ? output.data : Array.from(output?.data || []);
+  const batchSize = enrichedTexts.length;
+  if (rows.length === batchSize) {
+    return enrichedTexts.map((_, index) => JSON.stringify(Array.from(rows[index] || [])));
+  }
+
+  const flattened = Array.from(output?.data || []);
+  const embeddings = [];
+  const embeddingSize = flattened.length / batchSize;
+  for (let index = 0; index < batchSize; index += 1) {
+    const start = index * embeddingSize;
+    const end = start + embeddingSize;
+    embeddings.push(JSON.stringify(Array.from(flattened.slice(start, end))));
+  }
+  return embeddings;
+}
+
 /**
  * Saves an embedding associated with a message ID to the database.
  * @param {string} messageId The ID of the message.
@@ -87,6 +112,7 @@ async function getEmbedding(messageId) {
 module.exports = {
   initializeEmbeddingPipeline,
   generateEmbedding,
+  generateEmbeddings,
   saveEmbedding,
   getEmbedding,
 };
