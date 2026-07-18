@@ -2,7 +2,8 @@ const { startWorker, stopWorker } = require("./services/embeddingWorker");
 const { startSessionMonitor, stopSessionMonitor } = require("./services/sessionManager");
 const app = require("./app");
 const { dbReady } = require("./database");
-
+const dotenv=require("dotenv");
+dotenv.config();
 let httpServer;
 
 function shouldStartEmbeddingWorker() {
