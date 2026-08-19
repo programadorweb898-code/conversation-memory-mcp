@@ -25,7 +25,7 @@ describe('Semantic Search Messages Tool', () => {
     await saveMessage({ sessionId: testSessionId, project: testProject, role: "assistant", content: "Un vehículo escarlata se encuentra estacionado en la vía pública." });
     await saveMessage({ sessionId: testSessionId, project: testProject, role: "user", content: "Los perros son mascotas leales y amigables." });
     await saveMessage({ sessionId: testSessionId, project: testProject, role: "assistant", content: "Los gatos prefieren la soledad y son cazadores hábiles." });
-    await saveMessage({ sessionId: testSessionId, project: "other-project", role: "user", content: "El precio de las acciones subió hoy." });
+    await saveMessage({ sessionId: `${testSessionId}-other`, project: "other-project", role: "user", content: "El precio de las acciones subió hoy." });
 
     const savedMessages = await db.allAsync(
       `SELECT id, content FROM conversations WHERE session_id = $1`,

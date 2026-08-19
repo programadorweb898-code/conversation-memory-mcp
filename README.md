@@ -4,6 +4,16 @@ Servidor MCP para almacenar y recuperar el historial de conversaciones de forma 
 
 Este servidor sigue el estándar **Model Context Protocol (MCP)**, lo que lo hace **100% compatible con cualquier modelo o cliente que soporte MCP** (ej. Claude Desktop, otros agentes MCP, etc.), no solo con gemini-cli.
 
+## Guardado automático (opencode)
+
+En opencode el guardado de cada turno es **automático y obligatorio**: el plugin global `conversation-memory` (`~/.config/opencode/plugins/conversation-memory.ts`) persiste en este MCP el par usuario/assistant de cada turno en cuanto la sesión queda idle. No depende de que el agente "se acuerde".
+
+- El plugin se conecta al servidor con el SDK MCP y llama `saveMessage` por cada mensaje nuevo.
+- El `project` se resuelve solo (nombre del directorio de trabajo en minúsculas, con aliases configurables).
+- Lleva una caché local (`~/.config/opencode/conversation-memory-cache.json`) para no duplicar guardados entre reinicios.
+- Los agentes **no deben** llamar `saveMessage` manualmente salvo backfill puntual: duplicaría mensajes.
+- Configuración: `CONVERSATION_MEMORY_URL` y `CONVERSATION_MEMORY_TOKEN` como variables de entorno, o se leen solas de `mcp.conversation-memory` del `opencode.json(c)` global o del proyecto.
+
 ## Configuración Obligatoria para Agentes
 
 Para garantizar la integridad y separación de datos entre diferentes proyectos, es obligatorio configurar tu agente siguiendo estas reglas:

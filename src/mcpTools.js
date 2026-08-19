@@ -25,7 +25,7 @@ function registerMcpTools(server) {
   server.tool(
   "saveMessage",           // nombre de la tool
   `Guarda un mensaje en la memoria persistente de conversaciones.
-REGLA PROACTIVA: Llamá a saveMessage inmediatamente después de cualquier turno de conversación relevante — sin esperar a que el usuario te lo pida.
+OJO: En opencode el guardado de cada turno es AUTOMÁTICO (lo hace el plugin global "conversation-memory" cuando la sesión queda idle). NO llames a esta tool para guardar turnos normales: duplicaría mensajes. Usala únicamente para backfill puntual (recuperar un turno que el plugin no llegó a guardar) o si el plugin está desactivado.
 Guardá siempre en pares: primero el mensaje del usuario (role: "user"), anotando el messageId que devuelve esta tool en la respuesta; después guardá tu respuesta (role: "assistant") pasando ese mismo ID como relatedMessageId.
 Usá el mismo sessionId durante toda la sesión activa.
 Identificate pasando tu propio nombre en agentId en cada llamada (por ejemplo 'gemini-cli', 'github-copilot-cli'), para que la memoria pueda filtrarse por agente más adelante.
