@@ -7,21 +7,25 @@ function createSessionId() {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function setupMcpRoutes(app, { httpServer, sseServer }) {
-  const streamableHttpTransport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-  });
-
-  let httpTransportReady;
-
+function setupMcpRoutes(app, { createMcpServer, sseServer }) {
   app.all("/mcp", async (req, res, next) => {
-    try {
-      if (!httpTransportReady) {
-        httpTransportReady = httpServer.connect(streamableHttpTransport);
-      }
+    // Modo stateless: el SDK de MCP no permite reutilizar un StreamableHTTPServerTransport
+    // sin sessionIdGenerator ("Stateless transport cannot be reused across requests") y un
+    // McpServer solo admite un transporte a la vez. Siguiendo el ejemplo oficial del SDK,
+    // se crea un server y un transporte nuevos por request y se cierran al terminar.
+    const server = createMcpServer();
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+    });
 
-      await httpTransportReady;
-      await streamableHttpTransport.handleRequest(req, res, req.body);
+    res.on("close", () => {
+      transport.close();
+      server.close();
+    });
+
+    try {
+      await server.connect(transport);
+      await transport.handleRequest(req, res, req.body);
     } catch (error) {
       next(error);
     }

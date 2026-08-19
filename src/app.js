@@ -32,11 +32,11 @@ function createMcpServer() {
 }
 
 // Create servers for the modern HTTP transport and the legacy SSE transport.
-const httpServer = createMcpServer();
+// El /mcp crea un McpServer nuevo por request (stateless); el /sse reutiliza sseServer.
 const sseServer = createMcpServer();
 
 applyMiddleware(app);
-setupMcpRoutes(app, { httpServer, sseServer });
+setupMcpRoutes(app, { createMcpServer, sseServer });
 
 // Coloca el middleware de errores después de todas las rutas y middleware para que capture los errores.
 app.use(errorHandler);
