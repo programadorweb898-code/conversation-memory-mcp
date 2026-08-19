@@ -94,7 +94,7 @@ describe('Semantic Search Messages Tool', () => {
     });
 
     // Buscar filtrando por ese agente
-    const results = await searchMessages({ agentId: "test-agent" });
+    const results = await searchMessages({ agentId: "test-agent", project: testProject });
 
     expect(results).to.be.an('array');
     expect(results).to.have.length.at.least(1);
@@ -117,7 +117,7 @@ describe('Semantic Search Messages Tool', () => {
     await saveEmbedding(msg.messageId, embedding);
 
     // Buscar filtrando por ese agente
-    const results = await semanticSearchMessages({ query: "agente específico", agentId: "test-agent-semantic" });
+    const results = await semanticSearchMessages({ query: "agente específico", agentId: "test-agent-semantic", project: testProject });
 
     expect(results).to.be.an('array');
     expect(results).to.have.length.at.least(1);

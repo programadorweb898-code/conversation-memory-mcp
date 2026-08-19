@@ -38,7 +38,7 @@ describe('Delete Message Tool', () => {
   });
 
   it('debería eliminar un mensaje y su embedding asociado correctamente', async () => {
-    await deleteMessage(testMessageId);
+    await deleteMessage({ messageId: testMessageId, project: "test-project-del" });
 
     // Verificar que el mensaje fue eliminado de conversations
     const conversationRow = await db.getAsync(`SELECT * FROM conversations WHERE id = $1`, [testMessageId]);
@@ -51,7 +51,7 @@ describe('Delete Message Tool', () => {
 
   it('debería resolver correctamente si el mensaje a eliminar no existe', async () => {
     const nonExistentId = uuidv4();
-    await deleteMessage(nonExistentId);
+    await deleteMessage({ messageId: nonExistentId, project: "test-project-del" });
 
     expect(true).to.be.true; 
   });

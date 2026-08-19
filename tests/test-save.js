@@ -95,6 +95,24 @@ describe('saveMessage', () => {
     expect(queueStub.called).to.be.false; 
   });
 
+  it('should reject saving a message if the session already belongs to another project', async () => {
+    const sessionId = uuidv4();
+    testSessionIds.push(sessionId);
+
+    await saveMessage({ sessionId, project: 'proj-a', role: 'user', content: 'Primer mensaje' });
+
+    let error;
+    try {
+      await saveMessage({ sessionId, project: 'proj-b', role: 'user', content: 'Mensaje mezclado' });
+    } catch (e) {
+      error = e;
+    }
+
+    expect(error).to.exist;
+    expect(error.code).to.equal('PROJECT_CONFLICT');
+    expect(queueStub.calledOnce).to.be.true;
+  });
+
   it('should resolve true even if embedding generation fails, but message is saved', async () => {
     const sessionId = uuidv4();
     testSessionIds.push(sessionId);

@@ -41,7 +41,7 @@ describe('Delete Message Pair Tool', () => {
 
   it('debería eliminar el par de mensajes si se elimina uno de ellos', async () => {
     // Eliminar la pregunta (msgId1), debería borrar también la respuesta (msgId2)
-    await deleteMessagePair(msgId1);
+    await deleteMessagePair({ messageId: msgId1, project: "test-project-pair" });
 
     const rows = await db.allAsync(`SELECT id FROM conversations WHERE session_id = $1`, [testSessionId]);
     expect(rows).to.have.lengthOf(0);

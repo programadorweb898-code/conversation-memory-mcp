@@ -7,12 +7,13 @@ const { db } = require("../database");
  * @param {string} [params.agentId] - ID del agente para filtrar.
  * @returns {Promise<Array>} - Lista de mensajes de la sesión.
  */
-async function recoverSession({ sessionId, agentId }) {
+async function recoverSession({ sessionId, project, agentId }) {
+  if (!project) throw new Error("El parámetro 'project' es obligatorio.");
   try {
-    let sql = `SELECT * FROM conversations WHERE session_id = $1`;
-    const params = [sessionId];
+    let sql = `SELECT * FROM conversations WHERE session_id = $1 AND project = $2`;
+    const params = [sessionId, project];
     if (agentId) {
-      sql += ` AND agent_id = $2`;
+      sql += ` AND agent_id = $3`;
       params.push(agentId);
     }
     sql += ` ORDER BY timestamp ASC`;

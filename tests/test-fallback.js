@@ -17,7 +17,7 @@ describe('Fallback to Engram', () => {
   it('should signal Engram fallback when DB connection fails', async () => {
     lastSessionStub.rejects(new Error('DB_CONNECTION_FAILURE'));
 
-    const context = await getLastSessionContext();
+    const context = await getLastSessionContext({ project: "test" });
     
     expect(context.sessionId).to.equal('ENGRAM_FALLBACK_REQUIRED');
     expect(context.summary).to.contain('Error de conexión');

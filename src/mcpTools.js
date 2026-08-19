@@ -1,4 +1,5 @@
 const { z } = require("zod");
+const { db } = require("./database");
 
 // Import tools
 const { saveMessage } = require("./tools/saveMessage");
@@ -31,7 +32,7 @@ Identificate pasando tu propio nombre en agentId en cada llamada (por ejemplo 'g
 No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin contenido sustancioso. Guardá cuando haya una pregunta real, una decisión, un análisis, o cualquier intercambio que sea valioso recuperar en el futuro.`,              // descripción (esto es lo que ve el agente)
   {
     sessionId: z.string().describe("ID de la sesión"),
-    project: z.string().optional().describe("Nombre del proyecto"),
+    project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
     role: z.string().describe("Rol del emisor (user/assistant)"),
     content: z.string().describe("Contenido del mensaje"),
     agentId: z.string().optional().describe("Identificador único del agente que genera el mensaje"),
@@ -52,7 +53,7 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
     "Busca mensajes en el historial",
     {
       searchTerm: z.string().describe("Término de búsqueda (palabra clave o consulta semántica)"),
-      project: z.string().optional().describe("Filtrar por proyecto"),
+      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
       agentId: z.string().optional().describe("Filtrar por ID de agente"),
     },
     async ({ searchTerm, project, agentId }) => {
@@ -67,7 +68,7 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
     "Busca mensajes semánticamente similares a una consulta",
     {
       query: z.string().describe("La consulta de búsqueda"),
-      project: z.string().optional().describe("Filtrar por proyecto"),
+      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
       agentId: z.string().optional().describe("Filtrar por ID de agente"),
       limit: z.number().optional().describe("Número máximo de resultados (por defecto: 5)"),
     },
@@ -83,9 +84,10 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
     "Busca sesiones relevantes mediante su resumen semántico y recupera todo su historial",
     {
       query: z.string().describe("La consulta de búsqueda"),
+      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
     },
-    async ({ query }) => {
-      const history = await searchSessionsBySummary({ query });
+    async ({ query, project }) => {
+      const history = await searchSessionsBySummary({ query, project });
       return { content: [{ type: "text", text: JSON.stringify({ history }, null, 2) }], structuredContent: { history } };
     }
   );
@@ -95,10 +97,11 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
     "lastSession",
     "Recupera el ID de la última sesión",
     {
+      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
       agentId: z.string().optional().describe("Filtrar por ID de agente"),
     },
-    async ({ agentId }) => {
-      const sessionId = await lastSession({ agentId });
+    async ({ project, agentId }) => {
+      const sessionId = await lastSession({ project, agentId });
       return { content: [{ type: "text", text: sessionId || "No hay sesiones previas." }] };
     }
   );
@@ -109,10 +112,11 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
     "Recupera todos los mensajes de una sesión",
     {
       sessionId: z.string().describe("ID de la sesión a recuperar"),
+      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
       agentId: z.string().optional().describe("Filtrar por ID de agente"),
     },
-    async ({ sessionId, agentId }) => {
-      const messages = await recoverSession({ sessionId, agentId });
+    async ({ sessionId, project, agentId }) => {
+      const messages = await recoverSession({ sessionId, project, agentId });
       return { content: [{ type: "text", text: JSON.stringify({ messages }, null, 2) }], structuredContent: { messages } };
     }
   );
@@ -122,10 +126,11 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
     "listSessions",
     "Lista todas las sesiones disponibles",
     {
+      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
       agentId: z.string().optional().describe("Filtrar por ID de agente"),
     },
-    async ({ agentId }) => {
-      const sessions = await listSessions({ agentId });
+    async ({ project, agentId }) => {
+      const sessions = await listSessions({ project, agentId });
       return { content: [{ type: "text", text: JSON.stringify({ data: sessions }, null, 2) }] };
     }
   );
@@ -136,9 +141,10 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
     "Prepara un mensaje para ser enviado a Engram",
     {
       messageId: z.string().describe("ID del mensaje a recuperar"),
+      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
     },
-    async ({ messageId }) => {
-      const message = await pushToEngram({ messageId });
+    async ({ messageId, project }) => {
+      const message = await pushToEngram({ messageId, project });
       return { content: [{ type: "text", text: JSON.stringify(message, null, 2) }] };
     }
   );
@@ -148,10 +154,11 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
     "getLastSessionContext",
     "Recupera el historial completo de la última sesión",
     {
+      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
       agentId: z.string().optional().describe("Filtrar por ID de agente"),
     },
-    async ({ agentId }) => {
-      const context = await getLastSessionContext({ agentId });
+    async ({ project, agentId }) => {
+      const context = await getLastSessionContext({ project, agentId });
       return { content: [{ type: "text", text: JSON.stringify(context, null, 2) }] };
     }
   );
@@ -162,10 +169,11 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
     "Guarda o actualiza el resumen de una sesión",
     {
       sessionId: z.string().describe("ID de la sesión"),
+      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
       summary: z.string().describe("Contenido del resumen"),
     },
-    async ({ sessionId, summary }) => {
-      await saveSessionSummary({ sessionId, summary });
+    async ({ sessionId, project, summary }) => {
+      await saveSessionSummary({ sessionId, project, summary });
       return { content: [{ type: "text", text: "Resumen guardado correctamente." }] };
     }
   );
@@ -176,9 +184,10 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
     "Recupera el resumen de una sesión específica",
     {
       sessionId: z.string().describe("ID de la sesión"),
+      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
     },
-    async ({ sessionId }) => {
-      const summary = await getSessionSummary({ sessionId });
+    async ({ sessionId, project }) => {
+      const summary = await getSessionSummary({ sessionId, project });
       return {
         content: [
           {
@@ -196,9 +205,10 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
     "Finaliza explícitamente una sesión, generando y guardando su resumen",
     {
       sessionId: z.string().describe("ID de la sesión"),
+      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
     },
-    async ({ sessionId }) => {
-      const result = await finalizeSession(sessionId);
+    async ({ sessionId, project }) => {
+      const result = await finalizeSession({ sessionId, project });
       return { content: [{ type: "text", text: JSON.stringify(result) }] };
     }
   );
@@ -209,9 +219,10 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
     "Elimina todos los mensajes, embeddings y el resumen de una sesión específica",
     {
       sessionId: z.string().describe("ID de la sesión a eliminar"),
+      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
     },
-    async ({ sessionId }) => {
-      await deleteSession(sessionId);
+    async ({ sessionId, project }) => {
+      await deleteSession({ sessionId, project });
       return { content: [{ type: "text", text: `Sesión ${sessionId}, sus mensajes y resumen eliminados correctamente.` }] };
     }
   );
@@ -222,9 +233,10 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
     "Elimina un mensaje específico y su embedding asociado",
     {
       messageId: z.string().describe("ID del mensaje a eliminar"),
+      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
     },
-    async ({ messageId }) => {
-      await deleteMessage(messageId);
+    async ({ messageId, project }) => {
+      await deleteMessage({ messageId, project });
       return { content: [{ type: "text", text: `Mensaje ${messageId} y su embedding eliminados correctamente.` }] };
     }
   );
@@ -235,9 +247,10 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
     "Elimina un mensaje y su mensaje relacionado (pregunta/respuesta) y sus embeddings",
     {
       messageId: z.string().describe("ID del mensaje del par a eliminar"),
+      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
     },
-    async ({ messageId }) => {
-      await deleteMessagePair(messageId);
+    async ({ messageId, project }) => {
+      await deleteMessagePair({ messageId, project });
       return { content: [{ type: "text", text: `Par de mensajes con ${messageId} y sus embeddings eliminados correctamente.` }] };
     }
   );
@@ -248,11 +261,17 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
     "Genera y guarda un embedding para un mensaje dado",
     {
       messageId: z.string().describe("ID del mensaje al que se asociará el embedding"),
+      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
       text: z.string().describe("El texto del cual generar el embedding"),
       role: z.string().describe("Rol del emisor (user/assistant)"),
     },
-    async ({ messageId, text, role }) => {
+    async ({ messageId, project, text, role }) => {
       try {
+        const message = await db.getAsync(
+          `SELECT id FROM conversations WHERE id = $1 AND project = $2`,
+          [messageId, project]
+        );
+        if (!message) throw new Error("Mensaje no encontrado en el proyecto especificado");
         const generatedEmbedding = await generateEmbedding({ role, content: text });
         await saveEmbedding(messageId, generatedEmbedding);
         return { content: [{ type: "text", text: `Embedding generado y guardado para el mensaje ${messageId}.` }] };

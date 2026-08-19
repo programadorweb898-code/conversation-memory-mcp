@@ -8,14 +8,15 @@ const recoverSession = require("./recoverSession");
  * @param {string} [params.agentId] - ID del agente para filtrar.
  * @returns {Promise<Object>} - El ID de la sesión, el resumen y los mensajes.
  */
-async function getLastSessionContext({ agentId } = {}) {
+async function getLastSessionContext({ project, agentId } = {}) {
+  if (!project) throw new Error("El parámetro 'project' es obligatorio.");
   try {
-    const sessionId = await lastSession.lastSession({ agentId });
+    const sessionId = await lastSession.lastSession({ project, agentId });
     if (!sessionId) {
       return { sessionId: null, summary: null, messages: [] };
     }
-    const summaryData = await getSessionSummary({ sessionId });
-    const messages = await recoverSession({ sessionId, agentId });
+    const summaryData = await getSessionSummary({ sessionId, project });
+    const messages = await recoverSession({ sessionId, project, agentId });
     return { sessionId, summary: summaryData ? summaryData.summary : null, messages };
   } catch (err) {
     if (err.message === "DB_CONNECTION_FAILURE") {

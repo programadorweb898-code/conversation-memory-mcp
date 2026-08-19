@@ -9,17 +9,19 @@ Este servidor sigue el estándar **Model Context Protocol (MCP)**, lo que lo hac
 Para garantizar la integridad y separación de datos entre diferentes proyectos, es obligatorio configurar tu agente siguiendo estas reglas:
 
 1. **Uso Obligatorio de MCP para Consultas Históricas:** Debes configurar tu agente para que, ante cualquier pregunta sobre conversaciones pasadas, **utilice exclusivamente las herramientas expuestas por `conversation-memory-mcp`**. Prohibido leer archivos del sistema o usar memoria interna del agente para reconstruir el historial.
-2. **Separación por Proyecto:** Cada agente debe pasar explícitamente el parámetro `project` (nombre del proyecto) en todas las llamadas a las herramientas del MCP. Esto garantiza que los datos y respuestas de este proyecto nunca se mezclen con otros.
+2. **Parámetro `project` Obligatorio:** Todas las herramientas del MCP exigen el parámetro `project`. El servidor lo **rechaza si falta** y solo guarda/lee/elimina datos del proyecto indicado. Además, si un `sessionId` ya pertenece a otro proyecto, la operación falla (código `PROJECT_CONFLICT`) para impedir cualquier mezcla de datos.
 
 Ejemplo de configuración:
-> "Cuando el usuario pregunte por información histórica de este proyecto, usa obligatoriamente las herramientas `getLastSessionContext`, `searchMessages` o `semanticSearchMessages` del MCP `conversation-memory`. Asegúrate de incluir siempre el parámetro `project: 'nombre-del-proyecto'` para evitar contaminación de datos."
+> "Cuando el usuario pregunte por información histórica de este proyecto, usa obligatoriamente las herramientas del MCP `conversation-memory`. Asegúrate de incluir **siempre** el parámetro `project: 'nombre-del-proyecto'` en **todas** las llamadas, ya que el servidor lo exige para aislar los datos por proyecto."
 
 ## Herramientas Disponibles
 
-- `saveMessage`: Guarda un nuevo mensaje en el historial.
-- `searchMessages`: Busca mensajes históricos por palabras clave.
-- `lastSession`: Recupera el ID de la última sesión activa.
-- `recoverSession`: Recupera el historial completo de una sesión específica.
+- `saveMessage`: Guarda un nuevo mensaje en el historial. `project` obligatorio.
+- `searchMessages`: Busca mensajes históricos por palabras clave. `project` obligatorio.
+- `lastSession`: Recupera el ID de la última sesión activa del proyecto. `project` obligatorio.
+- `recoverSession`: Recupera el historial completo de una sesión específica del proyecto. `project` obligatorio.
+
+Todas las herramientas (incluyendo resúmenes, eliminaciones y búsquedas semánticas) requieren `project` para garantizar el aislamiento de datos entre proyectos.
 
 ## Desarrollo
 

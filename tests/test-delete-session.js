@@ -47,7 +47,7 @@ describe('Delete Session Tool', () => {
   });
 
   it('debería eliminar todos los mensajes y sus embeddings asociados para una sesión', async () => {
-    await deleteSession(testSessionId);
+    await deleteSession({ sessionId: testSessionId, project: "test-project-session" });
 
     // Verificar que no hay mensajes para la sesión en conversations
     const conversationRows = await db.allAsync(`SELECT * FROM conversations WHERE session_id = $1`, [testSessionId]);
@@ -61,7 +61,7 @@ describe('Delete Session Tool', () => {
 
   it('debería resolver correctamente si la sesión a eliminar no existe', async () => {
     const nonExistentSessionId = uuidv4();
-    await deleteSession(nonExistentSessionId);
+    await deleteSession({ sessionId: nonExistentSessionId, project: "test-project-session" });
 
     expect(true).to.be.true;
   });

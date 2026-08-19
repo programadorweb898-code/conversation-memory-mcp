@@ -12,12 +12,12 @@ async function checkAndFinalizeInactiveSessions() {
     // nunca tuvieron resumen, o las que tienen mensajes nuevos por encima del
     // último sequence_id ya resumido.
     const activeSessions = await db.allAsync(`
-      SELECT c.session_id, MAX(c.timestamp) AS last_activity
+      SELECT c.session_id, c.project, MAX(c.timestamp) AS last_activity
       FROM conversations c
       LEFT JOIN session_summaries ss ON ss.session_id = c.session_id
       WHERE ss.session_id IS NULL
         OR COALESCE(c.sequence_id, -1) > COALESCE(ss.last_processed_seq_id, -1)
-      GROUP BY c.session_id
+      GROUP BY c.session_id, c.project
     `);
 
 // ...
@@ -30,7 +30,7 @@ async function checkAndFinalizeInactiveSessions() {
       if (idleTime > INACTIVITY_THRESHOLD_MS) {
         console.log(`Sesión ${session.session_id} inactiva por ${Math.round(idleTime/1000)}s. Finalizando...`);
         try {
-          await finalizeSession(session.session_id);
+          await finalizeSession({ sessionId: session.session_id, project: session.project });
           console.log(`Sesión ${session.session_id} finalizada automáticamente.`);
         } catch (error) {
           console.error(`Error al finalizar sesión ${session.session_id}:`, error.message);

@@ -7,18 +7,19 @@ const { db } = require("../database");
  */
 // Orden obligatorio: message_embeddings depende de conversations; conversations depende de la sesión.
 // Por eso se borran primero los embeddings de mensajes, luego los mensajes, y al final los summaries.
-async function deleteSession(sessionId) {
+async function deleteSession({ sessionId, project }) {
+  if (!project) throw new Error("El parámetro 'project' es obligatorio.");
   try {
     const embeddingResult = await db.runAsync(
-      "DELETE FROM message_embeddings WHERE message_id IN (SELECT id FROM conversations WHERE session_id = $1)",
-      [sessionId]
+      "DELETE FROM message_embeddings WHERE message_id IN (SELECT id FROM conversations WHERE session_id = $1 AND project = $2)",
+      [sessionId, project]
     );
     console.log(`Embeddings for session ${sessionId} deleted (if existed). Rows affected: ${embeddingResult.changes}`);
 
-    const messageResult = await db.runAsync("DELETE FROM conversations WHERE session_id = $1", [sessionId]);
+    const messageResult = await db.runAsync("DELETE FROM conversations WHERE session_id = $1 AND project = $2", [sessionId, project]);
     console.log(`Messages for session ${sessionId} deleted (if existed). Rows affected: ${messageResult.changes}`);
 
-    const summaryResult = await db.runAsync("DELETE FROM session_summaries WHERE session_id = $1", [sessionId]);
+    const summaryResult = await db.runAsync("DELETE FROM session_summaries WHERE session_id = $1 AND project = $2", [sessionId, project]);
     if (messageResult.changes > 0 || summaryResult.changes > 0) {
       console.log(`Session ${sessionId} and its messages deleted successfully. Rows affected: messages=${messageResult.changes}, summaries=${summaryResult.changes}`);
     } else {

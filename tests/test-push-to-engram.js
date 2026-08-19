@@ -28,7 +28,7 @@ describe('Push To Engram Tool', () => {
     const message = await db.getAsync(`SELECT id FROM conversations WHERE session_id = $1`, [testSessionId]);
 
     // Probamos la herramienta
-    const result = await pushToEngram({ messageId: message.id });
+    const result = await pushToEngram({ messageId: message.id, project: "test" });
     
     // Validamos la nueva estructura
     expect(result).to.have.property('message');

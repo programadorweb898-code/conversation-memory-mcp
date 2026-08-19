@@ -13,7 +13,7 @@ describe('Last Session Tool', () => {
       content: "Test para lastSession"
     });
 
-    const result = await lastSession();
+    const result = await lastSession({ project: "test" });
     expect(result).to.equal(testSessionId);
   });
 
@@ -25,7 +25,7 @@ describe('Last Session Tool', () => {
     await saveMessage({ sessionId: sessionId1, project: "test", role: "user", content: "M1", agentId });
     await saveMessage({ sessionId: sessionId2, project: "test", role: "user", content: "M2", agentId: 'other-agent' });
 
-    const result = await lastSession({ agentId });
+    const result = await lastSession({ project: "test", agentId });
     expect(result).to.equal(sessionId1);
   });
 });

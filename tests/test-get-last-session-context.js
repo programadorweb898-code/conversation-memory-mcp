@@ -8,7 +8,7 @@ describe('Get Last Session Context Tool', () => {
 
     await saveMessage({ sessionId, project: "test", role: "user", content: "Mensaje 1" });
 
-    const context = await getLastSessionContext();
+    const context = await getLastSessionContext({ project: "test" });
     
     expect(context.sessionId).to.equal(sessionId);
     expect(context.messages).to.have.lengthOf(1);
@@ -21,7 +21,7 @@ describe('Get Last Session Context Tool', () => {
 
     await saveMessage({ sessionId, project: "test", role: "user", content: "Mensaje 1", agentId });
 
-    const context = await getLastSessionContext({ agentId });
+    const context = await getLastSessionContext({ project: "test", agentId });
     
     expect(context.sessionId).to.equal(sessionId);
     expect(context.messages).to.have.lengthOf(1);

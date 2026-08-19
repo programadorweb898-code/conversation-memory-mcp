@@ -6,12 +6,13 @@ const { db } = require("../database");
  * @param {string} [params.agentId] - ID del agente para filtrar.
  * @returns {Promise<string|null>} - El ID de la sesión más reciente o null si no hay registros.
  */
-async function lastSession({ agentId } = {}) {
+async function lastSession({ project, agentId } = {}) {
+  if (!project) throw new Error("El parámetro 'project' es obligatorio.");
   try {
-    let sql = `SELECT session_id FROM conversations`;
-    const params = [];
+    let sql = `SELECT session_id FROM conversations WHERE project = $1`;
+    const params = [project];
     if (agentId) {
-      sql += ` WHERE agent_id = $1`;
+      sql += ` AND agent_id = $2`;
       params.push(agentId);
     }
     sql += ` ORDER BY timestamp DESC LIMIT 1`;

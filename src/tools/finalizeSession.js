@@ -2,25 +2,26 @@ const generateSessionSummary = require("./generateSessionSummary");
 const saveSessionSummary = require("./saveSessionSummary");
 const { db } = require("../database");
 
-async function finalizeSession(sessionId) {
+async function finalizeSession({ sessionId, project }) {
+  if (!project) throw new Error("El parámetro 'project' es obligatorio.");
   console.log(`Finalizando sesión: ${sessionId}`);
   
   // 1. Obtener resumen previo y el ID del último mensaje procesado
   const existingSummary = await db.getAsync(
-    "SELECT summary, last_processed_seq_id FROM session_summaries WHERE session_id = $1",
-    [sessionId]
+    "SELECT summary, last_processed_seq_id FROM session_summaries WHERE session_id = $1 AND project = $2",
+    [sessionId, project]
   );
 
   // 2. Obtener mensajes nuevos (delta)
   let query = `
     SELECT id, sequence_id, role, content, timestamp 
     FROM conversations 
-    WHERE session_id = $1
+    WHERE session_id = $1 AND project = $2
   `;
-  const params = [sessionId];
+  const params = [sessionId, project];
   
   if (existingSummary && existingSummary.last_processed_seq_id) {
-    query += " AND sequence_id > $2";
+    query += " AND sequence_id > $3";
     params.push(existingSummary.last_processed_seq_id);
   }
   
@@ -43,7 +44,7 @@ async function finalizeSession(sessionId) {
   // 4. Guardar nuevo resumen y actualizar el ID del último mensaje
   const lastMessageSeqId = newMessages.length > 0 ? newMessages[newMessages.length - 1].sequence_id : existingSummary.last_processed_seq_id;
   
-  await saveSessionSummary({ sessionId, summary, lastProcessedSeqId: lastMessageSeqId });
+  await saveSessionSummary({ sessionId, project, summary, lastProcessedSeqId: lastMessageSeqId });
   
   return { summary, auditRequired: true };
 }

@@ -3,6 +3,7 @@ const { generateEmbedding } = require("../services/embeddingService");
 
 async function semanticSearchMessages({ query, project, agentId, limit = 5 }) {
   if (!query) throw new Error("La consulta no puede estar vacía.");
+  if (!project) throw new Error("El parámetro 'project' es obligatorio para aislar los datos por proyecto.");
 
   // Generar embedding de la consulta
   const queryEmbeddingJson = await generateEmbedding({ role: "search", content: query });

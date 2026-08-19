@@ -9,7 +9,7 @@ describe('Recover Session Tool', () => {
     await saveMessage({ sessionId, project: "test", role: "user", content: "Mensaje 1" });
     await saveMessage({ sessionId, project: "test", role: "assistant", content: "Mensaje 2" });
 
-    const messages = await recoverSession({ sessionId });
+    const messages = await recoverSession({ sessionId, project: "test" });
     
     expect(messages).to.have.lengthOf(2);
     expect(messages[0].content).to.equal("Mensaje 1");
@@ -24,7 +24,7 @@ describe('Recover Session Tool', () => {
     await saveMessage({ sessionId, project: "test", role: "user", content: "Mensaje A1", agentId });
     await saveMessage({ sessionId, project: "test", role: "user", content: "Mensaje A2", agentId: otherAgentId });
 
-    const messages = await recoverSession({ sessionId, agentId });
+    const messages = await recoverSession({ sessionId, project: "test", agentId });
     
     expect(messages).to.have.lengthOf(1);
     expect(messages[0].content).to.equal("Mensaje A1");

@@ -6,11 +6,9 @@ const removeStopwords = require("../services/stopwords");
 const SearchMessagesSchema = z.object({
   searchTerm: z.string().optional(),
   query: z.string().optional(),
-  project: z.string().optional(),
+  project: z.string().min(1),
   agentId: z.string().optional(),
   threshold: z.number().min(0).max(1).optional().default(0.6),
-}).refine(data => data.searchTerm || data.query || data.project || data.agentId, {
-  message: "Se requiere al menos uno de: searchTerm, query, project o agentId",
 });
 
 /**

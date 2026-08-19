@@ -5,7 +5,7 @@ const embeddingQueue = require("../services/embeddingQueue");
 
 const SaveMessageSchema = z.object({
   sessionId: z.string().min(1),
-  project: z.string().min(1).optional().nullable(),
+  project: z.string().min(1),
   role: z.enum(["user", "assistant", "system"]),
   content: z.string().min(1),
   agentId: z.string().optional(),
@@ -37,6 +37,19 @@ async function saveMessage(params) {
   }
 
   const messageId = randomUUID();
+
+  const existingSessionProject = await db.getAsync(
+    `SELECT project FROM conversations WHERE session_id = $1 LIMIT 1`,
+    [sessionId]
+  );
+  if (existingSessionProject && existingSessionProject.project !== project) {
+    const error = new Error(
+      `La sesión ${sessionId} ya pertenece al proyecto "${existingSessionProject.project}". No se permite mezclar datos entre proyectos.`
+    );
+    error.code = "PROJECT_CONFLICT";
+    throw error;
+  }
+
   try {
     const sql = `
       INSERT INTO conversations

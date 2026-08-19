@@ -10,7 +10,7 @@ describe('List Sessions Tool', () => {
     await saveMessage({ sessionId: sessionId1, project: "test", role: "user", content: "M1" });
     await saveMessage({ sessionId: sessionId2, project: "test", role: "user", content: "M2" });
 
-    const sessions = await listSessions();
+    const sessions = await listSessions({ project: "test" });
     
     // Verificamos que al menos nuestras dos sesiones estén en la lista
     const sessionIds = sessions.map(s => s.session_id);
@@ -26,7 +26,7 @@ describe('List Sessions Tool', () => {
     await saveMessage({ sessionId: sessionId1, project: "test", role: "user", content: "M1", agentId });
     await saveMessage({ sessionId: sessionId2, project: "test", role: "user", content: "M2", agentId: 'other-agent' });
 
-    const sessions = await listSessions({ agentId });
+    const sessions = await listSessions({ project: "test", agentId });
     
     // Verificamos que solo la sesión del agente esté en la lista
     const sessionIds = sessions.map(s => s.session_id);

@@ -6,10 +6,11 @@ const { db } = require("../database");
  * @param {string} params.sessionId - El ID de la sesión.
  * @returns {Promise<Object|null>} - El resumen y su timestamp o null si no existe.
  */
-async function getSessionSummary({ sessionId }) {
+async function getSessionSummary({ sessionId, project }) {
+  if (!project) throw new Error("El parámetro 'project' es obligatorio.");
   try {
-    const sql = `SELECT summary, timestamp FROM session_summaries WHERE session_id = $1`;
-    const row = await db.getAsync(sql, [sessionId]);
+    const sql = `SELECT summary, timestamp FROM session_summaries WHERE session_id = $1 AND project = $2`;
+    const row = await db.getAsync(sql, [sessionId, project]);
     return row || null;
   } catch (err) {
     console.error("Error retrieving session summary:", err.message);

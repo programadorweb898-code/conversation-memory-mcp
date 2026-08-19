@@ -37,9 +37,9 @@ describe('Session Summaries Tool', () => {
 
   it('debería generar y guardar un resumen de sesión correctamente', async function() {
     this.timeout(30000);
-    await finalizeSession(testSessionId);
+    await finalizeSession({ sessionId: testSessionId, project: "test" });
     
-    const result = await getSessionSummary({ sessionId: testSessionId });
+    const result = await getSessionSummary({ sessionId: testSessionId, project: "test" });
     expect(result).to.exist;
     
     const parsedSummary = JSON.parse(result.summary);
@@ -52,14 +52,14 @@ describe('Session Summaries Tool', () => {
 
   it('debería actualizar un resumen existente (upsert) con nuevo contenido', async function() {
     this.timeout(30000);
-    await finalizeSession(testSessionId);
+    await finalizeSession({ sessionId: testSessionId, project: "test" });
     
     const newMessage = { sessionId: testSessionId, project: "test", role: "assistant", content: "Entendido, estoy generando el resumen." };
     await saveMessage(newMessage);
 
-    await finalizeSession(testSessionId);
+    await finalizeSession({ sessionId: testSessionId, project: "test" });
 
-    const result = await getSessionSummary({ sessionId: testSessionId });
+    const result = await getSessionSummary({ sessionId: testSessionId, project: "test" });
     expect(result).to.exist;
     
     const parsedSummary = JSON.parse(result.summary);

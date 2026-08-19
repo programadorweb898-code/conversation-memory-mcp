@@ -5,12 +5,16 @@ const { db } = require("../database");
  * @param {string} messageId - El ID unico del mensaje a eliminar.
  * @returns {Promise<void>}
  */
-async function deleteMessage(messageId) {
+async function deleteMessage({ messageId, project }) {
+  if (!project) throw new Error("El parámetro 'project' es obligatorio.");
   try {
-    await db.runAsync("DELETE FROM message_embeddings WHERE message_id = $1", [messageId]);
+    await db.runAsync(
+      "DELETE FROM message_embeddings WHERE message_id IN (SELECT id FROM conversations WHERE id = $1 AND project = $2)",
+      [messageId, project]
+    );
     console.log(`Embedding for message ${messageId} deleted (if existed).`);
 
-    const result = await db.runAsync("DELETE FROM conversations WHERE id = $1", [messageId]);
+    const result = await db.runAsync("DELETE FROM conversations WHERE id = $1 AND project = $2", [messageId, project]);
     if (result.changes > 0) {
       console.log(`Message ${messageId} deleted successfully.`);
     } else {

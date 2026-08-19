@@ -81,10 +81,13 @@ async function initDb() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS session_summaries (
         session_id TEXT PRIMARY KEY,
+        project TEXT,
         summary TEXT NOT NULL,
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await client.query(`ALTER TABLE session_summaries ADD COLUMN IF NOT EXISTS project TEXT;`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_session_summaries_project ON session_summaries(project)`);
     await client.query(`
       CREATE TABLE IF NOT EXISTS session_summary_embeddings (
         session_id TEXT PRIMARY KEY,
