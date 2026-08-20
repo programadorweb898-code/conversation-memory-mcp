@@ -7,7 +7,7 @@ function createSessionId() {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function setupMcpRoutes(app, { createMcpServer, sseServer }) {
+function setupMcpRoutes(app, { createMcpServer }) {
   app.all("/mcp", async (req, res, next) => {
     // Modo stateless: el SDK de MCP no permite reutilizar un StreamableHTTPServerTransport
     // sin sessionIdGenerator ("Stateless transport cannot be reused across requests") y un
@@ -61,10 +61,13 @@ function setupMcpRoutes(app, { createMcpServer, sseServer }) {
       transports.delete(sessionId);
       console.log(`Sesion ${sessionId} desconectada. Transports activos: ${transports.size}`);
     });
-
+    const server= createMcpServer();
     console.log("Connecting MCP server to transport...");
-    await sseServer.connect(transport);
+    await server.connect(transport);
     console.log("MCP server connected to transport");
+    res.on("close",()=>{
+      server.close();
+    })
   });
 
   app.post("/messages", async (req, res) => {
