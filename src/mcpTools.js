@@ -9,6 +9,7 @@ const semanticSearchMessages = require("./tools/semanticSearchMessages");
 const searchSessionsBySummary = require("./tools/searchSessionsBySummary");
 const lastSession = require("./tools/lastSession");
 const recoverSession = require("./tools/recoverSession");
+const extractMemories = require("./tools/extractMemories");
 const listSessions = require("./tools/listSessions");
 const pushToEngram = require("./tools/pushToEngram");
 const getLastSessionContext = require("./tools/getLastSessionContext");
@@ -118,6 +119,30 @@ No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin 
     async ({ sessionId, project, agentId }) => {
       const messages = await recoverSession({ sessionId, project, agentId });
       return { content: [{ type: "text", text: JSON.stringify({ messages }, null, 2) }], structuredContent: { messages } };
+    }
+  );
+
+  // 4.5. extractMemories
+  server.tool(
+    "extractMemories",
+    `Recupera una sesión completa y prepara los candidatos de memoria semántica durable para que el agente los analice.
+Sirve para identificar memorias potenciales de una sesión (decisiones, descubrimientos, restricciones, configuraciones, lecciones) a partir de su contexto.
+NO guarda nada en Engram: solamente extrae y estructura la información.
+No debe utilizarse para guardar cada conversación ni como mecanismo de persistencia automática.
+Categorías de memoria:
+- decision: una elección que se tomó y su motivo.
+- discovery: un hallazgo o aprendizaje técnico.
+- constraint: una limitación o regla impuesta.
+- configuration: un cambio de configuración o setup.
+- lesson: una lección aprendida de una situación concreta.`,
+    {
+      sessionId: z.string().describe("ID de la sesión a recuperar"),
+      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
+      agentId: z.string().optional().describe("Filtrar por ID de agente"),
+    },
+    async ({ sessionId, project, agentId }) => {
+      const result = await extractMemories({ sessionId, project, agentId });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], structuredContent: { data: result } };
     }
   );
 
