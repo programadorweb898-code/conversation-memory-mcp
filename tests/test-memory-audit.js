@@ -25,10 +25,6 @@ function setApiKey() {
   process.env.GEMINI_API_KEY = 'test-key';
 }
 
-function clearApiKey() {
-  delete process.env.GEMINI_API_KEY;
-}
-
 function restoreApiKey() {
   if (DEFAULT_API_KEY !== undefined) {
     process.env.GEMINI_API_KEY = DEFAULT_API_KEY;
@@ -37,10 +33,14 @@ function restoreApiKey() {
   }
 }
 
+// La extracción (extractMemories) resuelve GEMINI_API_KEY dinámicamente en cada
+// llamada: sin key devolvería [] y la auditoría no tendría candidatos. Por eso
+// estos tests mantienen la key puesta (setApiKey) y fuerzan la heurística de la
+// decisión mediante un veredicto LLM inválido (estado no permitido).
 function stubSmartLlm({ candidates, verdict }) {
   const generateContent = sinon.stub().callsFake((prompt) => {
     const isAudit = String(prompt).includes(AUDIT_MARKER);
-    const payload = isAudit ? verdict : { candidates };
+    const payload = isAudit ? (verdict || { status: '__invalid__', reason: 'forzar heurística', relatedMemoryIds: [] }) : { candidates };
     return { response: { text: () => JSON.stringify(payload) } };
   });
   sinon.stub(GoogleGenerativeAI.prototype, 'getGenerativeModel').returns({ generateContent });
@@ -112,7 +112,7 @@ describe('Memory Audit Tool', function () {
     const { sessionId, ids } = await seed([['user', 'Decidimos usar Postgres en Neon para el historial.']]);
     stubSmartLlm({ candidates: [makeCandidate(ids[0])] });
     stubAdapter(mockAdapter({ related: [] }));
-    clearApiKey();
+    setApiKey();
 
     const result = await memoryAudit({ sessionId, project: 'test' });
 
@@ -143,7 +143,7 @@ describe('Memory Audit Tool', function () {
       }],
     });
     stubAdapter(adapter);
-    clearApiKey();
+    setApiKey();
 
     const result = await memoryAudit({ sessionId, project: 'test' });
 
@@ -162,7 +162,7 @@ describe('Memory Audit Tool', function () {
     const { sessionId, ids } = await seed([['user', 'Decidimos usar Postgres en Neon para el historial.']]);
     stubSmartLlm({ candidates: [makeCandidate(ids[0])] });
     stubAdapter(mockAdapter({ related: [] }));
-    clearApiKey();
+    setApiKey();
 
     const result = await memoryAudit({ sessionId, project: 'test' });
 
@@ -175,7 +175,7 @@ describe('Memory Audit Tool', function () {
     const { sessionId, ids } = await seed([['user', 'Mensaje de contexto.']]);
     stubSmartLlm({
       candidates: [{
-        type: 'decision', title: 'a b c d e f', what: '', why: '',
+        type: 'decision', title: 'a b c d e f', what: 'contexto', why: '',
         whereContext: '', learned: '', importance: 'low',
         sourceMessageIds: ['msg-' + ids[0]],
       }],
@@ -183,7 +183,7 @@ describe('Memory Audit Tool', function () {
     stubAdapter(mockAdapter({
       related: [{ id: 'obs-3', topicKey: null, type: 'configuration', title: 'c d', content: 'g h i j k l m n' }],
     }));
-    clearApiKey();
+    setApiKey();
 
     const result = await memoryAudit({ sessionId, project: 'test' });
 
@@ -195,7 +195,7 @@ describe('Memory Audit Tool', function () {
     const { sessionId, ids } = await seed([['user', 'Mensaje de contexto.']]);
     stubSmartLlm({
       candidates: [{
-        type: 'decision', title: 'a b c d e f', what: '', why: '',
+        type: 'decision', title: 'a b c d e f', what: 'contexto', why: '',
         whereContext: '', learned: '', importance: 'low',
         sourceMessageIds: ['msg-' + ids[0]],
       }],
@@ -203,7 +203,7 @@ describe('Memory Audit Tool', function () {
     stubAdapter(mockAdapter({
       related: [{ id: 'obs-4', topicKey: null, type: 'discovery', title: 'c d e f', content: 'g h i j k l' }],
     }));
-    clearApiKey();
+    setApiKey();
 
     const result = await memoryAudit({ sessionId, project: 'test' });
 
@@ -218,7 +218,7 @@ describe('Memory Audit Tool', function () {
       status: { available: false, provider: 'engram-local', error: 'connection refused' },
     });
     stubAdapter(adapter);
-    clearApiKey();
+    setApiKey();
 
     const result = await memoryAudit({ sessionId, project: 'test' });
 
@@ -238,7 +238,7 @@ describe('Memory Audit Tool', function () {
     const { sessionId, ids } = await seed([['user', 'Mensaje de contexto.']]);
     stubSmartLlm({ candidates: [makeCandidate(ids[0])] });
     stubAdapter(mockAdapter({ related: [], searchError: 'ECONNREFUSED' }));
-    clearApiKey();
+    setApiKey();
 
     const result = await memoryAudit({ sessionId, project: 'test' });
 
@@ -251,7 +251,7 @@ describe('Memory Audit Tool', function () {
     const { sessionId, ids } = await seed([['user', 'Mensaje de contexto.']]);
     stubSmartLlm({ candidates: [makeCandidate(ids[0])] });
     stubAdapter(mockAdapter({ related: [] }));
-    clearApiKey();
+    setApiKey();
 
     const first = await memoryAudit({ sessionId, project: 'test' });
     const second = await memoryAudit({ sessionId, project: 'test' });
@@ -271,7 +271,7 @@ describe('Memory Audit Tool', function () {
     stubSmartLlm({ candidates: [makeCandidate('id-inventado-que-no-existe')] });
     const adapter = mockAdapter({ related: [] });
     stubAdapter(adapter);
-    clearApiKey();
+    setApiKey();
 
     const result = await memoryAudit({ sessionId, project: 'test' });
 
@@ -325,7 +325,7 @@ describe('Memory Audit Tool', function () {
     stubSmartLlm({ candidates: [makeCandidate(ids[0])] });
     const adapter = mockAdapter({ related: [] });
     stubAdapter(adapter);
-    clearApiKey();
+    setApiKey();
 
     const beforeConversations = await count('SELECT COUNT(*) AS c FROM conversations WHERE session_id = $1', [sessionId]);
     const beforeEmbeddings = await count(
@@ -360,7 +360,7 @@ describe('Memory Audit Tool', function () {
     const adapter = mockAdapter({ related: [] });
     stubAdapter(adapter);
     stubSmartLlm({ candidates: [], verdict: { status: 'missing', reason: 'x', relatedMemoryIds: [] } });
-    clearApiKey();
+    setApiKey();
 
     const result = await memoryAudit({ sessionId, project: 'test' });
 

@@ -77,7 +77,7 @@ describe('Extract Memories — Criterios de éxito', () => {
   });
 
   it('Test 2 — detecta configuración (configuration)', async () => {
-    const { sessionId } = await seedSession([
+    const { sessionId, ids } = await seedSession([
       ['user', 'El proyecto utiliza PostgreSQL en Neon con pgvector y Render realiza el despliegue automático.'],
     ]);
     const stub = stubLlm([
@@ -89,7 +89,7 @@ describe('Extract Memories — Criterios de éxito', () => {
         whereContext: 'Infraestructura',
         learned: 'El stack tecnológico debe consultarse en la configuración del proyecto',
         importance: 'medium',
-        sourceMessageIds: [],
+        sourceMessageIds: [ids[0]],
       },
     ]);
 

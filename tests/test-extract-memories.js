@@ -2,6 +2,7 @@ const { expect } = require('chai');
 const sinon = require('sinon');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const extractMemories = require("../src/tools/extractMemories");
+const { validateCandidate } = extractMemories;
 const saveMessage = require("../src/tools/saveMessage");
 const { db } = require('./test-helper');
 
@@ -115,6 +116,30 @@ describe('Extract Memories Tool', () => {
     // pero nunca debe lanzar ni acoplarse a Engram.
   });
 
+  it('debería resolver GEMINI_API_KEY dinámicamente en cada llamada', async () => {
+    testSessionId = `test-session-dinamica-${Date.now()}`;
+    await saveMessage({ sessionId: testSessionId, project: "test", role: "user", content: "Decidimos usar postgres" });
+
+    const getModelStub = GoogleGenerativeAI.prototype.getGenerativeModel;
+    const originalKey = process.env.GEMINI_API_KEY;
+    try {
+      delete process.env.GEMINI_API_KEY;
+      getModelStub.resetHistory();
+      const sinKey = await extractMemories({ sessionId: testSessionId, project: "test" });
+      expect(sinKey.candidates).to.be.an('array');
+      expect(getModelStub.called).to.equal(false);
+
+      process.env.GEMINI_API_KEY = 'clave-del-momento';
+      getModelStub.resetHistory();
+      const conKey = await extractMemories({ sessionId: testSessionId, project: "test" });
+      expect(conKey.candidates).to.be.an('array');
+      expect(getModelStub.calledOnce).to.equal(true);
+    } finally {
+      if (originalKey !== undefined) process.env.GEMINI_API_KEY = originalKey;
+      else delete process.env.GEMINI_API_KEY;
+    }
+  });
+
   it('debería lanzar error si falta el parámetro project', async () => {
     let error;
     try {
@@ -124,5 +149,162 @@ describe('Extract Memories Tool', () => {
     }
     expect(error).to.be.an('error');
     expect(error.message).to.include('project');
+  });
+});
+
+describe('Extract Memories — Validación de candidatos', () => {
+  let validationSessionId;
+
+  const validCandidate = {
+    type: 'decision',
+    title: 'decidimos usar postgres en neon',
+    what: 'postgres en neon para el historial',
+    why: 'desacoplar responsabilidades',
+    whereContext: 'arquitectura',
+    learned: 'consultar neon para el historial',
+    importance: 'medium',
+    sourceMessageIds: ['msg-1'],
+  };
+
+  afterEach(async () => {
+    sinon.restore();
+    try {
+      if (validationSessionId) {
+        await db.runAsync(`DELETE FROM message_embeddings WHERE message_id IN (SELECT id FROM conversations WHERE session_id = $1)`, [validationSessionId]);
+        await db.runAsync(`DELETE FROM conversations WHERE session_id = $1`, [validationSessionId]);
+      }
+    } catch (err) {
+      console.error("Error en limpieza de test de validación:", err.message);
+    }
+  });
+
+  function expectInvalid(candidate, reason) {
+    const result = validateCandidate(candidate);
+    expect(result.valid).to.equal(false);
+    if (reason !== undefined) expect(result.reason).to.equal(reason);
+  }
+
+  function expectValid(candidate) {
+    expect(validateCandidate(candidate).valid).to.equal(true);
+  }
+
+  function without(candidate, keys) {
+    const copy = { ...candidate };
+    for (const key of keys) delete copy[key];
+    return copy;
+  }
+
+  it('rechaza null', () => {
+    expectInvalid(null);
+  });
+
+  it('rechaza un candidato que no es objeto', () => {
+    expectInvalid('texto', 'Candidate is not an object');
+    expectInvalid([validCandidate], 'Candidate is not an object');
+  });
+
+  it('rechaza type inválido', () => {
+    expectInvalid({ ...validCandidate, type: 'raro' }, 'Invalid candidate type');
+  });
+
+  it('rechaza title vacío', () => {
+    expectInvalid({ ...validCandidate, title: '' }, 'Candidate title is required');
+  });
+
+  it('rechaza title que solamente contiene espacios', () => {
+    expectInvalid({ ...validCandidate, title: '   ' }, 'Candidate title is required');
+  });
+
+  it('rechaza title que no es string', () => {
+    expectInvalid({ ...validCandidate, title: 123 }, 'Candidate title is required');
+  });
+
+  it('rechaza what vacío', () => {
+    expectInvalid({ ...validCandidate, what: '' }, 'Candidate what is required');
+  });
+
+  it('rechaza what que solamente contiene espacios', () => {
+    expectInvalid({ ...validCandidate, what: '   ' }, 'Candidate what is required');
+  });
+
+  it('rechaza sourceMessageIds ausente', () => {
+    expectInvalid(without(validCandidate, ['sourceMessageIds']), 'Invalid sourceMessageIds');
+  });
+
+  it('rechaza sourceMessageIds que no es array', () => {
+    expectInvalid({ ...validCandidate, sourceMessageIds: 'msg-1' }, 'Invalid sourceMessageIds');
+  });
+
+  it('rechaza sourceMessageIds vacío', () => {
+    expectInvalid({ ...validCandidate, sourceMessageIds: [] }, 'At least one sourceMessageId is required');
+  });
+
+  it('rechaza sourceMessageIds con elementos inválidos', () => {
+    expectInvalid({ ...validCandidate, sourceMessageIds: ['', 'msg-1'] }, 'Invalid sourceMessageIds');
+    expectInvalid({ ...validCandidate, sourceMessageIds: [1] }, 'Invalid sourceMessageIds');
+    expectInvalid({ ...validCandidate, sourceMessageIds: ['msg-1', ' '] }, 'Invalid sourceMessageIds');
+  });
+
+  it('rechaza importance inválida', () => {
+    expectInvalid({ ...validCandidate, importance: 'urgente' }, 'Invalid importance');
+  });
+
+  it('rechaza title demasiado largo', () => {
+    expectInvalid({ ...validCandidate, title: 'a'.repeat(201) }, 'Candidate title is too long');
+  });
+
+  it('rechaza what demasiado largo', () => {
+    expectInvalid({ ...validCandidate, what: 'a'.repeat(2001) }, 'Candidate what is too long');
+  });
+
+  it('acepta un candidato completamente válido', () => {
+    expectValid(validCandidate);
+  });
+
+  it('acepta candidato sin campos opcionales', () => {
+    expectValid(without(validCandidate, ['why', 'whereContext', 'learned', 'importance']));
+  });
+
+  it('acepta candidato con why, whereContext y learned en null/undefined', () => {
+    expectValid({ ...validCandidate, why: null, whereContext: undefined, learned: null });
+  });
+
+  it('acepta valores en el límite de longitud permitido', () => {
+    expectValid({ ...validCandidate, title: 'a'.repeat(200), what: 'a'.repeat(2000) });
+  });
+
+  it('los candidatos rechazados no continúan al resultado final', async () => {
+    validationSessionId = `test-val-${Date.now()}`;
+    await saveMessage({ sessionId: validationSessionId, project: "test", role: "user", content: "Decidimos usar postgres" });
+
+    const originalKey = process.env.GEMINI_API_KEY;
+    process.env.GEMINI_API_KEY = 'test-key';
+
+    sinon.stub(GoogleGenerativeAI.prototype, 'getGenerativeModel').returns({
+      generateContent: sinon.stub().resolves({
+        response: {
+          text: () => JSON.stringify({
+            candidates: [
+              { type: 'decision', title: 'candidato válido', what: 'usar postgres', importance: 'high', sourceMessageIds: ['msg-x'] },
+              { type: 'inventado', title: 'inv', what: 'x', sourceMessageIds: ['msg-x'] },
+              { type: 'discovery', title: '   ', what: 'x', sourceMessageIds: ['msg-x'] },
+              { type: 'lesson', title: 'inv', what: '', sourceMessageIds: ['msg-x'] },
+              { type: 'constraint', title: 'inv', what: 'x', sourceMessageIds: [] },
+              { type: 'configuration', title: 'inv', what: 'x', sourceMessageIds: ['msg-x'], importance: 'urgente' },
+            ],
+          }),
+        },
+      }),
+    });
+
+    try {
+      const result = await extractMemories({ sessionId: validationSessionId, project: "test" });
+      expect(result.candidates).to.have.lengthOf(1);
+      expect(result.candidates[0].title).to.equal('candidato válido');
+      expect(result.candidates[0].type).to.equal('decision');
+    } finally {
+      if (originalKey !== undefined) process.env.GEMINI_API_KEY = originalKey;
+      else delete process.env.GEMINI_API_KEY;
+    }
   });
 });
