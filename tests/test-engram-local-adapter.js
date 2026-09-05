@@ -161,11 +161,11 @@ describe('EngramLocalAdapter promote (CLI engram save)', () => {
     sinon.restore();
   });
 
-  it('P-A1 — ejecuta engram save con el candidato traducido y devuelve { id, topicKey }', async () => {
+  it('P-A1 — ejecuta engram save con el candidato traducido y devuelve { success:true, memoryId, topicKey, metadata }', async () => {
     const execStub = stubSave('Memory saved: #42 "elegi postgres en neon" (decision)\n');
     const result = await makeAdapter().promote(baseCandidate);
 
-    expect(result).to.deep.equal({ id: '42', topicKey: null });
+    expect(result).to.deep.equal({ success: true, memoryId: '42', topicKey: null, metadata: {} });
     expect(execStub.calledOnce).to.equal(true);
     const [file, args] = execStub.getCall(0).args;
     expect(file).to.equal('engram');
@@ -182,54 +182,110 @@ describe('EngramLocalAdapter promote (CLI engram save)', () => {
     const execStub = stubSave('Memory saved: #7 "titulo" (discovery)');
     const result = await makeAdapter().promote({ ...baseCandidate, topicKey: 'arch/memoria' });
 
-    expect(result).to.deep.equal({ id: '7', topicKey: 'arch/memoria' });
+    expect(result).to.deep.equal({ success: true, memoryId: '7', topicKey: 'arch/memoria', metadata: {} });
     const args = execStub.getCall(0).args[1];
     expect(args[args.indexOf('--topic') + 1]).to.equal('arch/memoria');
   });
 
   it('P-A3 — si el contenido está vacío, usa el título como cuerpo', async () => {
     const execStub = stubSave('Memory saved: #3 "solo titulo" (manual)');
-    await makeAdapter().promote({ project: 'p', title: 'solo titulo', what: '' });
+    const result = await makeAdapter().promote({ project: 'p', title: 'solo titulo', what: '' });
 
+    expect(result.success).to.equal(true);
+    expect(result.memoryId).to.equal('3');
     const args = execStub.getCall(0).args[1];
     expect(args[1]).to.equal('solo titulo');
     expect(args[2]).to.equal('solo titulo');
   });
 
-  it('P-A4 — rechaza si el CLI devuelve un error', async () => {
+  it('P-A4 — si el CLI devuelve un error, responde { success:false, retryable:true } sin lanzar', async () => {
     stubSave('', new Error('engram: command not found'));
-    let err;
-    try {
-      await makeAdapter().promote(baseCandidate);
-    } catch (e) {
-      err = e;
-    }
-    expect(err).to.be.an('error');
-    expect(err.message).to.contain('Engram save falló');
+    const result = await makeAdapter().promote(baseCandidate);
+
+    expect(result.success).to.equal(false);
+    expect(result.error).to.contain('Engram save falló');
+    expect(result.retryable).to.equal(false);
   });
 
-  it('P-A5 — rechaza si la respuesta no se puede interpretar', async () => {
+  it('P-A4b — un fallo temporal del CLI es retryable', async () => {
+    stubSave('', new Error('engram daemon: connection refused'));
+    const result = await makeAdapter().promote(baseCandidate);
+
+    expect(result.success).to.equal(false);
+    expect(result.error).to.contain('Engram save falló');
+    expect(result.retryable).to.equal(true);
+  });
+
+  it('P-A5 — si la respuesta no se puede interpretar, responde { success:false, retryable:false } sin lanzar', async () => {
     stubSave('Algo inesperado');
-    let err;
-    try {
-      await makeAdapter().promote(baseCandidate);
-    } catch (e) {
-      err = e;
-    }
-    expect(err).to.be.an('error');
-    expect(err.message).to.contain('Respuesta inesperada de Engram save');
+    const result = await makeAdapter().promote(baseCandidate);
+
+    expect(result.success).to.equal(false);
+    expect(result.error).to.contain('Respuesta inesperada de Engram save');
+    expect(result.retryable).to.equal(false);
   });
 
-  it('P-A6 — rechaza un candidato sin título', async () => {
+  it('P-A6 — rechaza un candidato sin título sin invocar el CLI', async () => {
     const execStub = stubSave('Memory saved: #1 "x" (manual)');
-    let err;
-    try {
-      await makeAdapter().promote({ project: 'p', title: '' });
-    } catch (e) {
-      err = e;
-    }
-    expect(err).to.be.an('error');
-    expect(err.message).to.contain('sin título');
+    const result = await makeAdapter().promote({ project: 'p', title: '' });
+
+    expect(result.success).to.equal(false);
+    expect(result.error).to.contain('título');
+    expect(result.retryable).to.equal(false);
     expect(execStub.called).to.equal(false);
+  });
+
+  it('P-A1b — acepta options.idempotencyKey sin afectar la operación', async () => {
+    const execStub = stubSave('Memory saved: #42 "elegi postgres en neon" (decision)\n');
+    const result = await makeAdapter().promote(baseCandidate, { idempotencyKey: 'candidate-123' });
+
+    expect(result.success).to.equal(true);
+    expect(result.memoryId).to.equal('42');
+    expect(execStub.calledOnce).to.equal(true);
+  });
+
+  it('P-A7 — reutiliza una memoria existente con el mismo título en el proyecto (no crea duplicado)', async () => {
+    const fetchStub = sinon.stub().resolves({
+      ok: true, status: 200,
+      json: sinon.stub().resolves([
+        { id: 5, sync_id: 'obs-500', type: 'decision', title: 'Elegi Postgres en Neon', project: 'proj' },
+      ]),
+    });
+    const adapter = new EngramLocalAdapter({ baseUrl: 'http://engram.test', fetchFn: fetchStub });
+    const execStub = stubSave('Memory saved: #900 "x" (manual)');
+
+    const result = await adapter.promote(baseCandidate);
+
+    expect(result).to.deep.equal({ success: true, memoryId: 'obs-500', topicKey: null, metadata: {} });
+    expect(execStub.called).to.equal(false);
+    expect(fetchStub.calledOnce).to.equal(true);
+    expect(fetchStub.getCall(0).args[0]).to.contain('/search?');
+  });
+
+  it('P-A8 — crea la memoria cuando no hay coincidencia exacta de título', async () => {
+    const fetchStub = sinon.stub().resolves({
+      ok: true, status: 200,
+      json: sinon.stub().resolves([
+        { id: 1, sync_id: 'obs-1', type: 'decision', title: 'otra cosa distinta', project: 'proj' },
+      ]),
+    });
+    const adapter = new EngramLocalAdapter({ baseUrl: 'http://engram.test', fetchFn: fetchStub });
+    const execStub = stubSave('Memory saved: #42 "elegi postgres en neon" (decision)\n');
+
+    const result = await adapter.promote(baseCandidate);
+
+    expect(result).to.deep.equal({ success: true, memoryId: '42', topicKey: null, metadata: {} });
+    expect(execStub.calledOnce).to.equal(true);
+  });
+
+  it('P-A9 — si la búsqueda previa falla, igual intenta crear la memoria', async () => {
+    const fetchStub = sinon.stub().rejects(new Error('ECONNREFUSED'));
+    const adapter = new EngramLocalAdapter({ baseUrl: 'http://engram.test', fetchFn: fetchStub });
+    const execStub = stubSave('Memory saved: #9 "elegi postgres en neon" (decision)');
+
+    const result = await adapter.promote(baseCandidate);
+
+    expect(result).to.deep.equal({ success: true, memoryId: '9', topicKey: null, metadata: {} });
+    expect(execStub.calledOnce).to.equal(true);
   });
 });

@@ -95,24 +95,42 @@ class EngramLocalAdapter {
   }
 
   /**
-   * Crea la memoria en Engram local invocando el CLI `engram save`.
-   * Traduce el candidato interno al formato del proveedor (título, contenido
-   * estructurado What/Why/Where/Learned, tipo y proyecto).
-   * LANZA ante errores del CLI o si no se puede interpretar la respuesta.
-   * @param {Object} candidate - Candidato normalizado a promover.
-   * @param {string} candidate.project - Proyecto destino en Engram.
-   * @param {string} candidate.title - Título de la memoria.
-   * @param {string} [candidate.type] - Tipo observación (decision, discovery...).
-   * @param {string} [candidate.topicKey] - Topic key (si el candidato lo tiene).
-   * @param {string} [candidate.what]
-   * @param {string} [candidate.why]
-   * @param {string} [candidate.whereContext]
-   * @param {string} [candidate.learned]
-   * @returns {Promise<{id: string, topicKey: string|null}>} Identificador devuelto por el proveedor.
+   * Promueve un candidato AUDITADO creando (o reutilizando) la memoria en Engram
+   * local mediante el CLI `engram save`. Traduce el candidato interno al formato
+   * del proveedor (título, contenido estructurado What/Why/Where/Learned, tipo,
+   * proyecto y topic opcional).
+   *
+   * Contrato MemoryAdapter.promote:
+   *   - NUNCA lanza excepciones del proveedor: devuelve un PromoteResult.
+   *   - Éxito: { success: true, memoryId, topicKey, metadata }.
+   *   - Fallo: { success: false, error, retryable }.
+   *   - No escribe en memory_candidates ni en Neon.
+   *
+   * @param {MemoryCandidate} candidate - Candidato auditado a promover.
+   * @param {PromoteOptions} [options] - Opciones del contrato. Engram local no
+   *   implementa idempotencia nativa, así que idempotencyKey se acepta pero no
+   *   se mapea a ningún flag del CLI (el find-before-create evita duplicados).
+   * @returns {Promise<PromoteResult>} Resultado normalizado.
    */
-  async promote(candidate = {}) {
+  async promote(candidate = {}, _options = {}) {
     const title = String(candidate.title || "").trim();
-    if (!title) throw new Error("No se puede promover un candidato sin título");
+    if (!title) {
+      return {
+        success: false,
+        error: "Candidato inválido: el título es requerido",
+        retryable: false,
+      };
+    }
+
+    const existing = await this.findExistingMemory(candidate);
+    if (existing) {
+      return {
+        success: true,
+        memoryId: existing.id,
+        topicKey: existing.topicKey,
+        metadata: {},
+      };
+    }
 
     const content = buildCandidateContent(candidate);
     const args = [
@@ -130,13 +148,56 @@ class EngramLocalAdapter {
     try {
       output = await runEngram(args);
     } catch (err) {
-      throw new Error(`Engram save falló: ${err.message}`);
+      return {
+        success: false,
+        error: `Engram save falló: ${err.message}`,
+        retryable: isRetryableProviderError(err.message),
+      };
     }
     const match = /Memory saved:\s*#(\d+)/.exec(output);
     if (!match) {
-      throw new Error(`Respuesta inesperada de Engram save: ${output.trim().slice(0, 120)}`);
+      return {
+        success: false,
+        error: `Respuesta inesperada de Engram save: ${output.trim().slice(0, 120)}`,
+        retryable: false,
+      };
     }
-    return { id: match[1], topicKey: candidate.topicKey || null };
+    return {
+      success: true,
+      memoryId: match[1],
+      topicKey: candidate.topicKey || null,
+      metadata: {},
+    };
+  }
+
+  /**
+   * Localiza una memoria ya existente en el proveedor que represente exactamente
+   * este candidato (mismo título normalizado en el mismo proyecto y tipo), para
+   * reutilizarla y no crear un duplicado tras un reintento.
+   * Best-effort: si la búsqueda falla devuelve null y el flujo sigue a la
+   * creación normal.
+   * @param {Object} candidate - Candidato normalizado a promover.
+   * @returns {Promise<{id: string, topicKey: string|null}|null>} Memoria existente o null.
+   */
+  async findExistingMemory(candidate) {
+    const title = String(candidate.title || "").trim();
+    if (!title) return null;
+
+    let memories;
+    try {
+      memories = await this.searchRelated({ query: title, project: candidate.project, limit: 10 });
+    } catch {
+      return null;
+    }
+    const targetType = candidate.type ? String(candidate.type).trim() : null;
+    const normalizedTitle = normalizeTitle(title);
+    for (const memory of memories) {
+      if (normalizeTitle(memory.title) !== normalizedTitle) continue;
+      if (targetType && memory.type && String(memory.type) !== targetType) continue;
+      if (memory.id == null) continue;
+      return { id: memory.id, topicKey: candidate.topicKey || null };
+    }
+    return null;
   }
 }
 
@@ -154,6 +215,29 @@ function buildCandidateContent(candidate) {
     ["Learned", candidate.learned],
   ].filter(([, value]) => value && String(value).trim());
   return parts.map(([label, value]) => `**${label}**: ${String(value).trim()}`).join("\n");
+}
+
+/**
+ * Normaliza un título para comparar coincidencias exactas (caso/espacios).
+ * @param {string} value
+ * @returns {string}
+ */
+function normalizeTitle(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * Clasifica un error del proceso `engram` como retryable o permanente.
+ * Retryable: el fallo es externo y temporal (timeout, conexión, crash del daemon).
+ * Permanente: el entorno está mal configurado y reintentar no ayudará
+ * (binario ausente, comando no reconocido, permisos).
+ * @param {string} message - Mensaje del error del CLI.
+ * @returns {boolean} true si reintentar puede resolver el fallo.
+ */
+function isRetryableProviderError(message) {
+  const detailed = String(message || "");
+  const permanent = /ENOENT|EACCES|EPERM|command not found|not recognized|no such file|is not recognized/i;
+  return !permanent.test(detailed);
 }
 
 /**

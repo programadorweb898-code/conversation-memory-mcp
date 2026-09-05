@@ -11,11 +11,11 @@ const { db } = require('./test-helper');
 
 const PROVIDER_OK = { available: true, provider: 'engram-local', version: '0.1.0' };
 
-function mockAdapter({ status = PROVIDER_OK, promoteError = null } = {}) {
+function mockAdapter({ status = PROVIDER_OK, promoteError = null, promoteRetryable = true } = {}) {
   const getStatus = sinon.stub().resolves(status);
   const promote = promoteError
-    ? sinon.stub().rejects(new Error(promoteError))
-    : sinon.stub().resolves({ id: 'obs-101', topicKey: null });
+    ? sinon.stub().resolves({ success: false, error: promoteError, retryable: promoteRetryable })
+    : sinon.stub().resolves({ success: true, memoryId: 'obs-101', topicKey: null });
   return { provider: 'engram-local', getStatus, promote };
 }
 
@@ -132,10 +132,25 @@ describe('Memory Promote Tool', function () {
     expect(result.results[0].status).to.equal('failed');
     expect(result.results[0].reason).to.contain('el proveedor no responde');
     expect(result.results[0].memoryId).to.equal(undefined);
+    expect(result.results[0].retryable).to.equal(true);
     const stored = await row(id);
     expect(stored.status).to.equal('missing');
     expect(stored.promoted_at).to.equal(null);
     expect(stored.engram_id).to.equal(null);
+  });
+
+  it('P3b — un fallo no retryable del adaptador (candidato inválido) se propaga como tal', async () => {
+    const sessionId = await withSession();
+    const id = makeId();
+    await insertCandidate({ project: 'test', sessionId, id, type: 'discovery', title: 'sin sentido', status: 'missing' });
+    const adapter = mockAdapter({ promoteError: 'Candidato inválido: el título es requerido', promoteRetryable: false });
+    stubAdapter(adapter);
+
+    const result = await memoryPromote({ sessionId, project: 'test' });
+
+    expect(result.results[0].status).to.equal('failed');
+    expect(result.results[0].reason).to.contain('título');
+    expect(result.results[0].retryable).to.equal(false);
   });
 
   it('P4 — skipped: un candidato pedido con status no promocionable no se promueve', async () => {
@@ -179,6 +194,7 @@ describe('Memory Promote Tool', function () {
     expect(result.memoryProvider.available).to.equal(false);
     expect(result.results[0].status).to.equal('failed');
     expect(result.results[0].reason).to.contain('connection refused');
+    expect(result.results[0].retryable).to.equal(true);
     expect(adapter.promote.called).to.equal(false);
     const stored = await row(id);
     expect(stored.promoted_at).to.equal(null);
@@ -227,7 +243,9 @@ describe('Memory Promote Tool', function () {
 
     await memoryPromote({ sessionId, project: 'test', candidateIds: [id] });
 
-    const candidate = adapter.promote.getCall(0).args[0];
+    const promoteCall = adapter.promote.getCall(0);
+    const candidate = promoteCall.args[0];
+    expect(candidate.id).to.equal(id);
     expect(candidate.title).to.equal('cambie temas');
     expect(candidate.type).to.equal('configuration');
     expect(candidate.project).to.equal('test');
@@ -238,6 +256,8 @@ describe('Memory Promote Tool', function () {
     expect(candidate.whereContext).to.equal('IDE');
     expect(candidate.learned).to.equal('ok');
     expect(candidate.sourceMessageIds).to.deep.equal(['msg-1']);
+    // El contrato exige la clave de idempotencia en las opciones.
+    expect(promoteCall.args[1]).to.deep.equal({ idempotencyKey: id });
   });
 
   it('P10 — persiste engram_topic_key devuelto por el adaptador', async () => {
@@ -245,7 +265,7 @@ describe('Memory Promote Tool', function () {
     const id = makeId();
     await insertCandidate({ project: 'test', sessionId, id, type: 'decision', title: 'usar postgres', status: 'missing' });
     const adapter = mockAdapter({});
-    adapter.promote.resolves({ id: 'obs-202', topicKey: 'arquitectura/postgres' });
+    adapter.promote.resolves({ success: true, memoryId: 'obs-202', topicKey: 'arquitectura/postgres' });
     stubAdapter(adapter);
 
     await memoryPromote({ sessionId, project: 'test', candidateIds: [id] });
@@ -277,5 +297,76 @@ describe('Memory Promote Tool', function () {
     }
     expect(err).to.be.an('error');
     expect(err.message).to.contain('project');
+  });
+
+  it('P13 — idempotencia concurrente: dos llamadas simultáneas sobre el mismo candidato crean UNA sola memoria', async () => {
+    const sessionId = await withSession();
+    const id = makeId();
+    await insertCandidate({ project: 'test', sessionId, id, type: 'decision', title: 'usar postgres', status: 'missing' });
+
+    let release = null;
+    const gate = new Promise((resolve) => { release = resolve; });
+    const adapter = mockAdapter({});
+    adapter.promote = sinon.stub().onFirstCall().callsFake(() => gate.then(() => ({ success: true, memoryId: 'obs-101', topicKey: null })));
+    stubAdapter(adapter);
+
+    try {
+      const p1 = memoryPromote({ sessionId, project: 'test' });
+      const p2 = memoryPromote({ sessionId, project: 'test' });
+      // Deja que ambas alcancen el advisory lock antes de liberar la primera.
+      await new Promise((r) => setTimeout(r, 150));
+      release();
+      const [r1, r2] = await Promise.all([p1, p2]);
+
+      const statuses = [r1.results[0], r2.results[0]].map((r) => r.status).sort();
+      expect(statuses).to.deep.equal(['already_promoted', 'promoted']);
+      expect(adapter.promote.callCount).to.equal(1);
+      expect(adapter.promote.getCall(0).args[1]).to.deep.equal({ idempotencyKey: id });
+      const stored = await row(id);
+      expect(stored.engram_id).to.equal('obs-101');
+      expect(stored.promoted_at).to.not.equal(null);
+    } finally {
+      if (release) release();
+    }
+  });
+
+  it('P14 — si Engram creó la memoria pero registrarla en Neon falla, el reintento reutiliza la MISMA memoria sin duplicar', async () => {
+    const sessionId = await withSession();
+    const id = makeId();
+    await insertCandidate({ project: 'test', sessionId, id, type: 'discovery', title: 'gtk4 en windows', status: 'missing' });
+
+    const adapter = mockAdapter({});
+    adapter.promote = sinon.stub().resolves({ success: true, memoryId: 'obs-777', topicKey: null });
+    stubAdapter(adapter);
+
+    const originalRunAsync = db.runAsync;
+    db.runAsync = async function runAsyncSimulado(sql, params) {
+      if (String(sql).startsWith('UPDATE memory_candidates')) {
+        throw new Error('Neon caído');
+      }
+      return originalRunAsync.call(this, sql, params);
+    };
+
+    let first;
+    try {
+      first = await memoryPromote({ sessionId, project: 'test' });
+    } finally {
+      db.runAsync = originalRunAsync;
+    }
+
+    expect(first.results[0].status).to.equal('failed');
+    expect(first.results[0].reason).to.contain('obs-777');
+    expect(first.results[0].reason).to.contain('no se pudo registrar');
+
+    const storedAfterFirst = await row(id);
+    expect(storedAfterFirst.promoted_at).to.equal(null);
+    expect(storedAfterFirst.engram_id).to.equal(null);
+
+    // Neon se recupera: el reintento registra la misma memoria (id repetido)
+    const second = await memoryPromote({ sessionId, project: 'test' });
+    expect(second.results[0]).to.deep.equal({ candidateId: id, status: 'promoted', memoryId: 'obs-777' });
+    const stored = await row(id);
+    expect(stored.engram_id).to.equal('obs-777');
+    expect(stored.promoted_at).to.not.equal(null);
   });
 });

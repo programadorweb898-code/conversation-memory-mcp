@@ -4,7 +4,7 @@
 // no contiene lógica específica de Engram: toda la traducción al proveedor le
 // corresponde al adaptador.
 const memoryAdapterService = require("../services/memoryAdapter");
-const { db } = require("../database");
+const { db, withAdvisoryLock } = require("../database");
 
 /**
  * Promueve candidatos de memoria auditados mediante el adaptador activo.
@@ -60,6 +60,7 @@ async function memoryPromote({ sessionId, project, agentId, candidateIds }) {
           candidateId: item.row.id,
           status: "failed",
           reason: `Memory provider unavailable: ${providerStatus.error || "proveedor no disponible"}`,
+          retryable: true,
         };
       }
     }
@@ -99,34 +100,44 @@ async function loadCandidates({ sessionId, project, candidateIds }) {
 }
 
 /**
- * Promueve un candidato individual. Re-chequea el flag de promoción justo antes
- * de llamar al adaptador (idempotencia frente a ejecuciones concurrentes).
+ * Promueve un candidato individual bajo un advisory lock de fila (idempotencia
+ * concurrente). Re-chequea el flag de promoción justo antes de llamar al
+ * adaptador. Si Engram creó la memoria pero el registro local en Neon falla, el
+ * candidato queda sin promocionar y el reintento reutilizará la memoria ya
+ * creada (idempotencia frente a fallas entre proveedor y base).
  * @returns {Promise<Object>} Resultado { candidateId, status, memoryId|reason }.
  */
 async function promoteCandidate(row, adapter) {
-  const fresh = await getCandidateById(row.id);
-  if (fresh && (fresh.promoted_at || fresh.engram_id)) {
-    return { candidateId: row.id, status: "already_promoted", memoryId: fresh.engram_id };
-  }
+  return withAdvisoryLock(`memory_promote:${row.id}`, async () => {
+    const fresh = await getCandidateById(row.id);
+    if (fresh && (fresh.promoted_at || fresh.engram_id)) {
+      return { candidateId: row.id, status: "already_promoted", memoryId: fresh.engram_id };
+    }
 
-  const candidate = mapRowToCandidate(fresh || row);
-  try {
-    const promoted = await adapter.promote(candidate);
-    const memoryId = promoted.id || null;
+    const candidate = mapRowToCandidate(fresh || row);
+    const promoted = await adapter.promote(candidate, { idempotencyKey: candidate.id });
+    if (!promoted || promoted.success !== true) {
+      // El adaptador normaliza los fallos en { success:false, error, retryable }.
+      return {
+        candidateId: row.id,
+        status: "failed",
+        reason: promoted && promoted.error ? promoted.error : "El proveedor rechazó la promoción",
+        retryable: promoted && typeof promoted.retryable === "boolean" ? promoted.retryable : true,
+      };
+    }
+    const memoryId = promoted.memoryId || null;
     try {
       await markPromoted({ candidateId: row.id, memoryId, topicKey: promoted.topicKey || null });
     } catch (err) {
       return {
         candidateId: row.id,
         status: "failed",
-        reason: `La memoria fue creada pero no se pudo registrar la promoción localmente: ${err.message}`,
+        reason: `La memoria se creó en el proveedor (memoryId ${memoryId}) pero no se pudo registrar la promoción localmente: ${err.message}. El candidato queda pendiente; el próximo intento reutilizará esa memoria y no creará un duplicado.`,
+        retryable: true,
       };
     }
     return { candidateId: row.id, status: "promoted", memoryId };
-  } catch (err) {
-    // El candidato permanece sin promocionar: quedará disponible para un nuevo intento.
-    return { candidateId: row.id, status: "failed", reason: err.message };
-  }
+  });
 }
 
 /**
@@ -151,6 +162,7 @@ function getCandidateById(id) {
  */
 function mapRowToCandidate(row) {
   return {
+    id: row.id,
     project: row.project,
     sessionId: row.session_id,
     agentId: row.agent_id,
