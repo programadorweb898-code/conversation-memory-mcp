@@ -19,6 +19,15 @@ function listen(app) {
 
 function close(server) {
   return new Promise((resolve, reject) => {
+    if (typeof server.close !== 'function') {
+      reject(new TypeError('server.close is not a function'));
+      return;
+    }
+
+    if (typeof server.closeAllConnections === 'function') {
+      server.closeAllConnections();
+    }
+
     server.close((error) => {
       if (error) {
         reject(error);
@@ -62,6 +71,7 @@ describe('Server HTTP layer', () => {
 
     transportInstance = {
       response: null,
+      close: sinon.stub(),
       handlePostMessage: sinon.stub().callsFake((req, res) => {
         res.status(200).json({ ok: true });
       }),
@@ -77,6 +87,7 @@ describe('Server HTTP layer', () => {
     sinon.stub(mcpSdk, 'McpServer').callsFake(() => ({
       tool: sinon.stub(),
       connect: connectStub,
+      close: sinon.stub(),
     }));
     sinon.stub(sseSdk, 'SSEServerTransport').callsFake(transportConstructorStub);
     sinon.stub(embeddingService, 'initializeEmbeddingPipeline').resolves();

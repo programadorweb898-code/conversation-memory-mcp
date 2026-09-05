@@ -10,6 +10,8 @@ const searchSessionsBySummary = require("./tools/searchSessionsBySummary");
 const lastSession = require("./tools/lastSession");
 const recoverSession = require("./tools/recoverSession");
 const extractMemories = require("./tools/extractMemories");
+const memoryAudit = require("./tools/memoryAudit");
+const memoryPromote = require("./tools/memoryPromote");
 const listSessions = require("./tools/listSessions");
 const pushToEngram = require("./tools/pushToEngram");
 const getLastSessionContext = require("./tools/getLastSessionContext");
@@ -142,6 +144,54 @@ Categorías de memoria:
     },
     async ({ sessionId, project, agentId }) => {
       const result = await extractMemories({ sessionId, project, agentId });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], structuredContent: { data: result } };
+    }
+  );
+
+  // 4.6. memoryAudit
+  server.tool(
+    "memoryAudit",
+    `Audita candidatos de memoria semántica extraídos de una sesión (extractMemories) contra el proveedor de memoria dura (Engram local), decide su estado y persiste el resultado en Neon.
+Estados posibles:
+- missing: candidato nuevo, listo para promoción.
+- already_exists: el conocimiento ya está cubierto por una memoria existente.
+- related: existe una memoria relacionada pero distinta.
+- possible_duplicate: probable duplicado de una memoria existente, requiere revisión.
+- conflict: contradice una memoria existente.
+- pending: no se pudo contrastar (proveedor no disponible).
+- discard: el candidato no tiene origen trazable en la conversación.
+NO promueve memorias a Engram: esa etapa es memoryPromote. NO escribe en Engram.`,
+    {
+      sessionId: z.string().describe("ID de la sesión a recuperar y auditar"),
+      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
+      agentId: z.string().optional().describe("Filtrar por ID de agente"),
+    },
+    async ({ sessionId, project, agentId }) => {
+      const result = await memoryAudit({ sessionId, project, agentId });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], structuredContent: { data: result } };
+    }
+  );
+
+  // 4.7. memoryPromote
+  server.tool(
+    "memoryPromote",
+    `Promueve candidatos de memoria previamente auditados (memoryAudit) hacia el proveedor de memoria dura a través de MemoryAdapter.
+Solo promueve candidatos con status "missing" y no promovidos aún. No reemplaza la decisión de la auditoría ni modifica el campo status.
+Resultados por candidato:
+- promoted: memoria creada en el proveedor (memoryId).
+- already_promoted: el candidato ya estaba promovido; no se vuelve a crear (idempotente).
+- failed: no se pudo crear la memoria; el candidato queda disponible para reintentar.
+- skipped: candidato pedido pero no promocionable según la auditoría.
+- not_found: el candidateId no existe para esa sesión/proyecto.
+Si candidateIds se omite, promueve todos los promocionables de la sesión/proyecto.`,
+    {
+      sessionId: z.string().describe("ID de la sesión de conversación de origen"),
+      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
+      agentId: z.string().optional().describe("Agente que originó la conversación"),
+      candidateIds: z.array(z.string()).optional().describe("Candidatos específicos a promocionar (si se omite: todos los promocionables de la sesión)"),
+    },
+    async ({ sessionId, project, agentId, candidateIds }) => {
+      const result = await memoryPromote({ sessionId, project, agentId, candidateIds });
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], structuredContent: { data: result } };
     }
   );
