@@ -17,7 +17,8 @@
  *   node scripts/migrate_project_backfill.js --apply    # aplica los cambios
  */
 
-const { db, dbReady } = require("../src/database");
+const { db } = require("../src/database");
+const { runMigrations } = require("./migrate");
 
 // Mapeo explícito sesión -> proyecto. Alineá los nombres con los que envía tu plugin/agente.
 const SESSION_PROJECT_MAP = {
@@ -123,7 +124,7 @@ function projectSource(session) {
 async function run() {
   const apply = process.argv.includes("--apply");
   assertNeonDatabase();
-  await dbReady;
+  await runMigrations();
   await ensureProjectColumn();
 
   const sessions = await getSessionsToFix();

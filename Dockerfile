@@ -24,5 +24,5 @@ COPY . .
 # Expose the port
 EXPOSE 3000
 
-# Start the application
-CMD ["node", "src/server.js"]
+# Run versioned database migrations before starting the application
+CMD ["sh", "-c", "npm run migrate && npm start"]

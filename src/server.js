@@ -1,8 +1,7 @@
 const { startWorker, stopWorker } = require("./services/embeddingWorker");
 const { startSessionMonitor, stopSessionMonitor } = require("./services/sessionManager");
 const app = require("./app");
-const { dbReady } = require("./database");
-const dotenv=require("dotenv");
+const dotenv = require("dotenv");
 dotenv.config();
 let httpServer;
 
@@ -17,9 +16,6 @@ async function startServer() {
     console.error("Fatal error: MCP_BEARER_TOKEN environment variable is required.");
     process.exit(1);
   }
-
-  await dbReady;
-  console.log("Database is ready.");
 
   const PORT = process.env.PORT || 3000;
 

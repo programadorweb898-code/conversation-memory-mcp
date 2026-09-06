@@ -1,10 +1,11 @@
-const { db, dbReady } = require("../src/database");
+const { db } = require("../src/database");
+const { runMigrations } = require("./migrate");
 const listSessions = require("../src/tools/listSessions");
 const finalizeSession = require("../src/tools/finalizeSession");
 
 async function run() {
     try {
-        await dbReady; // Esperar a que la BD esté inicializada
+        await runMigrations();
 
         const projects = await db.allAsync(
             `SELECT DISTINCT project FROM conversations WHERE project IS NOT NULL`
