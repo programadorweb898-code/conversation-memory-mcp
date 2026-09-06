@@ -1,11 +1,10 @@
-const { db, dbReady } = require('../src/database');
+const { db } = require('../src/database');
 
 /**
  * Helper para estandarizar la conexión y operaciones de BD en tests.
- * Ya no requiere dbReadyPromise al estar centralizado.
+ * Las migraciones se ejecutan explícitamente desde el setup global.
  */
 
 module.exports = {
-  db,
-  dbReady
+  db
 };
