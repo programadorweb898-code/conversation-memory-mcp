@@ -1,7 +1,8 @@
--- Baseline migration for conversation-memory-mcp.
--- This migration defines the core schema expected by the current application.
--- It is intentionally additive/idempotent so it can establish the baseline
--- without deleting existing production data.
+-- Baseline migration for the current conversation-memory-mcp schema.
+-- Safe for an existing database: it only creates missing objects and fills
+-- missing sequence values; it does not delete application data.
+
+CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TABLE IF NOT EXISTS conversations (
   id TEXT PRIMARY KEY,
@@ -10,25 +11,22 @@ CREATE TABLE IF NOT EXISTS conversations (
   project TEXT,
   role TEXT NOT NULL,
   content TEXT NOT NULL,
-  agent_id TEXT
+  agent_id TEXT,
+  related_message_id TEXT,
+  sequence_id BIGINT
 );
 
-CREATE INDEX IF NOT EXISTS idx_conversations_project
-  ON conversations(project);
+CREATE INDEX IF NOT EXISTS idx_conversations_project ON conversations(project);
+CREATE INDEX IF NOT EXISTS idx_conversations_session_id ON conversations(session_id);
 
-CREATE INDEX IF NOT EXISTS idx_conversations_session_id
-  ON conversations(session_id);
-
-CREATE TABLE IF NOT EXISTS session_summaries (
-  session_id TEXT PRIMARY KEY,
-  project TEXT,
-  summary TEXT NOT NULL,
-  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  last_processed_seq_id BIGINT
+CREATE TABLE IF NOT EXISTS message_embeddings (
+  message_id TEXT PRIMARY KEY,
+  embedding vector(384) NOT NULL,
+  FOREIGN KEY(message_id) REFERENCES conversations(id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_session_summaries_project
-  ON session_summaries(project);
+CREATE INDEX IF NOT EXISTS idx_message_embeddings_hnsw_cosine
+  ON message_embeddings USING hnsw (embedding vector_cosine_ops);
 
 CREATE TABLE IF NOT EXISTS embedding_failures (
   message_id TEXT PRIMARY KEY,
@@ -66,17 +64,87 @@ CREATE TABLE IF NOT EXISTS memory_candidates (
   )
 );
 
-CREATE INDEX IF NOT EXISTS idx_memory_candidates_project
-  ON memory_candidates(project);
+CREATE INDEX IF NOT EXISTS idx_memory_candidates_project ON memory_candidates(project);
+CREATE INDEX IF NOT EXISTS idx_memory_candidates_session_id ON memory_candidates(session_id);
+CREATE INDEX IF NOT EXISTS idx_memory_candidates_status ON memory_candidates(status);
 
-CREATE INDEX IF NOT EXISTS idx_memory_candidates_session_id
-  ON memory_candidates(session_id);
-
-CREATE INDEX IF NOT EXISTS idx_memory_candidates_status
-  ON memory_candidates(status);
-
-CREATE TABLE IF NOT EXISTS conversations_seq_placeholder (
-  _placeholder BOOLEAN PRIMARY KEY DEFAULT TRUE
+CREATE TABLE IF NOT EXISTS session_summaries (
+  session_id TEXT PRIMARY KEY,
+  project TEXT,
+  summary TEXT NOT NULL,
+  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  last_processed_seq_id BIGINT
 );
 
-DROP TABLE IF EXISTS conversations_seq_placeholder;
+CREATE INDEX IF NOT EXISTS idx_session_summaries_project ON session_summaries(project);
+
+CREATE TABLE IF NOT EXISTS session_summary_embeddings (
+  session_id TEXT PRIMARY KEY,
+  embedding vector(384) NOT NULL,
+  FOREIGN KEY(session_id) REFERENCES session_summaries(session_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_session_summary_embeddings_hnsw_cosine
+  ON session_summary_embeddings USING hnsw (embedding vector_cosine_ops);
+
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS related_message_id TEXT;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS sequence_id BIGINT;
+
+UPDATE conversations
+SET sequence_id = subquery.new_seq
+FROM (
+  SELECT id, row_number() OVER (ORDER BY timestamp ASC, id ASC) AS new_seq
+  FROM conversations
+) AS subquery
+WHERE conversations.id = subquery.id
+  AND conversations.sequence_id IS NULL;
+
+CREATE SEQUENCE IF NOT EXISTS conversations_seq;
+
+SELECT setval(
+  'conversations_seq',
+  GREATEST(COALESCE((SELECT MAX(sequence_id) FROM conversations), 0) + 1, 1),
+  false
+);
+
+ALTER TABLE conversations ALTER COLUMN sequence_id SET DEFAULT nextval('conversations_seq');
+ALTER TABLE conversations ALTER COLUMN sequence_id SET NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_sequence ON conversations(sequence_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_session_id_sequence_id ON conversations(session_id, sequence_id);
+
+-- Ensure the self-reference uses ON DELETE SET NULL.
+DO $constraints$
+DECLARE
+  constraint_name TEXT;
+  delete_rule TEXT;
+BEGIN
+  SELECT tc.constraint_name, rc.delete_rule
+    INTO constraint_name, delete_rule
+  FROM information_schema.table_constraints tc
+  JOIN information_schema.key_column_usage kcu
+    ON tc.constraint_name = kcu.constraint_name
+   AND tc.table_schema = kcu.table_schema
+  JOIN information_schema.referential_constraints rc
+    ON tc.constraint_name = rc.constraint_name
+   AND tc.constraint_schema = rc.constraint_schema
+  WHERE tc.constraint_type = 'FOREIGN KEY'
+    AND tc.table_name = 'conversations'
+    AND kcu.column_name = 'related_message_id'
+  LIMIT 1;
+
+  IF constraint_name IS NOT NULL AND delete_rule <> 'SET NULL' THEN
+    EXECUTE format('ALTER TABLE conversations DROP CONSTRAINT %I', constraint_name);
+    EXECUTE format(
+      'ALTER TABLE conversations ADD CONSTRAINT %I FOREIGN KEY (related_message_id) REFERENCES conversations(id) ON DELETE SET NULL',
+      constraint_name
+    );
+  ELSIF constraint_name IS NULL THEN
+    ALTER TABLE conversations
+      ADD CONSTRAINT conversations_related_message_id_fkey
+      FOREIGN KEY (related_message_id)
+      REFERENCES conversations(id)
+      ON DELETE SET NULL;
+  END IF;
+END
+$constraints$;
