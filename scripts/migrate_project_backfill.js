@@ -129,41 +129,104 @@ async function run() {
 
   const sessions = await getSessionsToFix();
   if (sessions.length === 0) {
-    console.log("No hay sesiones con project NULL. Nada que migrar.");
+    console.log("No hay sesiones con mensajes sin proyecto. Nada que migrar.");
+    await db.close();
     process.exit(0);
   }
 
-  console.log(`Sesiones a revisar: ${sessions.length}`);
+  console.log(`Sesiones a corregir: ${sessions.length}`);
+  const assignments = sessions.map((session) => ({
+    ...session,
+    project: resolveProject(session),
+    missing: session.total_rows - session.rows_with_project,
+  }));
 
-  for (const session of sessions) {
-    const project = resolveProject(session);
-    const source = projectSource(session);
-    console.log(
-      `${apply ? "[APPLY]" : "[DRY-RUN]"} ${session.session_id} -> ${project} (${source}) ` +
-      `[${session.total_rows - session.rows_with_project} registros sin project]`
+  for (const a of assignments) {
+    const source = projectSource(a);
+    console.log(`  [${source}] ${a.session_id} (${a.missing} filas) -> ${a.project}`);
+  }
+
+  const mixed = assignments.filter((a) => a.distinct_projects > 1);
+  if (mixed.length > 0) {
+    const breakdown = await db.allAsync(
+      `SELECT session_id, project, COUNT(*)::int AS n
+       FROM conversations
+       WHERE session_id = ANY($1) AND project IS NOT NULL
+       GROUP BY session_id, project
+       ORDER BY session_id, n DESC`,
+      [mixed.map((m) => m.session_id)]
     );
+    const bySession = {};
+    for (const b of breakdown) {
+      (bySession[b.session_id] = bySession[b.session_id] || []).push(`${b.project}(${b.n})`);
+    }
+    console.log("\nAviso: sesiones mixtas (comparten session_id entre proyectos). Las filas NULL se asignan al proyecto dominante:");
+    for (const m of mixed) {
+      console.log(`  - ${m.session_id}: ${bySession[m.session_id] ? bySession[m.session_id].join(", ") : "-"}`);
+    }
+  }
 
-    if (!apply) continue;
+  const summaryAssignments = await db.allAsync(
+    `SELECT session_id FROM session_summaries WHERE project IS NULL`
+  );
+  let summaryResolved = [];
+  if (summaryAssignments.length > 0) {
+    const summarySessionIds = summaryAssignments.map((r) => r.session_id);
+    const convProjects = await db.allAsync(
+      `SELECT session_id, project, COUNT(*)::int AS n
+       FROM conversations
+       WHERE session_id = ANY($1) AND project IS NOT NULL
+       GROUP BY session_id, project
+       ORDER BY session_id, n DESC`,
+      [summarySessionIds]
+    );
+    const dominantBySession = {};
+    for (const c of convProjects) {
+      if (!dominantBySession[c.session_id]) dominantBySession[c.session_id] = c.project;
+    }
 
+    console.log(`\nResúmenes sin proyecto a corregir: ${summaryAssignments.length}`);
+    summaryResolved = summaryAssignments.map((row) => {
+      const assignment = assignments.find((a) => a.session_id === row.session_id);
+      const project = assignment
+        ? assignment.project
+        : dominantBySession[row.session_id] || resolveProject({ session_id: row.session_id });
+      return { sessionId: row.session_id, project };
+    });
+    for (const s of summaryResolved) {
+      console.log(`  [summary] ${s.sessionId} -> ${s.project}`);
+    }
+  }
+
+  if (!apply) {
+    console.log("\n[DRY-RUN] No se modificó nada. Ejecutá con --apply para aplicar.");
+    await db.close();
+    process.exit(0);
+  }
+
+  // Aplicar cambios
+  for (const a of assignments) {
     await db.runAsync(
       `UPDATE conversations SET project = $1 WHERE session_id = $2 AND project IS NULL`,
-      [project, session.session_id]
+      [a.project, a.session_id]
     );
+  }
 
+  for (const row of summaryResolved) {
     await db.runAsync(
       `UPDATE session_summaries SET project = $1 WHERE session_id = $2 AND project IS NULL`,
-      [project, session.session_id]
+      [row.project, row.sessionId]
     );
   }
 
-  if (apply) {
-    console.log("Backfill aplicado correctamente.");
-  } else {
-    console.log("Dry-run finalizado. Usá --apply para aplicar los cambios.");
-  }
+  const remaining = await db.getAsync(`SELECT COUNT(*)::int AS n FROM conversations WHERE project IS NULL`);
+  const remainingSummaries = await db.getAsync(`SELECT COUNT(*)::int AS n FROM session_summaries WHERE project IS NULL`);
+  console.log(`\nMigración aplicada. Mensajes sin proyecto restantes: ${remaining.n}. Resúmenes sin proyecto restantes: ${remainingSummaries.n}.`);
+  await db.close();
+  process.exit(0);
 }
 
-run().catch((error) => {
-  console.error("Error en migrate_project_backfill:", error);
+run().catch((err) => {
+  console.error("Error en la migración:", err);
   process.exit(1);
 });
