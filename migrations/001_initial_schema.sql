@@ -191,7 +191,13 @@ CREATE SEQUENCE IF NOT EXISTS conversations_seq;
 
 SELECT setval(
   'conversations_seq',
-  GREATEST(COALESCE((SELECT MAX(sequence_id) FROM conversations), 0) + 1, 1),
+  GREATEST(
+    COALESCE((SELECT MAX(sequence_id) FROM conversations), 0) + 1,
+    CASE
+      WHEN (SELECT is_called FROM conversations_seq) THEN (SELECT last_value FROM conversations_seq) + 1
+      ELSE (SELECT last_value FROM conversations_seq)
+    END
+  ),
   false
 );
 
