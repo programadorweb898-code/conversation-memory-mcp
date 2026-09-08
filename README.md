@@ -24,18 +24,6 @@ Para garantizar la integridad y separación de datos entre diferentes proyectos,
 Ejemplo de configuración:
 > "Cuando el usuario pregunte por información histórica de este proyecto, usa obligatoriamente las herramientas del MCP `conversation-memory`. Asegúrate de incluir **siempre** el parámetro `project: 'nombre-del-proyecto'` en **todas** las llamadas, ya que el servidor lo exige para aislar los datos por proyecto."
 
-## Guardado automático — Cliente opencode (caso particular)
-
-En opencode el guardado de cada turno es **automático y obligatorio**: el plugin global `conversation-memory` (`~/.config/opencode/plugins/conversation-memory.ts`) persiste en este MCP el par usuario/assistant de cada turno en cuanto la sesión queda idle. No depende de que el agente "se acuerde".
-
-- El plugin se conecta al servidor con el SDK MCP y llama `saveMessage` por cada mensaje nuevo.
-- El `project` se resuelve solo (nombre del directorio de trabajo en minúsculas, con aliases configurables).
-- Lleva una caché local (`~/.config/opencode/conversation-memory-cache.json`) para no duplicar guardados entre reinicios.
-- En este cliente, los agentes **no deben** llamar `saveMessage` manualmente salvo backfill puntual: duplicaría mensajes.
-- Configuración: `CONVERSATION_MEMORY_URL` y `CONVERSATION_MEMORY_TOKEN` como variables de entorno, o se leen solas de `mcp.conversation-memory` del `opencode.json(c)` global o del proyecto.
-
-Este comportamiento es específico de opencode. En otros clientes sin plugin equivalente, el propio agente es quien guarda los turnos mediante `saveMessage`.
-
 ## Guardado automático en cualquier agente — Instrucción al agente
 
 El servidor **no guarda turnos por sí solo**: solo persiste lo que recibe vía `saveMessage`. En clientes sin plugin (Copilot, Claude Desktop, Cursor, agentes remotos, etc.) el guardado de cada turno depende de que el agente esté **configurado con una instrucción** que lo obligue a llamar `saveMessage`. El servidor es agnóstico: no detecta turnos, no cachea, no inyecta parámetros.
@@ -51,10 +39,10 @@ Para que un agente arbitrario guarde cada turno, configuralo con esta instrucci�
 > 6. Omití saludos, confirmaciones cortas (\"ok\", \"entendido\") y mensajes sin valor de recuperación."
 
 Dónde ponerla según el cliente:
-- **VS Code / GitHub Copilot**: archivo `*.instructions.md` en el perfil de usuario (`%APPDATA%\Code\User\instructions\`) con frontmatter `applyTo: '**'`, o en `.github/instructions/` del repositorio. Nota: el setting `github.copilot.chat.codeGeneration.instructions` está **deprecado** desde VS Code 1.102; usá el archivo de instrucciones.
+- **VS Code / GitHub Copilot**: archivo `*.instructions.md` en el perfil de usuario (`%APPDATA%\Code\User\instructions\`) con frontmatter `applyTo: '**'`, o en `.github/instructions/` del repositorio.
 - **Cualquier agente MCP**: en la configuración de instrucciones del agente (prompt de sistema, reglas del proyecto `AGENTS.md`, etc.).
 
-La diferencia con opencode: allí el plugin lo hace por el agente; en el resto, el agente lo hace guiado por la instrucción (patrón "por instrucción al agente", el mismo que usa Engram).
+Este es el patrón «por instrucción al agente» (el mismo que usa Engram): el agente guarda guiado por la instrucción, sin depender del servidor ni de características específicas del cliente. Los clientes con plugins o hooks pueden automatizar este guardado por su cuenta.
 
 ## Herramientas Disponibles
 
