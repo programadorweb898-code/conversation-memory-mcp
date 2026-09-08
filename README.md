@@ -36,6 +36,26 @@ En opencode el guardado de cada turno es **automático y obligatorio**: el plugi
 
 Este comportamiento es específico de opencode. En otros clientes sin plugin equivalente, el propio agente es quien guarda los turnos mediante `saveMessage`.
 
+## Guardado automático en cualquier agente — Instrucción al agente
+
+El servidor **no guarda turnos por sí solo**: solo persiste lo que recibe vía `saveMessage`. En clientes sin plugin (Copilot, Claude Desktop, Cursor, agentes remotos, etc.) el guardado de cada turno depende de que el agente esté **configurado con una instrucción** que lo obligue a llamar `saveMessage`. El servidor es agnóstico: no detecta turnos, no cachea, no inyecta parámetros.
+
+Para que un agente arbitrario guarde cada turno, configuralo con esta instrucción (ajustá `agentId` según el agente):
+
+> "Guardá en este MCP de memoria cada turno de conversación que tenga contenido sustancioso, usando la herramienta `saveMessage` del servidor `conversation-memory-mcp`:
+> 1. Llamá `saveMessage` con el mensaje del usuario (`role: 'user'`) y anotá el `messageId` que devuelve.
+> 2. Llamá `saveMessage` con tu respuesta (`role: 'assistant'`) pasando ese `messageId` como `relatedMessageId`.
+> 3. Usá el mismo `sessionId` durante toda la sesión activa.
+> 4. Incluí siempre el parámetro `project` (el nombre del directorio de trabajo, en minúsculas).
+> 5. Identificate con tu `agentId` propio (por ejemplo `'copilot'`, `'claude-desktop'`, `'gemini-cli'`).
+> 6. Omití saludos, confirmaciones cortas (\"ok\", \"entendido\") y mensajes sin valor de recuperación."
+
+Dónde ponerla según el cliente:
+- **VS Code / GitHub Copilot**: archivo `*.instructions.md` en el perfil de usuario (`%APPDATA%\Code\User\instructions\`) con frontmatter `applyTo: '**'`, o en `.github/instructions/` del repositorio. Nota: el setting `github.copilot.chat.codeGeneration.instructions` está **deprecado** desde VS Code 1.102; usá el archivo de instrucciones.
+- **Cualquier agente MCP**: en la configuración de instrucciones del agente (prompt de sistema, reglas del proyecto `AGENTS.md`, etc.).
+
+La diferencia con opencode: allí el plugin lo hace por el agente; en el resto, el agente lo hace guiado por la instrucción (patrón "por instrucción al agente", el mismo que usa Engram).
+
 ## Herramientas Disponibles
 
 - `saveMessage`: Guarda un nuevo mensaje en el historial. `project` obligatorio.
