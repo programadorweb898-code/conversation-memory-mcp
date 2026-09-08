@@ -2,6 +2,7 @@ const { db } = require("../database");
 const { z } = require("zod");
 const { generateEmbedding } = require("../services/embeddingService");
 const removeStopwords = require("../services/stopwords");
+const { lexicalSearch, countEmbeddings } = require("../services/lexicalSearch");
 
 const SearchMessagesSchema = z.object({
   searchTerm: z.string().optional(),
@@ -13,6 +14,9 @@ const SearchMessagesSchema = z.object({
 
 /**
  * Busca mensajes en la base de datos usando un enfoque híbrido.
+ * La búsqueda semántica (pgvector) se usa cuando existen embeddings indexados;
+ * si no los hay (o no producen coincidencias), cae a una búsqueda léxica
+ * (ILIKE) para que el conocimiento siempre sea recuperable por cualquier agente.
  */
 async function searchMessages(params) {
   const validatedParams = SearchMessagesSchema.parse(params);
@@ -43,14 +47,34 @@ async function searchMessages(params) {
       return await db.allAsync(sql, dbParams);
     }
 
-    // --- RERANKING HÍBRIDO ---
-    // Limpiamos el término de búsqueda de stopwords para el embedding semántico
     const semanticSearchTerm = removeStopwords(searchTerm);
     const queryTokens = semanticSearchTerm
       .toLowerCase()
       .split(/\W+/)
       .filter((token) => token.length > 2);
-    
+
+    const fallbackToLexical = async () => {
+      const rows = await lexicalSearch({ searchTerm, project, agentId });
+      return rows.map((row) => {
+        const lexicalScore = Number(row.lexical_score) || 0;
+        const normalized = queryTokens.length > 0 ? lexicalScore / queryTokens.length : lexicalScore;
+        return {
+          ...row,
+          lexicalScore,
+          semanticScore: 0,
+          similarity: normalized,
+        };
+      });
+    };
+
+    // Sin embeddings indexados no hay vía semántica posible: respondemos con
+    // búsqueda léxica sin cargar el modelo (rápida y siempre disponible).
+    const embeddingCount = await countEmbeddings(project, agentId);
+    if (embeddingCount === 0) {
+      return await fallbackToLexical();
+    }
+
+    // --- RERANKING HÍBRIDO ---
     // Pasamos un objeto mensaje simulado para que coincida con el formato enriquecido
     const queryEmbeddingJson = await generateEmbedding({ role: "query", content: semanticSearchTerm });
 
@@ -99,9 +123,16 @@ async function searchMessages(params) {
       return { ...row, similarity: finalScore, lexicalScore, semanticScore };
     });
 
-    return scoredResults
+    const filteredResults = scoredResults
       .filter((result) => result.lexicalScore > 0 || result.semanticScore >= threshold)
       .sort((a, b) => b.similarity - a.similarity);
+
+    // Los embeddings existen pero no aportaron coincidencias: igual respondemos
+    // con coincidencias léxicas antes de devolver vacío.
+    if (filteredResults.length > 0) {
+      return filteredResults;
+    }
+    return await fallbackToLexical();
   } catch (err) {
     console.error("Error searching messages:", err.message);
     throw err;

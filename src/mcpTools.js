@@ -52,7 +52,10 @@ En clientes que ya integran guardado automático, esta tool puede duplicar mensa
   // 2. searchMessages
   server.tool(
     "searchMessages",
-    "Busca mensajes en el historial",
+    `Busca mensajes en el historial.
+Búsqueda híbrida: usa similitud semántica (pgvector) cuando hay embeddings y cae a coincidencia léxica (ILIKE) si no los hay, así el conocimiento siempre es recuperable.
+ACCESO MULTI-AGENTE: el conocimiento es compartido y remoto (Neon). Si NO pasás agentId, buscás en TODO lo que guardaron todos los agentes; pasándolo, acotás a un agente.
+Cada resultado incluye agent_id: identifica quién escribió ese mensaje (turno, plan o acción).`,
     {
       searchTerm: z.string().describe("Término de búsqueda (palabra clave o consulta semántica)"),
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
@@ -67,7 +70,10 @@ En clientes que ya integran guardado automático, esta tool puede duplicar mensa
   // 2.5. semanticSearchMessages
   server.tool(
     "semanticSearchMessages",
-    "Busca mensajes semánticamente similares a una consulta",
+    `Busca mensajes semánticamente similares a una consulta.
+ACCESO MULTI-AGENTE: el conocimiento es compartido y remoto (Neon). Si NO pasás agentId, buscás en TODO lo que guardaron todos los agentes; pasándolo, acotás a un agente.
+Cada resultado incluye agent_id: identifica quién escribió ese mensaje (turno, plan o acción).
+Si no hay embeddings indexados, responde con coincidencia léxica (ILIKE).`,
     {
       query: z.string().describe("La consulta de búsqueda"),
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
@@ -111,7 +117,9 @@ En clientes que ya integran guardado automático, esta tool puede duplicar mensa
   // 4. recoverSession
   server.tool(
     "recoverSession",
-    "Recupera todos los mensajes de una sesión",
+    `Recupera todos los mensajes de una sesión, ordenados cronológicamente.
+Cada mensaje incluye agent_id para saber qué agente lo escribió (turno, plan o acción).
+Si NO pasás agentId, devuelve los mensajes de todos los agentes de la sesión.`,
     {
       sessionId: z.string().describe("ID de la sesión a recuperar"),
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
@@ -198,7 +206,8 @@ Si candidateIds se omite, promueve todos los promocionables de la sesión/proyec
   // 5. listSessions
   server.tool(
     "listSessions",
-    "Lista todas las sesiones disponibles",
+    `Lista todas las sesiones disponibles del proyecto.
+ACCESO MULTI-AGENTE: si NO pasás agentId, listás sesiones de todos los agentes; pasándolo, solo las de ese agente.`,
     {
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
       agentId: z.string().optional().describe("Filtrar por ID de agente"),
@@ -226,7 +235,9 @@ Si candidateIds se omite, promueve todos los promocionables de la sesión/proyec
   // 7. getLastSessionContext
   server.tool(
     "getLastSessionContext",
-    "Recupera el historial completo de la última sesión",
+    `Recupera el historial completo de la última sesión.
+Cada mensaje incluye agent_id para saber qué agente lo escribió.
+ACCESO MULTI-AGENTE: si NO pasás agentId, la última sesión puede ser de cualquier agente; pasándolo, la última de ese agente.`,
     {
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
       agentId: z.string().optional().describe("Filtrar por ID de agente"),

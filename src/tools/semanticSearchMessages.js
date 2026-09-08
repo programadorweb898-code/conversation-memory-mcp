@@ -1,9 +1,31 @@
 const { db } = require("../database");
 const { generateEmbedding } = require("../services/embeddingService");
+const { lexicalSearch, countEmbeddings } = require("../services/lexicalSearch");
 
 async function semanticSearchMessages({ query, project, agentId, limit = 5 }) {
   if (!query) throw new Error("La consulta no puede estar vacía.");
   if (!project) throw new Error("El parámetro 'project' es obligatorio para aislar los datos por proyecto.");
+
+  const fallbackToLexical = async () => {
+    const rows = await lexicalSearch({ searchTerm: query, project, agentId, limit });
+    return rows.map((row) => ({
+      message_id: row.id,
+      content: row.content,
+      session_id: row.session_id,
+      project: row.project,
+      role: row.role,
+      timestamp: row.timestamp,
+      agent_id: row.agent_id,
+      similarity: Number(row.lexical_score) || 0,
+    }));
+  };
+
+  // Sin embeddings indexados no hay vía semántica posible: respondemos con
+  // búsqueda léxica sin cargar el modelo (rápida y siempre disponible).
+  const embeddingCount = await countEmbeddings(project, agentId);
+  if (embeddingCount === 0) {
+    return await fallbackToLexical();
+  }
 
   // Generar embedding de la consulta
   const queryEmbeddingJson = await generateEmbedding({ role: "search", content: query });
@@ -48,8 +70,12 @@ async function semanticSearchMessages({ query, project, agentId, limit = 5 }) {
 
   const results = await db.allAsync(sql, params);
 
-  return results;
+  // Los embeddings existen pero no aportaron coincidencias: igual respondemos
+  // con coincidencias léxicas antes de devolver vacío.
+  if (results.length > 0) {
+    return results;
+  }
+  return await fallbackToLexical();
 }
-
 
 module.exports = semanticSearchMessages;
