@@ -27,12 +27,11 @@ function registerMcpTools(server) {
   // 1. saveMessage
   server.tool(
   "saveMessage",           // nombre de la tool
-  `Guarda un mensaje en la memoria persistente de conversaciones.
-OJO: En opencode el guardado de cada turno es AUTOMÁTICO (lo hace el plugin global "conversation-memory" cuando la sesión queda idle). NO llames a esta tool para guardar turnos normales: duplicaría mensajes. Usala únicamente para backfill puntual (recuperar un turno que el plugin no llegó a guardar) o si el plugin está desactivado.
-Guardá siempre en pares: primero el mensaje del usuario (role: "user"), anotando el messageId que devuelve esta tool en la respuesta; después guardá tu respuesta (role: "assistant") pasando ese mismo ID como relatedMessageId.
-Usá el mismo sessionId durante toda la sesión activa.
-Identificate pasando tu propio nombre en agentId en cada llamada (por ejemplo 'gemini-cli', 'github-copilot-cli'), para que la memoria pueda filtrarse por agente más adelante.
-No guardés saludos, confirmaciones cortas ("ok", "entendido"), ni mensajes sin contenido sustancioso. Guardá cuando haya una pregunta real, una decisión, un análisis, o cualquier intercambio que sea valioso recuperar en el futuro.`,              // descripción (esto es lo que ve el agente)
+  `Guarda un mensaje en el historial persistente de conversaciones.
+Cuando seas un agente usando este MCP, guardá cada turno de conversación que tenga contenido sustancioso: primero el mensaje del usuario (role: "user") anotando el messageId que devuelve esta tool en la respuesta; después guardá tu respuesta (role: "assistant") pasando ese mismo ID como relatedMessageId.
+Usá el mismo sessionId durante toda la sesión activa e identificá tu agente con agentId (por ejemplo 'claude-desktop', 'copilot', 'gemini-cli'), para que la memoria pueda filtrarse por agente más adelante. El parámetro project es obligatorio y aísla los datos.
+Podés omitir contenido trivial: saludos, confirmaciones cortas ("ok", "entendido") y mensajes sin valor de recuperación futuro.
+En clientes que ya integran guardado automático, esta tool puede duplicar mensajes; en ese caso usala solo para backfill.`,              // descripción (esto es lo que ve el agente)
   {
     sessionId: z.string().describe("ID de la sesión"),
     project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
