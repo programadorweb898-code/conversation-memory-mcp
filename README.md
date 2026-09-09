@@ -61,6 +61,52 @@ Este es el patrón «por instrucción al agente» (el mismo que usa Engram): el 
 
 Todas las herramientas requieren `project` para garantizar el aislamiento de datos entre proyectos.
 
+## Acceso multi-tenant (tokens por usuario/proyecto)
+
+Por defecto el servidor se protege con un único token master (`MCP_BEARER_TOKEN` en la variable de entorno), con acceso a **todos** los proyectos. Para darle a otros usuarios o dispositivos acceso sin compartir el token master, el servidor soporta **API keys por usuario/proyecto**:
+
+- Cada `api_key` tiene un `name` (dueño), un `project` (opcional) y su propio token.
+- Solo se almacena el **hash SHA-256** del token, nunca el token en texto plano.
+- Un token con `project` asignado **solo puede leer/escribir ese proyecto**:
+  - si la llamada `tools/call` pide otro `project` → `403`;
+  - si no especifica `project` → el servidor lo inyecta automáticamente.
+- Un token sin `project` da acceso a todos los proyectos (equivalente al master).
+- Los tokens se pueden revocar (`enabled = FALSE`); un token revocado recibe `401`.
+
+### Gestión de API keys
+
+```bash
+# Crear un token para un usuario/dispositivo con acceso a un único proyecto
+node scripts/create-api-key.js new --name "maxi-portatil" --project "tiktok-mcp"
+
+# Crear un token con acceso a todos los proyectos (no recomendado si hay varios usuarios)
+node scripts/create-api-key.js new --name "agente-interno"
+
+# Listar las keys (nunca muestra los tokens, solo su hash nunca se expone)
+node scripts/create-api-key.js list
+
+# Revocar un token
+node scripts/create-api-key.js revoke <id>
+```
+
+El token plano se imprime **una sola vez** al crearlo; no se puede recuperar después.
+
+### Configuración en el cliente
+
+Cada usuario configura su agente con su propio token (no el master). Con un token scoped, el agente **no necesita incluir `project`**: el servidor lo inyecta. Ejemplo para `opencode.jsonc` u otro cliente MCP:
+
+```jsonc
+{
+  "mcp": {
+    "conversation-memory": {
+      "type": "http",
+      "url": "https://conversation-memory-mcp.onrender.com/mcp",
+      "headers": { "Authorization": "Bearer <token-del-usuario>" }
+    }
+  }
+}
+```
+
 ## Desarrollo
 
 - Base de datos: **PostgreSQL en Neon con extensión pgvector** (búsquedas semánticas por distancia de coseno).
