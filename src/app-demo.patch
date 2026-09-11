@@ -1,0 +1,1 @@
+Portfolio demo integration is implemented in src/demoRoutes.js. The app entrypoint should mount setupDemoRoutes(app) after /health and before applyMiddleware(app), keeping the demo isolated from MCP bearer authentication.
