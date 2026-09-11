@@ -3,6 +3,7 @@ const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
 const { applyMiddleware } = require("./middleware");
 const { registerMcpTools } = require("./mcpTools");
 const { setupMcpRoutes } = require("./routes");
+const { setupDemoRoutes } = require("./demoRoutes");
 const errorHandler = require("./errorHandler");
 
 console.time("⏱️ App initialization");
@@ -20,6 +21,9 @@ app.use(express.json());
 app.get("/health", (req, res) => {
   res.status(200).send("OK");
 });
+
+// Demo pública aislada para el portfolio. Tiene su propio rate limit y no expone /mcp.
+setupDemoRoutes(app);
 
 function createMcpServer() {
   const server = new McpServer({
