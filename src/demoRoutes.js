@@ -67,10 +67,15 @@ function setupDemoRoutes(app) {
       });
 
       const relevant = Array.isArray(results) ? results.slice(0, 5) : [];
+      const context =
+        relevant.find((result) => result.role === "user")?.content ??
+        relevant[0]?.content ??
+        null;
+
       res.json({
         query,
         results: relevant,
-        context: relevant[0]?.content ?? null,
+        context,
       });
     } catch (error) {
       if (error?.name === "ZodError") {
