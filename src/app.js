@@ -1,9 +1,8 @@
 const express = require("express");
-const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
 const { applyMiddleware } = require("./middleware");
-const { registerMcpTools } = require("./mcpTools");
 const { setupMcpRoutes } = require("./routes");
 const errorHandler = require("./errorHandler");
+const { createMcpServer } = require("./createMcpServer");
 
 console.time("⏱️ App initialization");
 
@@ -20,16 +19,6 @@ app.use(express.json());
 app.get("/health", (req, res) => {
   res.status(200).send("OK");
 });
-
-function createMcpServer() {
-  const server = new McpServer({
-    name: "conversation-memory-mcp",
-    version: "1.0.0",
-  });
-
-  registerMcpTools(server);
-  return server;
-}
 
 // Create servers for the modern HTTP transport and the legacy SSE transport.
 // El /mcp crea un McpServer nuevo por request (stateless); el /sse reutiliza sseServer.
