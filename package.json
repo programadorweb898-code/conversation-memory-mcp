@@ -3,8 +3,12 @@
   "version": "1.0.0",
   "description": "Servidor MCP para almacenar y recuperar el historial de conversaciones de forma persistente mediante PostgreSQL.",
   "main": "server.js",
+  "bin": {
+    "conversation-memory-mcp": "src/stdio.js"
+  },
   "scripts": {
     "start": "node src/server.js",
+    "start:stdio": "node src/stdio.js",
     "test": "mocha tests/",
     "dev": "node src/server.js",
     "lint": "eslint .",
