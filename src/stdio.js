@@ -12,8 +12,13 @@ async function startStdioServer() {
   }
 
   // The npx package owns the schema lifecycle for the user's Neon database.
-  // Migrations are idempotent and protected by a PostgreSQL advisory lock.
-  await runMigrations();
+  // Keep migration logs on stderr because stdout is reserved for MCP messages.
+  await runMigrations({
+    logger: {
+      log: (...args) => console.error(...args),
+      error: (...args) => console.error(...args),
+    },
+  });
 
   const server = createMcpServer();
   const transport = new StdioServerTransport();
