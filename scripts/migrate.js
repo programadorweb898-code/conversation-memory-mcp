@@ -34,7 +34,7 @@ function loadMigrations() {
     });
 }
 
-async function runMigrations() {
+async function runMigrations({ logger = console } = {}) {
   const pool = getPool();
   const client = await pool.connect();
 
@@ -71,20 +71,20 @@ async function runMigrations() {
         continue;
       }
 
-      console.log(`Applying migration ${migration.name}...`);
+      logger.log(`Applying migration ${migration.name}...`);
       await client.query(migration.sql);
       await client.query(
         "INSERT INTO schema_migrations (version, name) VALUES ($1, $2)",
         [migration.version, migration.name]
       );
-      console.log(`Migration ${migration.name} applied.`);
+      logger.log(`Migration ${migration.name} applied.`);
     }
 
     await client.query("COMMIT");
-    console.log("Database migrations completed successfully.");
+    logger.log("Database migrations completed successfully.");
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Database migration failed:", error.message);
+    logger.error("Database migration failed:", error.message);
     throw error;
   } finally {
     client.release();
