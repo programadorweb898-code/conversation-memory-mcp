@@ -343,6 +343,11 @@ function ensurePluginSdk() {
     log(`@modelcontextprotocol/sdk ya instalado en ${CONFIG_DIR}`)
     return
   }
+  const pkgFile = join(CONFIG_DIR, "package.json")
+  if (!existsSync(pkgFile)) {
+    writeFileSync(pkgFile, "{}", "utf8")
+    log(`creado package.json en ${CONFIG_DIR}`)
+  }
   log("instalando @modelcontextprotocol/sdk en el directorio de config de opencode...")
   if (!run("npm", ["install", "--no-save", SDK_PKG], CONFIG_DIR)) {
     warn("no se pudo instalar el SDK en el directorio de config de opencode")
