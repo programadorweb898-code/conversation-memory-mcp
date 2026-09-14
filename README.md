@@ -197,6 +197,75 @@ Los clientes que dispongan de plugins, hooks o mecanismos propios de captura pue
 
 ---
 
+# Guardado automático con plugin (opencode y agentes con plugins)
+
+El repositorio incluye un **plugin para opencode** en `plugins/conversation-memory.ts` que automatiza el guardado: cada turno sustancioso se persiste solo cuando la sesión queda inactiva. No depende de que el agente se acuerde de llamar a `saveMessage`.
+
+El plugin **prefiere el MCP local `conversation-memory-local`** (stdio → tu Neon) y solo usa un endpoint HTTP remoto si encuentra `conversation-memory` en la configuración. No necesita Render ni ningún servidor externo.
+
+## Requisitos
+
+Para usar el plugin en un dispositivo necesitás:
+
+1. El código del repositorio (el plugin lanza `node src/stdio.js` de este repo).
+2. El archivo `plugins/conversation-memory.ts` copiado en la carpeta de plugins de opencode.
+3. La dependencia `@modelcontextprotocol/sdk` en el entorno de plugins de opencode.
+4. El bloque `conversation-memory-local` en la configuración de opencode.
+5. La `DATABASE_URL` apuntando a tu base Neon.
+
+## Instalación en el dispositivo actual
+
+```bash
+mkdir -p ~/.config/opencode/plugins
+cd ~/.config/opencode
+npm init -y
+npm install @modelcontextprotocol/sdk
+cp <ruta-al-repo>/plugins/conversation-memory.ts ~/.config/opencode/plugins/
+```
+
+En `~/.config/opencode/opencode.jsonc` agregá el bloque MCP:
+
+```jsonc
+{
+  "mcp": {
+    "conversation-memory-local": {
+      "type": "local",
+      "command": ["node", "<ruta-al-repositorio>/src/stdio.js"],
+      "enabled": true,
+      "environment": {
+        "DATABASE_URL": "{env:DATABASE_URL}"
+      }
+    }
+  }
+}
+```
+
+Reiniciá opencode. El plugin carga la variable `DATABASE_URL` del sistema y el servidor stdio la usa para conectar a tu base.
+
+## Misma memoria en otro dispositivo
+
+Como los datos viven en tu base de Neon, configurar otro dispositivo con **la misma `DATABASE_URL`** hace que ambos compartan el mismo historial:
+
+1. Cloná el repositorio en el nuevo dispositivo y ejecutá `npm install`.
+2. Cargá la `DATABASE_URL` en el sistema del nuevo dispositivo (misma cadena que ya usás):
+   - Windows: `setx DATABASE_URL "tu-cadena"`
+   - macOS/Linux: `export DATABASE_URL="tu-cadena"` en `~/.zshrc` o `~/.bashrc`
+3. Repetí la instalación del plugin y el bloque `conversation-memory-local` (ajustando la ruta al repositorio del nuevo dispositivo).
+4. Reiniciá opencode y verificá: pedile al agente que busque un mensaje guardado desde el otro dispositivo, por ejemplo `PROJECT_A_SECRET_63842` en el proyecto `proyecto-A`.
+
+> [!NOTE]
+> Con cadenas **distintas** los dispositivos ven bases **separadas**. La cadena es la que define privacidad y compartición: solo quienes tengan la misma `DATABASE_URL` comparten el historial.
+
+## Otros agentes que aceptan plugins
+
+Si tu agente soporta plugins o hooks (por ejemplo Copilot, Cursor, Claude Desktop), el mismo principio aplica:
+
+1. Configurá el MCP `conversation-memory-local` apuntando a `node <ruta-al-repo>/src/stdio.js`.
+2. Pasale la `DATABASE_URL` al servidor (variable de entorno o placeholder de tu agente).
+3. Usá un plugin/hook propio del agente para llamar a `saveMessage`, o el patrón de guardado por instrucción de la sección anterior si no tiene automatización.
+
+---
+
 # Aislamiento por proyecto
 
 El parámetro `project` es una pieza fundamental del diseño.
