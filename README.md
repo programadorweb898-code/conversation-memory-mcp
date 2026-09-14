@@ -117,8 +117,8 @@ Contiene el nombre del servidor de Neon, el nombre de usuario y la contraseña. 
 
 | Agente / cliente | Dónde va la cadena | Qué hace |
 |---|---|---|
-| **opencode** | Variable de entorno del sistema (`DATABASE_URL`) o el archivo `.env` del proyecto | El agente la toma de `{env:DATABASE_URL}` en su configuración |
-| **Copilot (VS Code)** | Variable de entorno del sistema (`DATABASE_URL`) | El agente la toma de `${env:DATABASE_URL}` en su configuración |
+| **opencode** | Archivo `.env` del proyecto (el bloque MCP usa `cwd` apuntando a la raíz del repo) | El plugin/autor lanzan `node src/stdio.js` con `cwd` en el repo y `dotenv` lee el `.env` |
+| **Copilot (VS Code)** | Archivo `.env` del proyecto (bloque MCP con `cwd` a la raíz del repo) | El servidor se lanza con `cwd` en el repo y `dotenv` lee el `.env` |
 | **npx / modo local** | Archivo `.env` en la raíz del repositorio | El servidor la lee con `dotenv` |
 
 **Si el agente no encuentra la cadena, el servidor no arranca.** Siempre verificá que `DATABASE_URL` esté cargada en el lugar correcto de cada dispositivo.
@@ -211,19 +211,26 @@ Para usar el plugin en un dispositivo necesitás:
 2. El archivo `plugins/conversation-memory.ts` copiado en la carpeta de plugins de opencode.
 3. La dependencia `@modelcontextprotocol/sdk` en el entorno de plugins de opencode.
 4. El bloque `conversation-memory-local` en la configuración de opencode.
-5. La `DATABASE_URL` apuntando a tu base Neon.
+5. La `DATABASE_URL` en el archivo `.env` de la raíz del repositorio.
 
 ## Instalación en el dispositivo actual
 
+El repositorio incluye un instalador que hace los pasos 2 a 4 automáticamente (copia el plugin, instala el SDK en el entorno de opencode y agrega el bloque MCP con `cwd` al repo):
+
 ```bash
-mkdir -p ~/.config/opencode/plugins
-cd ~/.config/opencode
-npm init -y
-npm install @modelcontextprotocol/sdk
-cp <ruta-al-repo>/plugins/conversation-memory.ts ~/.config/opencode/plugins/
+npm run install:plugin
 ```
 
-En `~/.config/opencode/opencode.jsonc` agregá el bloque MCP:
+Requisitos previos: tener `node`/`npm` instalados y el repositorio clonado.
+
+### Qué hace el instalador (y qué tenés que hacer vos)
+
+- Clona/descarga este repositorio (clonar ya trae el código del server y el plugin).
+- Ejecutá `npm install` en el repo (lo hace el script si no está).
+- El script copia `plugins/conversation-memory.ts` a `~/.config/opencode/plugins/`, instala `@modelcontextprotocol/sdk` en `~/.config/opencode` si faltara, y agrega el bloque `conversation-memory-local` a `~/.config/opencode/opencode.jsonc` con `cwd` apuntando a tu repo.
+- Tu única tarea: pegar la `DATABASE_URL` en el `.env` del repo (`cp .env.example .env`).
+
+El bloque que deja el instalador en `~/.config/opencode/opencode.jsonc`:
 
 ```jsonc
 {
@@ -231,37 +238,35 @@ En `~/.config/opencode/opencode.jsonc` agregá el bloque MCP:
     "conversation-memory-local": {
       "type": "local",
       "command": ["node", "<ruta-al-repositorio>/src/stdio.js"],
-      "enabled": true,
-      "environment": {
-        "DATABASE_URL": "{env:DATABASE_URL}"
-      }
+      "cwd": "<ruta-al-repositorio>",
+      "enabled": true
     }
   }
 }
 ```
 
-Reiniciá opencode. El plugin carga la variable `DATABASE_URL` del sistema y el servidor stdio la usa para conectar a tu base.
+La cadena de conexión NO va en la configuración de opencode: va en el archivo `.env` de la raíz del repositorio (`cp .env.example .env` y pegá tu `DATABASE_URL`). El plugin lanza el servidor con `cwd` en el repo y `dotenv` lee el `.env`. No hace falta variable de entorno del sistema.
+
+Reiniciá opencode. El plugin usa el MCP local `conversation-memory-local`, que conecta a tu base a través del `.env` del repo.
 
 ## Misma memoria en otro dispositivo
 
 Como los datos viven en tu base de Neon, configurar otro dispositivo con **la misma `DATABASE_URL`** hace que ambos compartan el mismo historial:
 
-1. Cloná el repositorio en el nuevo dispositivo y ejecutá `npm install`.
-2. Cargá la `DATABASE_URL` en el sistema del nuevo dispositivo (misma cadena que ya usás):
-   - Windows: `setx DATABASE_URL "tu-cadena"`
-   - macOS/Linux: `export DATABASE_URL="tu-cadena"` en `~/.zshrc` o `~/.bashrc`
-3. Repetí la instalación del plugin y el bloque `conversation-memory-local` (ajustando la ruta al repositorio del nuevo dispositivo).
+1. Cloná el repositorio en el nuevo dispositivo.
+2. Copiá la cadena en el `.env` del repo clonado: `cp .env.example .env` y pegá tu `DATABASE_URL` (la misma que usás en este dispositivo).
+3. Ejecutá `npm install` y luego `npm run install:plugin` (copia el plugin, instala el SDK y agrega el bloque MCP con `cwd` a la ruta local del repo).
 4. Reiniciá opencode y verificá: pedile al agente que busque un mensaje guardado desde el otro dispositivo, por ejemplo `PROJECT_A_SECRET_63842` en el proyecto `proyecto-A`.
 
 > [!NOTE]
-> Con cadenas **distintas** los dispositivos ven bases **separadas**. La cadena es la que define privacidad y compartición: solo quienes tengan la misma `DATABASE_URL` comparten el historial.
+> Con cadenas **distintas** los dispositivos ven bases **separadas**. La cadena es la que define privacidad y compartición: solo quienes tengan la misma `DATABASE_URL` en su `.env` comparten el historial.
 
 ## Otros agentes que aceptan plugins
 
 Si tu agente soporta plugins o hooks (por ejemplo Copilot, Cursor, Claude Desktop), el mismo principio aplica:
 
-1. Configurá el MCP `conversation-memory-local` apuntando a `node <ruta-al-repo>/src/stdio.js`.
-2. Pasale la `DATABASE_URL` al servidor (variable de entorno o placeholder de tu agente).
+1. Configurá el MCP `conversation-memory-local` apuntando a `node <ruta-al-repo>/src/stdio.js`, con `cwd` en la raíz del repositorio.
+2. La `DATABASE_URL` va en el `.env` de la raíz del repositorio (no en la config del agente).
 3. Usá un plugin/hook propio del agente para llamar a `saveMessage`, o el patrón de guardado por instrucción de la sección anterior si no tiene automatización.
 
 ---

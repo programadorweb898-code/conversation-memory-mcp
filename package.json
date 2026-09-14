@@ -12,7 +12,8 @@
     "test": "mocha tests/",
     "dev": "node src/server.js",
     "lint": "eslint .",
-    "migrate": "node scripts/migrate.js"
+    "migrate": "node scripts/migrate.js",
+    "install:plugin": "node scripts/install-plugin.js"
   },
   "keywords": [],
   "author": "",

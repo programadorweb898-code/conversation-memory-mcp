@@ -72,7 +72,7 @@ function readJsonc(file: string): any {
   }
 }
 
-type McpLocalConfig = { kind: "local"; command: string; args: string[]; env: Record<string, string> }
+type McpLocalConfig = { kind: "local"; command: string; args: string[]; env: Record<string, string>; cwd?: string }
 type McpRemoteConfig = { kind: "remote"; url: string; token: string }
 type McpResolved = McpLocalConfig | McpRemoteConfig
 
@@ -105,13 +105,15 @@ function findMcpConfig(directory: string): McpResolved | null {
       if (commandArr.length === 0) continue
       const env: Record<string, string> = {}
       for (const [key, raw] of Object.entries(local.environment ?? {})) {
-        env[key] = resolveEnvTemplate(String(raw))
+        const resolved = resolveEnvTemplate(String(raw))
+        if (resolved) env[key] = resolved
       }
       return {
         kind: "local",
         command: commandArr[0],
         args: commandArr.slice(1),
         env,
+        ...(local.cwd ? { cwd: local.cwd } : {}),
       }
     }
 
@@ -174,6 +176,7 @@ async function getMcpClient(mcpConfig: McpResolved): Promise<any> {
       command: mcpConfig.command,
       args: mcpConfig.args,
       env: mcpConfig.env,
+      ...(mcpConfig.cwd ? { cwd: mcpConfig.cwd } : {}),
     })
   } else {
     const { StreamableHTTPClientTransport } = await import(
