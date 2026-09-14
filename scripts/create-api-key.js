@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 // Gestión de api_keys para el MCP multi-tenant.
 // Uso:
-//   node scripts/create-api-key.js new --name "<dueño>" [--project <proyecto>] [--json]
+//   node scripts/create-api-key.js new --name "<dueño>" [--owner <usuario>] [--project <proyecto>] [--json]
 //   node scripts/create-api-key.js list [--json]
 //   node scripts/create-api-key.js revoke <id> [--json]
 //
 // El token plano se imprime UNA sola vez al crearlo; solo se guarda su hash.
+// El owner (si no se indica, MCP_DEFAULT_OWNER) determina qué datos aislados
+// podrá leer/escribir ese token. El token master (MCP_BEARER_TOKEN) ve todo.
 
 const dotenv = require("dotenv");
 dotenv.config();
@@ -17,11 +19,13 @@ const {
 } = require("../src/services/apiKeyService");
 
 function parseArgs(argv) {
-  const args = { _: [], name: null, project: null, json: false };
+  const args = { _: [], name: null, owner: null, project: null, json: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--name" || arg === "-n") {
       args.name = argv[++i];
+    } else if (arg === "--owner" || arg === "-o") {
+      args.owner = argv[++i];
     } else if (arg === "--project" || arg === "-p") {
       args.project = argv[++i];
     } else if (arg === "--json") {
@@ -48,15 +52,16 @@ async function main() {
 
   if (command === "new") {
     if (!args.name) {
-      console.error('Falta --name. Ejemplo: node scripts/create-api-key.js new --name "maxi-portatil" --project tiktok-mcp');
+      console.error('Falta --name. Ejemplo: node scripts/create-api-key.js new --name "maxi-portatil" --owner maxi --project tiktok-mcp');
       process.exit(1);
     }
     const keyUrl = args.project ? `Y URL: ${process.env.MCP_URL || "(URL del servidor)"}` : "";
-    const { token, key } = await createApiKey({ name: args.name, project: args.project });
+    const { token, key } = await createApiKey({ name: args.name, owner: args.owner, project: args.project });
     output({
       ok: true,
       id: key.id,
       name: key.name,
+      owner: key.owner,
       project: key.project || "(todos los proyectos)",
       token,
       note: "Guardá este token: solo se muestra una vez.",

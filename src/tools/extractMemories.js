@@ -38,10 +38,10 @@ const EXTRACT_MODEL = "gemini-2.5-flash-lite";
  * @param {string} [params.agentId] - ID del agente para filtrar los mensajes.
  * @returns {Promise<Object>} - Sesión con los candidatos extraídos.
  */
-async function extractMemories({ sessionId, project, agentId }) {
+async function extractMemories({ sessionId, project, agentId, owner }) {
   if (!project) throw new Error("El parámetro 'project' es obligatorio.");
 
-  const messages = await recoverSession({ sessionId, project, agentId });
+  const messages = await recoverSession({ sessionId, project, agentId, owner });
 
   // Sin mensajes no hay nada que analizar. Se responde de forma controlada
   // indicando explícitamente que la sesión no tiene contenido recuperable.

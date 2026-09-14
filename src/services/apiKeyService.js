@@ -32,23 +32,26 @@ async function findByTokenHash(tokenHash) {
  * Crea una api_key: genera un token aleatorio, guarda solo su hash y lo devuelve.
  * El token plano se imprime una única vez y no puede recuperarse después.
  * @param {object} options
- * @param {string} options.name - Identificador del dueño (usuario/dispositivo/agente).
+ * @param {string} options.name - Identificador descriptivo (usuario/dispositivo/agente).
+ * @param {string} [options.owner] - Dueño del token (clave de aislamiento de datos).
+ *   Si no se indica, se usa MCP_DEFAULT_OWNER o, en su defecto, `name`.
  * @param {string|null} [options.project] - Proyecto al que da acceso o null para todos.
  * @returns {Promise<{token: string, key: object}>}
  */
-async function createApiKey({ name, project = null }) {
+async function createApiKey({ name, project = null, owner = null }) {
   const token = crypto.randomBytes(24).toString('base64url');
   const row = {
     id: crypto.randomUUID(),
     token_hash: hashToken(token),
     name,
     project: project || null,
+    owner: owner || process.env.MCP_DEFAULT_OWNER || name,
     enabled: true,
   };
   await db.runAsync(
-    `INSERT INTO api_keys (id, token_hash, name, project, enabled)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [row.id, row.token_hash, row.name, row.project, row.enabled]
+    `INSERT INTO api_keys (id, token_hash, name, project, owner, enabled)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [row.id, row.token_hash, row.name, row.project, row.owner, row.enabled]
   );
   return { token, key: row };
 }
@@ -59,7 +62,7 @@ async function createApiKey({ name, project = null }) {
  */
 async function listApiKeys() {
   const rows = await db.allAsync(
-    `SELECT id, name, project, enabled, created_at, last_used_at
+    `SELECT id, name, owner, project, enabled, created_at, last_used_at
      FROM api_keys ORDER BY created_at DESC`
   );
   return rows;

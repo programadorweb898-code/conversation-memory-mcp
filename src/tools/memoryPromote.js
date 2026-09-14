@@ -15,11 +15,11 @@ const { db, withAdvisoryLock } = require("../database");
  * @param {string[]} [params.candidateIds] - Candidatos específicos a promover; si se omite, todos los promocionables de la sesión/proyecto.
  * @returns {Promise<Object>} Resultado global con un resultado por candidato.
  */
-async function memoryPromote({ sessionId, project, agentId, candidateIds }) {
+async function memoryPromote({ sessionId, project, agentId, candidateIds, owner }) {
   if (!project) throw new Error("El parámetro 'project' es obligatorio.");
   if (!sessionId) throw new Error("El parámetro 'sessionId' es obligatorio.");
 
-  const rows = await loadCandidates({ sessionId, project, candidateIds });
+  const rows = await loadCandidates({ sessionId, project, candidateIds, owner });
   const requested = candidateIds && candidateIds.length > 0
     ? [...new Set(candidateIds)]
     : rows.map((row) => row.id);
@@ -80,23 +80,24 @@ async function memoryPromote({ sessionId, project, agentId, candidateIds }) {
 }
 
 /**
- * Carga los candidatos de la sesión/proyecto. Si candidateIds se indica, filtra
- * por esos ids (devuelve solo los que existen).
+ * Carga los candidatos de la sesión/proyecto (del owner autenticado). Si
+ * candidateIds se indica, filtra por esos ids (devuelve solo los que existen).
  */
-async function loadCandidates({ sessionId, project, candidateIds }) {
+async function loadCandidates({ sessionId, project, candidateIds, owner }) {
   if (candidateIds && candidateIds.length > 0) {
-    const placeholders = candidateIds.map((_, i) => `$${i + 3}`).join(", ");
+    const placeholders = candidateIds.map((_, i) => `$${i + 4}`).join(", ");
     const sql = `
       SELECT * FROM memory_candidates
-      WHERE session_id = $1 AND project = $2 AND id IN (${placeholders})
+      WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)
+        AND id IN (${placeholders})
     `;
-    return db.allAsync(sql, [sessionId, project, ...candidateIds]);
+    return db.allAsync(sql, [sessionId, project, owner ?? null, ...candidateIds]);
   }
   const sql = `
     SELECT * FROM memory_candidates
-    WHERE session_id = $1 AND project = $2
+    WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)
   `;
-  return db.allAsync(sql, [sessionId, project]);
+  return db.allAsync(sql, [sessionId, project, owner ?? null]);
 }
 
 /**

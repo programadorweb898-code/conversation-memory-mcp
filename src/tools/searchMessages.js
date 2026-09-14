@@ -10,6 +10,7 @@ const SearchMessagesSchema = z.object({
   project: z.string().min(1),
   agentId: z.string().optional(),
   threshold: z.number().min(0).max(1).optional().default(0.6),
+  owner: z.string().optional(),
 });
 
 /**
@@ -20,7 +21,7 @@ const SearchMessagesSchema = z.object({
  */
 async function searchMessages(params) {
   const validatedParams = SearchMessagesSchema.parse(params);
-  const { project, agentId, threshold } = validatedParams;
+  const { project, agentId, threshold, owner } = validatedParams;
   const searchTerm = validatedParams.searchTerm || validatedParams.query;
 
   try {
@@ -40,6 +41,11 @@ async function searchMessages(params) {
         whereClauses.push(`c.agent_id = $${dbParams.length}`);
       }
 
+      if (owner) {
+        dbParams.push(owner);
+        whereClauses.push(`c.owner = $${dbParams.length}`);
+      }
+
       if (whereClauses.length > 0) {
         sql += ` WHERE ` + whereClauses.join(` AND `);
       }
@@ -54,7 +60,7 @@ async function searchMessages(params) {
       .filter((token) => token.length > 2);
 
     const fallbackToLexical = async () => {
-      const rows = await lexicalSearch({ searchTerm, project, agentId });
+      const rows = await lexicalSearch({ searchTerm, project, agentId, owner });
       return rows.map((row) => {
         const lexicalScore = Number(row.lexical_score) || 0;
         const normalized = queryTokens.length > 0 ? lexicalScore / queryTokens.length : lexicalScore;
@@ -69,7 +75,7 @@ async function searchMessages(params) {
 
     // Sin embeddings indexados no hay vía semántica posible: respondemos con
     // búsqueda léxica sin cargar el modelo (rápida y siempre disponible).
-    const embeddingCount = await countEmbeddings(project, agentId);
+    const embeddingCount = await countEmbeddings(project, agentId, owner);
     if (embeddingCount === 0) {
       return await fallbackToLexical();
     }
@@ -97,6 +103,11 @@ async function searchMessages(params) {
     if (agentId) {
       dbParams.push(agentId);
       whereClauses.push(`c.agent_id = $${dbParams.length}`);
+    }
+
+    if (owner) {
+      dbParams.push(owner);
+      whereClauses.push(`c.owner = $${dbParams.length}`);
     }
 
     if (whereClauses.length > 0) {

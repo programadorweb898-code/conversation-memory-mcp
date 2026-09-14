@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS memory_candidates (
   agent_id TEXT,
   type TEXT NOT NULL,
   title TEXT NOT NULL,
+  content TEXT,
   topic_key TEXT,
   what TEXT,
   why TEXT,

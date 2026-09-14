@@ -10,7 +10,7 @@
  *   4. Si no se puede inferir, se usa DEFAULT_PROJECT.
  *
  * IMPORTANTE: este script corre contra la BD de Neon. Asegurate de que
- * DATABASE_URL en .env apunte a Neon (no al Postgres viejo de Render) antes de ejecutarlo.
+ * DATABASE_URL en .env apunte a Neon antes de ejecutarlo.
  *
  * Uso:
  *   node scripts/migrate_project_backfill.js            # dry-run (no modifica nada)
@@ -44,14 +44,6 @@ function assertNeonDatabase() {
   }
   if (!host) {
     console.error("ERROR: DATABASE_URL no está configurada o no es válida. Revisá tu .env.");
-    process.exit(1);
-  }
-  if (host.includes("render.com")) {
-    console.error(
-      `ERROR: DATABASE_URL apunta al Postgres de Render (${host}). ` +
-        "Este proyecto usa NEON. Actualizá DATABASE_URL en .env con la conexión de Neon " +
-        "(panel de Neon -> Connection Details) antes de migrar."
-    );
     process.exit(1);
   }
   if (!host.includes("neon.tech")) {

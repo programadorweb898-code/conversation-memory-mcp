@@ -121,9 +121,3 @@ No debe:
 - guardarse en un repositorio público.
 
 Si una credencial se filtra, debe rotarse desde Neon.
-
-## Render
-
-El modo `npx + Neon` no depende de Render.
-
-Render puede existir como infraestructura independiente para otros despliegues del repositorio, pero no participa en la ejecución local ni en el almacenamiento del modo `npx`.

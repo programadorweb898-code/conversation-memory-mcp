@@ -2,11 +2,11 @@ const { Pool } = require('pg');
 const dotenv = require('dotenv');
 dotenv.config();
 
-// Configuración basada en variables de entorno (Render te dará esta URL)
+// Configuración basada en variables de entorno
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: false // Necesario para conexiones externas en Render
+    rejectUnauthorized: false
   }
 });
 

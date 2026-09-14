@@ -7,7 +7,7 @@ const { generateEmbedding } = require("../services/embeddingService");
  * @param {string} params.query - La pregunta del usuario.
  * @returns {Promise<Array>} El historial completo de la(s) sesión(es) encontrada(s).
  */
-async function searchSessionsBySummary({ query, project }) {
+async function searchSessionsBySummary({ query, project, owner }) {
   if (!query) throw new Error("La consulta no puede estar vacía.");
   if (!project) throw new Error("El parámetro 'project' es obligatorio.");
 
@@ -15,7 +15,7 @@ async function searchSessionsBySummary({ query, project }) {
   const queryEmbeddingJson = await generateEmbedding({ role: "search", content: query });
 
   // 2. Buscar las sesiones cuyos resúmenes sean semánticamente similares (distancia coseno)
-  // Restringido al proyecto para aislar los datos.
+  // Restringido al proyecto (y al owner si corresponde) para aislar los datos.
   // Ordenamos por similitud (menor distancia = mayor similitud)
   const sql = `
     SELECT
@@ -23,12 +23,12 @@ async function searchSessionsBySummary({ query, project }) {
       (1 - (sse.embedding <=> $1::vector)) AS similarity
     FROM session_summary_embeddings AS sse
     JOIN session_summaries AS ss ON ss.session_id = sse.session_id
-    WHERE ss.project = $2
+    WHERE ss.project = $2 AND ($3::text IS NULL OR ss.owner = $3)
     ORDER BY sse.embedding <=> $1::vector ASC
     LIMIT 1
   `;
   
-  const results = await db.allAsync(sql, [queryEmbeddingJson, project]);
+  const results = await db.allAsync(sql, [queryEmbeddingJson, project, owner ?? null]);
 
   if (results.length === 0) {
     return [];
@@ -39,13 +39,13 @@ async function searchSessionsBySummary({ query, project }) {
 
   // 3. Recuperar todo el historial de la sesión identificada
   const historySql = `
-    SELECT id, session_id, timestamp, project, role, content 
-    FROM conversations 
-    WHERE session_id = $1 AND project = $2
+    SELECT id, session_id, timestamp, project, role, content
+    FROM conversations
+    WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)
     ORDER BY timestamp ASC
   `;
   
-  const history = await db.allAsync(historySql, [bestSessionId, project]);
+  const history = await db.allAsync(historySql, [bestSessionId, project, owner ?? null]);
 
   return history;
 }

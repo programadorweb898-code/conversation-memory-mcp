@@ -30,128 +30,109 @@ La idea central es separar:
 
 ---
 
-# Arquitectura de memoria
+# Inicio rápido (npx + Neon personal)
 
-`conversation-memory-mcp` está pensado principalmente como una **memoria conversacional persistente**.
+Cada usuario crea su propia base de datos en **Neon** (plan gratuito) y ejecuta el MCP localmente con `npx`. **Los chats de cada persona nunca se mezclan porque están en bases de datos distintas.**
 
-Esto es diferente de una memoria técnica o semántica durable.
+### 1. Crear una base en Neon
 
-Por eso el proyecto puede trabajar junto con **Engram**, creado por Alan Buscaglia, en lugar de intentar reemplazarlo.
+1. Andá a [neon.tech](https://neon.tech) y creá una cuenta (gratuito).
+2. Creá un nuevo proyecto.
+3. Copiá el **connection string** que Neon te da (empieza con `postgres://...`).
 
-## Engram
+### 2. Configurar el `.env`
 
-[Engram — repositorio original de Alan Buscaglia](https://github.com/Gentleman-Programming/engram?utm_source=chatgpt.com)
+En la raíz del repositorio clonado, creá un archivo `.env` a partir del ejemplo:
 
-**Engram** es un sistema de memoria persistente para agentes de IA. Su objetivo es evitar que el agente pierda entre sesiones conocimientos importantes como decisiones de arquitectura, bugs solucionados, descubrimientos, patrones y convenciones del proyecto.
+```bash
+cp .env.example .env
+```
 
-Engram está diseñado para ser **agnóstico del agente** y utiliza MCP para que distintos agentes compatibles puedan acceder a esa memoria persistente. El proyecto nació precisamente para resolver el problema de que un agente vuelva a comenzar prácticamente desde cero en una nueva sesión.
+Editá `.env` y completá tu connection string:
 
-Para conocer su arquitectura, instalación y configuración actual, consultar directamente el repositorio original de Engram:
+```bash
+DATABASE_URL=postgresql://neondb_owner:tu_clave@ep-tu-proyecto-region.aws.neon.tech/neondb?sslmode=require
+```
 
-[GitHub — Gentleman-Programming/engram](https://github.com/Gentleman-Programming/engram?utm_source=chatgpt.com)
+**No compartas este archivo ni lo subas a git.** Contiene las credenciales de tu base.
+
+### 3. Ejecutar
+
+```bash
+npm install
+npm start
+```
+
+El servidor inicia en modo stdio y queda listo para que tu agente lo utilice.
+
+Las migraciones se ejecutan automáticamente al iniciar.
+
+### 4. Configurar tu agente
+
+Agregá el MCP a la configuración de tu agente (por ejemplo, opencode):
+
+```jsonc
+{
+  "mcpServers": {
+    "conversation-memory": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["<ruta-al-repositorio>/src/stdio.js"]
+    }
+  }
+}
+```
+
+Y recordá instructar al agente para que incluya `project` en cada llamada al MCP (ver [Configuración obligatoria para agentes](#configuración-obligatoria-para-agentes)).
+
+### 5. ¿Por qué es privado?
+
+Cada usuario tiene **su propia base de datos en Neon**. No hay base compartida. Tus chats están en tu base; los de otra persona están en la suya. Nadie puede acceder a tu base sin tu `DATABASE_URL`, que es única por proyecto de Neon.
 
 ---
 
-# ¿Por qué utilizar Engram y conversation-memory-mcp juntos?
+### 6. La cadena de conexión: qué es, cómo se carga y dónde
 
-Los dos sistemas resuelven problemas relacionados con la memoria de los agentes, pero desde **niveles diferentes**.
-
-### `conversation-memory-mcp`
-
-Se ocupa principalmente de:
-
-* historial completo de conversaciones;
-* recuperación de sesiones;
-* búsqueda de mensajes;
-* búsqueda semántica;
-* contexto conversacional;
-* aislamiento por proyecto;
-* identificación de agentes;
-* persistencia de las conversaciones en PostgreSQL + pgvector.
-
-En otras palabras:
-
-> **¿Qué se dijo o qué ocurrió durante una conversación anterior?**
-
-### Engram
-
-Se ocupa principalmente de convertir determinados conocimientos importantes en **memoria durable**:
-
-* decisiones;
-* descubrimientos;
-* restricciones;
-* configuraciones;
-* lecciones;
-* problemas resueltos;
-* conocimiento técnico que debe sobrevivir a múltiples sesiones.
-
-En otras palabras:
-
-> **¿Qué conocimiento técnico importante debemos recordar para el futuro?**
-
-### Juntos
-
-El flujo puede ser:
+Esta es la parte más importante para entender y configurar. **La cadena de conexión es "la llave de tu base"**: es la única información que le dice a un agente dónde están tus chats.
 
 ```text
-                    AGENTE
-                       │
-                       ▼
-             conversation-memory-mcp
-                       │
-              Historial completo
-                       │
-                       ▼
-              extractMemories
-                       │
-                       ▼
-                memoryAudit
-                       │
-              ┌────────┴────────┐
-              │                 │
-          No existe         Ya existe /
-              │              relacionado
-              ▼                 │
-       memoryPromote            │
-              │                 │
-              ▼                 │
-           Engram ◄─────────────┘
+DATABASE_URL=postgresql://neondb_owner:tu_clave@ep-tu-proyecto-region.aws.neon.tech/neondb?sslmode=require
 ```
 
-Esto permite mantener una separación clara:
+Contiene el nombre del servidor de Neon, el nombre de usuario y la contraseña. Quien tenga esta cadena puede conectarse a tu base y leerla. Guardala siempre en un lugar seguro y **nunca la publiques**.
 
-```text
-Conversación completa
-        ↓
-conversation-memory-mcp
+#### Cómo se carga (paso a paso, sin ser desarrollador)
 
-Conocimiento técnico durable
-        ↓
-Engram
-```
+1. Andá a [neon.tech](https://neon.tech), ingresá a tu proyecto y copiá el **connection string**.
+2. En la carpeta del proyecto, creá un archivo llamado `.env` (o editá el que ya existe) y pegá tu cadena así:
+   ```bash
+   DATABASE_URL=postgresql://neondb_owner:tu_clave@ep-tu-proyecto-region.aws.neon.tech/neondb?sslmode=require
+   ```
+3. Guardá el archivo. El servidor MCP lee esa cadena automáticamente al iniciar.
 
-La ventaja de combinarlos es evitar dos problemas opuestos:
+> [!NOTE]
+> El archivo `.env` **no se sube nunca a Git** y no se comparte. Es local a tu dispositivo.
 
-1. **Guardar absolutamente todo como memoria durable**, generando ruido y dificultando la recuperación de conocimiento importante.
-2. **Guardar solamente memorias resumidas**, perdiendo el historial conversacional necesario para reconstruir qué se dijo, cuándo se dijo y en qué contexto ocurrió.
+#### Dónde se carga según el agente
 
-De esta forma, `conversation-memory-mcp` puede funcionar como la **fuente de historial conversacional**, mientras que Engram funciona como una **capa de conocimiento técnico durable**.
+| Agente / cliente | Dónde va la cadena | Qué hace |
+|---|---|---|
+| **opencode** | Variable de entorno del sistema (`DATABASE_URL`) o el archivo `.env` del proyecto | El agente la toma de `{env:DATABASE_URL}` en su configuración |
+| **Copilot (VS Code)** | Variable de entorno del sistema (`DATABASE_URL`) | El agente la toma de `${env:DATABASE_URL}` en su configuración |
+| **npx / modo local** | Archivo `.env` en la raíz del repositorio | El servidor la lee con `dotenv` |
 
-La integración está diseñada para que Engram sea opcional. `conversation-memory-mcp` puede funcionar sin Engram y mantener su capacidad de almacenar y recuperar conversaciones.
+**Si el agente no encuentra la cadena, el servidor no arranca.** Siempre verificá que `DATABASE_URL` esté cargada en el lugar correcto de cada dispositivo.
 
----
+#### Cómo funciona la privacidad entre dispositivos
 
-# Uso para cualquier agente
+- **Todos tus dispositivos con la MISMA cadena** → ven los **mismos chats**. Si configurás tu notebook y tu celular con la misma `DATABASE_URL`, ambos comparten el mismo historial.
+- **Dispositivos con cadenas DISTINTAS** → son bases **separadas**. Si otra persona tiene una cadena diferente, no puede ver tus datos, y viceversa.
+- **El "aislamiento" no es una configuración aparte**: es simplemente tener cada quien su propia cadena. Mientras la cadena no se comparta, los datos no se mezclan.
 
-Este MCP expone herramientas para persistir y recuperar conversaciones por proyecto.
+#### Un consejo para no romper el aislamiento
 
-Para utilizarlo desde cualquier agente o cliente MCP:
-
-1. **Guardar turnos** con `saveMessage`.
-2. Utilizar `project` para aislar los datos.
-3. Utilizar `agentId` para identificar al agente que generó el mensaje.
-4. Recuperar conversaciones mediante las herramientas de búsqueda y recuperación.
-5. Opcionalmente convertir conocimiento relevante de una conversación en memoria durable mediante el flujo `extractMemories → memoryAudit → memoryPromote`.
+- **Compartí la cadena solo con quien quieras que vea tus datos** (por ejemplo: tu otro dispositivo o un asistente de confianza).
+- **Nunca la pegues en un chat, un ticket, una captura o un repositorio público.** Si se filtra, alguien podría conectarse a tu base. En ese caso, creá una nueva base en Neon y cambiá la cadena en todos tus dispositivos.
 
 ---
 
@@ -213,6 +194,27 @@ Ejemplo:
 Este es el patrón de **guardado por instrucción al agente**.
 
 Los clientes que dispongan de plugins, hooks o mecanismos propios de captura pueden automatizar este proceso.
+
+---
+
+# Aislamiento por proyecto
+
+El parámetro `project` es una pieza fundamental del diseño.
+
+Cada conversación queda asociada a un proyecto y las operaciones se validan contra ese proyecto.
+
+Esto permite que diferentes agentes trabajen sobre diferentes proyectos sin mezclar sus historiales.
+
+Por ejemplo:
+
+```text
+project: conversation-memory-mcp
+project: tiktok-mcp
+project: backend-ecommerce
+project: portfolio
+```
+
+Un `sessionId` asociado a un proyecto no puede utilizarse accidentalmente desde otro proyecto.
 
 ---
 
@@ -333,137 +335,114 @@ Cuando un embedding no está disponible, determinadas búsquedas pueden utilizar
 
 ---
 
-# Aislamiento por proyecto
+# Arquitectura de memoria
 
-El parámetro `project` es una pieza fundamental del diseño.
+`conversation-memory-mcp` está pensado principalmente como una **memoria conversacional persistente**.
 
-Cada conversación queda asociada a un proyecto y las operaciones se validan contra ese proyecto.
+Esto es diferente de una memoria técnica o semántica durable.
 
-Esto permite que diferentes agentes trabajen sobre diferentes proyectos sin mezclar sus historiales.
+Por eso el proyecto puede trabajar junto con **Engram**, creado por Alan Buscaglia, en lugar de intentar reemplazarlo.
 
-Por ejemplo:
+## Engram
 
-```text
-project: conversation-memory-mcp
-project: tiktok-mcp
-project: backend-ecommerce
-project: portfolio
-```
+[Engram — repositorio original de Alan Buscaglia](https://github.com/Gentleman-Programming/engram?utm_source=chatgpt.com)
 
-Un `sessionId` asociado a un proyecto no puede utilizarse accidentalmente desde otro proyecto.
+**Engram** es un sistema de memoria persistente para agentes de IA. Su objetivo es evitar que el agente pierda entre sesiones conocimientos importantes como decisiones de arquitectura, bugs solucionados, descubrimientos, patrones y convenciones del proyecto.
+
+Engram está diseñado para ser **agnóstico del agente** y utiliza MCP para que distintos agentes compatibles puedan acceder a esa memoria persistente. El proyecto nació precisamente para resolver el problema de que un agente vuelva a comenzar prácticamente desde cero en una nueva sesión.
+
+Para conocer su arquitectura, instalación y configuración actual, consultar directamente el repositorio original de Engram:
+
+[GitHub — Gentleman-Programming/engram](https://github.com/Gentleman-Programming/engram?utm_source=chatgpt.com)
 
 ---
 
-# Multi-tenant: API keys por usuario y proyecto
+## ¿Por qué utilizar Engram y conversation-memory-mcp juntos?
 
-Por defecto, el servidor puede protegerse mediante un token master:
+Los dos sistemas resuelven problemas relacionados con la memoria de los agentes, pero desde **niveles diferentes**.
+
+### `conversation-memory-mcp`
+
+Se ocupa principalmente de:
+
+* historial completo de conversaciones;
+* recuperación de sesiones;
+* búsqueda de mensajes;
+* búsqueda semántica;
+* contexto conversacional;
+* aislamiento por proyecto;
+* identificación de agentes;
+* persistencia de las conversaciones en PostgreSQL + pgvector.
+
+En otras palabras:
+
+> **¿Qué se dijo o qué ocurrió durante una conversación anterior?**
+
+### Engram
+
+Se ocupa principalmente de convertir determinados conocimientos importantes en **memoria durable**:
+
+* decisiones;
+* descubrimientos;
+* restricciones;
+* configuraciones;
+* lecciones;
+* problemas resueltos;
+* conocimiento técnico que debe sobrevivir a múltiples sesiones.
+
+En otras palabras:
+
+> **¿Qué conocimiento técnico importante debemos recordar para el futuro?**
+
+### Juntos
+
+El flujo puede ser:
 
 ```text
-MCP_BEARER_TOKEN
+                    AGENTE
+                       │
+                       ▼
+             conversation-memory-mcp
+                       │
+              Historial completo
+                       │
+                       ▼
+              extractMemories
+                       │
+                       ▼
+                memoryAudit
+                       │
+              ┌────────┴────────┐
+              │                 │
+          No existe         Ya existe /
+              │              relacionado
+              ▼                 │
+       memoryPromote            │
+              │                 │
+              ▼                 │
+           Engram ◄─────────────┘
 ```
 
-Ese token puede tener acceso a todos los proyectos.
-
-Para evitar compartir el token master con otros usuarios o dispositivos, el servidor también soporta **API keys específicas por usuario/proyecto**.
-
-Cada API key puede tener:
-
-* `name`
-* `project`
-* token propio
-* estado `enabled`
-
-Los tokens se almacenan mediante su **hash SHA-256**, no como texto plano.
-
-### Token limitado a un proyecto
-
-Un token puede estar asociado a un único proyecto.
-
-En ese caso:
+Esto permite mantener una separación clara:
 
 ```text
-Agente
-   │
-   │ token scoped
-   ▼
+Conversación completa
+        ↓
 conversation-memory-mcp
-   │
-   └── project permitido
+
+Conocimiento técnico durable
+        ↓
+Engram
 ```
 
-Si el agente intenta acceder a otro proyecto, recibe:
+La ventaja de combinarlos es evitar dos problemas opuestos:
 
-```text
-403
-```
+1. **Guardar absolutamente todo como memoria durable**, generando ruido y dificultando la recuperación de conocimiento importante.
+2. **Guardar solamente memorias resumidas**, perdiendo el historial conversacional necesario para reconstruir qué se dijo, cuándo se dijo y en qué contexto ocurrió.
 
-Si no especifica `project`, el servidor puede inyectar automáticamente el proyecto asociado al token.
+De esta forma, `conversation-memory-mcp` puede funcionar como la **fuente de historial conversacional**, mientras que Engram funciona como una **capa de conocimiento técnico durable**.
 
-### Revocación
-
-Un token puede revocarse mediante:
-
-```text
-enabled = FALSE
-```
-
-Un token revocado recibe:
-
-```text
-401
-```
-
----
-
-# Gestión de API keys
-
-Crear un token para un usuario/dispositivo:
-
-```bash
-node scripts/create-api-key.js new --name "maxi-portatil" --project "tiktok-mcp"
-```
-
-Crear un token con acceso global:
-
-```bash
-node scripts/create-api-key.js new --name "agente-interno"
-```
-
-Listar las keys:
-
-```bash
-node scripts/create-api-key.js list
-```
-
-Revocar un token:
-
-```bash
-node scripts/create-api-key.js revoke <id>
-```
-
-El token en texto plano se muestra **una sola vez** durante su creación y no puede recuperarse posteriormente.
-
----
-
-# Configuración del cliente
-
-Ejemplo para un cliente MCP compatible:
-
-```jsonc
-{
-  "mcp": {
-    "conversation-memory": {
-      "type": "http",
-      "url": "https://conversation-memory-mcp.onrender.com/mcp",
-      "headers": {
-        "Authorization": "Bearer <token-del-usuario>"
-      }
-    }
-  }
-}
-```
-
-Con un token scoped por proyecto, el agente no necesita enviar manualmente `project`; el servidor puede asociarlo automáticamente al token.
+La integración está diseñada para que Engram sea opcional. `conversation-memory-mcp` puede funcionar sin Engram y mantener su capacidad de almacenar y recuperar conversaciones.
 
 ---
 
@@ -523,6 +502,69 @@ memoryAudit
 ```
 
 Así, el historial completo permanece disponible en `conversation-memory-mcp`, mientras que el conocimiento técnico seleccionado puede convertirse en memoria durable.
+
+---
+
+# Avanzado: servidor HTTP multi-tenant
+
+> Esta sección aplica solo si se necesita un **servidor HTTP compartido** para múltiples usuarios, por ejemplo desplegado en un VPS. **No es necesario para el uso habitual con npx.**
+
+En este modo, el servidor expone un endpoint HTTP y valida `api_keys` por usuario. El `DATABASE_URL` vive solo en el servidor y los usuarios reciben tokens limitados (nunca ven las credenciales de la base).
+
+### Token master
+
+El token `MCP_BEARER_TOKEN` en el `.env` del servidor da acceso admin a todos los datos de todos los owners.
+
+### API keys por usuario
+
+```bash
+node scripts/create-api-key.js new --name "maxi-portatil" --owner "maxi" --project "tiktok-mcp"
+```
+
+Si no se pasa `--owner`, se usa `MCP_DEFAULT_OWNER`.
+
+### Aislamiento por usuario (`owner`)
+
+Cada API key pertenece a un **owner**. Todos los datos quedan asociados al `owner` del token que los escribió. Un usuario solo puede leer/escribir sus propios datos dentro del proyecto que su token autoriza.
+
+```text
+Token master (MCP_BEARER_TOKEN)  → owner = null  → acceso ADMIN a todo
+Token de api_key con owner "maxi" → datos aislados a owner="maxi"
+```
+
+El `owner` **nunca se recibe de los parámetros del request**: se deriva del token autenticado.
+
+### Gestión de API keys
+
+Listar:
+
+```bash
+node scripts/create-api-key.js list
+```
+
+Revocar:
+
+```bash
+node scripts/create-api-key.js revoke <id>
+```
+
+El token en texto plano se muestra **una sola vez** durante su creación y no puede recuperarse posteriormente.
+
+### Configuración del cliente (HTTP)
+
+```jsonc
+{
+  "mcpServers": {
+    "conversation-memory": {
+      "type": "http",
+      "url": "https://tu-servidor.com/mcp",
+      "headers": {
+        "Authorization": "Bearer <token-del-usuario>"
+      }
+    }
+  }
+}
+```
 
 ---
 

@@ -6,15 +6,15 @@ const { db } = require("../database");
  * @param {string} params.messageId - El ID del mensaje a recuperar.
  * @returns {Promise<Object>} - El contenido del mensaje y su contexto.
  */
-async function pushToEngram({ messageId, project }) {
+async function pushToEngram({ messageId, project, owner }) {
   if (!project) throw new Error("El parámetro 'project' es obligatorio.");
   try {
     const sql = `
       SELECT c.*
       FROM conversations c
-      WHERE c.id = $1 AND c.project = $2
+      WHERE c.id = $1 AND c.project = $2 AND ($3::text IS NULL OR c.owner = $3)
     `;
-    const row = await db.getAsync(sql, [messageId, project]);
+    const row = await db.getAsync(sql, [messageId, project, owner ?? null]);
 
     if (!row) {
       throw new Error("Mensaje no encontrado");

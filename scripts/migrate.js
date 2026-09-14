@@ -8,6 +8,20 @@ dotenv.config();
 const MIGRATIONS_DIR = path.join(__dirname, "..", "migrations");
 const MIGRATION_LOCK_KEY = 19082026;
 
+// Dueño por defecto para el aislamiento por usuario. Las migraciones usan el
+// placeholder ${MCP_DEFAULT_OWNER}; aquí se resuelve con env o fallback.
+const MCP_DEFAULT_OWNER = process.env.MCP_DEFAULT_OWNER || "luis";
+
+/**
+ * Sustituye los placeholders de entorno dentro del SQL de una migración.
+ * Soporta ${MCP_DEFAULT_OWNER}. Devuelve el SQL con los valores resueltos.
+ * @param {string} sql - SQL original de la migración.
+ * @returns {string}
+ */
+function resolveEnvPlaceholders(sql) {
+  return sql.replaceAll("${MCP_DEFAULT_OWNER}", MCP_DEFAULT_OWNER);
+}
+
 function getPool() {
   if (!process.env.DATABASE_URL) {
     throw new Error("DATABASE_URL environment variable is required.");
@@ -72,7 +86,7 @@ async function runMigrations({ logger = console } = {}) {
       }
 
       logger.log(`Applying migration ${migration.name}...`);
-      await client.query(migration.sql);
+      await client.query(resolveEnvPlaceholders(migration.sql));
       await client.query(
         "INSERT INTO schema_migrations (version, name) VALUES ($1, $2)",
         [migration.version, migration.name]
@@ -96,4 +110,4 @@ if (require.main === module) {
   runMigrations().catch(() => process.exit(1));
 }
 
-module.exports = { loadMigrations, runMigrations };
+module.exports = { loadMigrations, runMigrations, resolveEnvPlaceholders, MCP_DEFAULT_OWNER };

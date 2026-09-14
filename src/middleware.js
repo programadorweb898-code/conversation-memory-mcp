@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const rateLimit = require("express-rate-limit");
 const helmet = require("helmet");
 const { hashToken, findByTokenHash, touchApiKey } = require("./services/apiKeyService");
+const { runWithAuth } = require("./context");
 
 // límite para conexiones SSE: máximo 10 por IP por minuto
 const sseLimiter = rateLimit({
@@ -72,8 +73,11 @@ function scopeProject(req, res, apiKey) {
 /**
  * Autenticación Bearer multi-tenant:
  *  1) /health no requiere token.
- *  2) El token master (MCP_BEARER_TOKEN) da acceso total (compatibilidad).
- *  3) Los tokens de la tabla api_keys dan acceso a su proyecto.
+ *  2) El token master (MCP_BEARER_TOKEN) da acceso total (compatibilidad/admin);
+ *     no tiene owner (owner=null), por lo que las tools no filtran por usuario.
+ *  3) Los tokens de la tabla api_keys dan acceso a su proyecto y aislaron los
+ *     datos por su owner. El owner NUNCA se recibe del request: se deriva del
+ *     token autenticado y se propaga a las tools mediante AsyncLocalStorage.
  */
 async function requireBearerToken(req, res, next) {
   if (req.path === "/health") {
@@ -87,29 +91,32 @@ async function requireBearerToken(req, res, next) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  let apiKey = null;
-
   try {
     const expectedToken = process.env.MCP_BEARER_TOKEN || "";
     if (expectedToken && tokensMatch(Buffer.from(expectedToken), Buffer.from(token))) {
-      // token master: acceso total, sin scope
-      req.auth = { scope: null, master: true };
-      return next();
+      // token master: acceso total, sin scope ni owner
+      req.auth = { scope: null, master: true, owner: null, apiKeyId: null };
+      return runWithAuth(req.auth, next);
     }
 
-    apiKey = await findByTokenHash(hashToken(token));
+    const apiKey = await findByTokenHash(hashToken(token));
     if (!apiKey || !apiKey.enabled) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    req.auth = { scope: apiKey.project || null, master: false, apiKeyId: apiKey.id };
+    req.auth = {
+      scope: apiKey.project || null,
+      master: false,
+      apiKeyId: apiKey.id,
+      owner: apiKey.owner,
+    };
 
     if (!scopeProject(req, res, apiKey)) {
       return;
     }
 
     touchApiKey(apiKey.id);
-    return next();
+    return runWithAuth(req.auth, next);
   } catch (err) {
     console.error("Error en requireBearerToken:", err.message);
     return res.status(500).json({ error: "Internal Server Error" });

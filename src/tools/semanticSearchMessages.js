@@ -2,12 +2,12 @@ const { db } = require("../database");
 const { generateEmbedding } = require("../services/embeddingService");
 const { lexicalSearch, countEmbeddings } = require("../services/lexicalSearch");
 
-async function semanticSearchMessages({ query, project, agentId, limit = 5 }) {
+async function semanticSearchMessages({ query, project, agentId, limit = 5, owner }) {
   if (!query) throw new Error("La consulta no puede estar vacía.");
   if (!project) throw new Error("El parámetro 'project' es obligatorio para aislar los datos por proyecto.");
 
   const fallbackToLexical = async () => {
-    const rows = await lexicalSearch({ searchTerm: query, project, agentId, limit });
+    const rows = await lexicalSearch({ searchTerm: query, project, agentId, owner, limit });
     return rows.map((row) => ({
       message_id: row.id,
       content: row.content,
@@ -22,7 +22,7 @@ async function semanticSearchMessages({ query, project, agentId, limit = 5 }) {
 
   // Sin embeddings indexados no hay vía semántica posible: respondemos con
   // búsqueda léxica sin cargar el modelo (rápida y siempre disponible).
-  const embeddingCount = await countEmbeddings(project, agentId);
+  const embeddingCount = await countEmbeddings(project, agentId, owner);
   if (embeddingCount === 0) {
     return await fallbackToLexical();
   }
@@ -59,6 +59,11 @@ async function semanticSearchMessages({ query, project, agentId, limit = 5 }) {
   if (agentId) {
     whereClauses.push(`c.agent_id = $${params.length + 1}`);
     params.push(agentId);
+  }
+
+  if (owner) {
+    whereClauses.push(`c.owner = $${params.length + 1}`);
+    params.push(owner);
   }
 
   if (whereClauses.length > 0) {

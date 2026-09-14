@@ -8,14 +8,14 @@ console.time("⏱️ App initialization");
 
 const app = express();
 
-// Habilitar la confianza en el proxy para entornos como Render
-// Esto es necesario para que express-rate-limit identifique correctamente la IP del cliente
+// Habilitar la confianza en el proxy para que express-rate-limit
+// identifique correctamente la IP del cliente
 app.set("trust proxy", 1);
 
 // Middleware para parsear JSON
 app.use(express.json());
 
-// Endpoint de health check para Render
+// Endpoint de health check
 app.get("/health", (req, res) => {
   res.status(200).send("OK");
 });

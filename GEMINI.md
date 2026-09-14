@@ -27,7 +27,7 @@ Technical Requirements
 Stack:
 
 - Node.js
-- PostgreSQL (Render)
+- PostgreSQL (Neon)
 - MCP SDK
 - UUID
 - Zod
@@ -75,13 +75,13 @@ Esto garantiza que el contexto sea siempre relevante para la consulta actual, ex
 
 ## Capacidades del Proyecto
 El sistema ya cuenta con las siguientes funcionalidades terminadas:
-- **Persistencia de Historial Crudo:** Almacenamiento completo de mensajes (user/assistant) y sesiones en PostgreSQL (Render).
+- **Persistencia de Historial Crudo:** Almacenamiento completo de mensajes (user/assistant) y sesiones en PostgreSQL (Neon).
 - **Gestión de Sesiones:** Recuperación de sesiones completas y obtención del contexto de la última sesión (`getLastSessionContext`).
 - **Búsqueda:** Funcionalidad de búsqueda por palabras clave y capacidad de búsqueda semántica.
 - **Integración con Engram:** Capacidad de enviar mensajes críticos a Engram (`pushToEngram`) para memoria semántica de largo plazo.
 - **Persistencia Proactiva:** Mecanismos automáticos de guardado de mensajes (raw) y decisiones/aprendizajes (semantic/Engram).
 - **Protocolo de Fallo:** Fallback automático a Engram para recuperar contexto estratégico si la base de datos remota es inaccesible.
-    - Si la base de datos está inaccesible (error de conexión, render dormido, etc.): Responderé obligatoriamente: "No pude establecer conexión con la base de datos de historial".
+    - Si la base de datos está inaccesible (error de conexión, base dormida, etc.): Responderé obligatoriamente: "No pude establecer conexión con la base de datos de historial".
     - Si la base de datos está operativa pero vacía (sin historial): Responderé obligatoriamente: "La base de datos de historial está vacía".
 
 

@@ -8,14 +8,15 @@
 const { db } = require("../database");
 
 /**
- * Cuenta cuántos mensajes del proyecto (y opcionalmente del agente) tienen
+ * Cuenta cuántos mensajes del proyecto (y opcionalmente del agente/owner) tienen
  * embedding indexado. Si el resultado es 0, la vía semántica no puede
  * responder y conviene caer directo a la búsqueda léxica.
  * @param {string} [project]
  * @param {string} [agentId]
+ * @param {string} [owner]
  * @returns {Promise<number>}
  */
-async function countEmbeddings(project, agentId) {
+async function countEmbeddings(project, agentId, owner) {
   const params = [];
   const where = [];
   if (project) {
@@ -25,6 +26,10 @@ async function countEmbeddings(project, agentId) {
   if (agentId) {
     params.push(agentId);
     where.push(`c.agent_id = $${params.length}`);
+  }
+  if (owner) {
+    params.push(owner);
+    where.push(`c.owner = $${params.length}`);
   }
 
   const sql = `
@@ -48,7 +53,7 @@ async function countEmbeddings(project, agentId) {
  * @param {number} [params.limit]
  * @returns {Promise<Array>} Filas con campos de conversations + lexical_score.
  */
-async function lexicalSearch({ searchTerm, project, agentId, limit = 50 }) {
+async function lexicalSearch({ searchTerm, project, agentId, owner, limit = 50 }) {
   const tokens = (searchTerm || "")
     .toLowerCase()
     .split(/\W+/)
@@ -68,6 +73,10 @@ async function lexicalSearch({ searchTerm, project, agentId, limit = 50 }) {
     if (agentId) {
       dbParams.push(agentId);
       whereClauses.push(`c.agent_id = $${dbParams.length}`);
+    }
+    if (owner) {
+      dbParams.push(owner);
+      whereClauses.push(`c.owner = $${dbParams.length}`);
     }
 
     const likeClauses = tokens.map((token) => {

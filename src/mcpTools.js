@@ -1,5 +1,6 @@
 const { z } = require("zod");
 const { db } = require("./database");
+const { getAuth } = require("./context");
 
 // Import tools
 const { saveMessage } = require("./tools/saveMessage");
@@ -22,6 +23,19 @@ const deleteMessage = require("./tools/deleteMessage");
 const deleteSession = require("./tools/deleteSession");
 const deleteMessagePair = require("./tools/deleteMessagePair");
 
+/**
+ * Agrega el `owner` autenticado a los parámetros de una tool. El owner proviene
+ * del contexto HTTP (token), NUNCA de los parámetros públicos del request.
+ * Si el llamante es admin (token master, owner null), no se filtra por owner.
+ * @param {object} params - Parámetros de la tool.
+ * @returns {object}
+ */
+function withScope(params) {
+  const auth = getAuth();
+  const owner = auth && auth.owner;
+  return owner ? { ...params, owner } : params;
+}
+
 function registerMcpTools(server) {
   console.time("⏱️ Registering MCP tools");
   // 1. saveMessage
@@ -41,7 +55,7 @@ En clientes que ya integran guardado automático, esta tool puede duplicar mensa
     relatedMessageId: z.string().optional().describe("ID del mensaje relacionado (pregunta/respuesta)"),
   },
   async ({ sessionId, project, role, content, agentId, relatedMessageId }) => {
-    const result = await saveMessage({ sessionId, project, role, content, agentId, relatedMessageId });
+    const result = await saveMessage(withScope({ sessionId, project, role, content, agentId, relatedMessageId }));
     const text = result?.messageId
       ? `Mensaje guardado correctamente. ID: ${result.messageId}`
       : "Mensaje guardado correctamente.";
@@ -61,8 +75,8 @@ Cada resultado incluye agent_id: identifica quién escribió ese mensaje (turno,
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
       agentId: z.string().optional().describe("Filtrar por ID de agente"),
     },
-    async ({ searchTerm, project, agentId }) => {
-      const results = await searchMessages({ searchTerm, project, agentId });
+async ({ searchTerm, project, agentId }) => {
+    const results = await searchMessages(withScope({ searchTerm, project, agentId }));
       return { content: [{ type: "text", text: JSON.stringify({ results }, null, 2) }], structuredContent: { "data": results } };
     }
   );
@@ -80,8 +94,8 @@ Si no hay embeddings indexados, responde con coincidencia léxica (ILIKE).`,
       agentId: z.string().optional().describe("Filtrar por ID de agente"),
       limit: z.number().optional().describe("Número máximo de resultados (por defecto: 5)"),
     },
-    async ({ query, project, agentId, limit }) => {
-      const results = await semanticSearchMessages({ query, project, agentId, limit });
+async ({ query, project, agentId, limit }) => {
+    const results = await semanticSearchMessages(withScope({ query, project, agentId, limit }));
       return { content: [{ type: "text", text: JSON.stringify({ results }, null, 2) }], structuredContent: { "data": results } };
     }
   );
@@ -95,7 +109,7 @@ Si no hay embeddings indexados, responde con coincidencia léxica (ILIKE).`,
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
     },
     async ({ query, project }) => {
-      const history = await searchSessionsBySummary({ query, project });
+      const history = await searchSessionsBySummary(withScope({ query, project }));
       return { content: [{ type: "text", text: JSON.stringify({ history }, null, 2) }], structuredContent: { history } };
     }
   );
@@ -109,7 +123,7 @@ Si no hay embeddings indexados, responde con coincidencia léxica (ILIKE).`,
       agentId: z.string().optional().describe("Filtrar por ID de agente"),
     },
     async ({ project, agentId }) => {
-      const sessionId = await lastSession({ project, agentId });
+      const sessionId = await lastSession(withScope({ project, agentId }));
       return { content: [{ type: "text", text: sessionId || "No hay sesiones previas." }] };
     }
   );
@@ -126,7 +140,7 @@ Si NO pasás agentId, devuelve los mensajes de todos los agentes de la sesión.`
       agentId: z.string().optional().describe("Filtrar por ID de agente"),
     },
     async ({ sessionId, project, agentId }) => {
-      const messages = await recoverSession({ sessionId, project, agentId });
+      const messages = await recoverSession(withScope({ sessionId, project, agentId }));
       return { content: [{ type: "text", text: JSON.stringify({ messages }, null, 2) }], structuredContent: { messages } };
     }
   );
@@ -150,7 +164,7 @@ Categorías de memoria:
       agentId: z.string().optional().describe("Filtrar por ID de agente"),
     },
     async ({ sessionId, project, agentId }) => {
-      const result = await extractMemories({ sessionId, project, agentId });
+      const result = await extractMemories(withScope({ sessionId, project, agentId }));
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], structuredContent: { data: result } };
     }
   );
@@ -174,7 +188,7 @@ NO promueve memorias a Engram: esa etapa es memoryPromote. NO escribe en Engram.
       agentId: z.string().optional().describe("Filtrar por ID de agente"),
     },
     async ({ sessionId, project, agentId }) => {
-      const result = await memoryAudit({ sessionId, project, agentId });
+      const result = await memoryAudit(withScope({ sessionId, project, agentId }));
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], structuredContent: { data: result } };
     }
   );
@@ -198,7 +212,7 @@ Si candidateIds se omite, promueve todos los promocionables de la sesión/proyec
       candidateIds: z.array(z.string()).optional().describe("Candidatos específicos a promocionar (si se omite: todos los promocionables de la sesión)"),
     },
     async ({ sessionId, project, agentId, candidateIds }) => {
-      const result = await memoryPromote({ sessionId, project, agentId, candidateIds });
+      const result = await memoryPromote(withScope({ sessionId, project, agentId, candidateIds }));
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], structuredContent: { data: result } };
     }
   );
@@ -213,7 +227,7 @@ ACCESO MULTI-AGENTE: si NO pasás agentId, listás sesiones de todos los agentes
       agentId: z.string().optional().describe("Filtrar por ID de agente"),
     },
     async ({ project, agentId }) => {
-      const sessions = await listSessions({ project, agentId });
+      const sessions = await listSessions(withScope({ project, agentId }));
       return { content: [{ type: "text", text: JSON.stringify({ data: sessions }, null, 2) }] };
     }
   );
@@ -227,7 +241,7 @@ ACCESO MULTI-AGENTE: si NO pasás agentId, listás sesiones de todos los agentes
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
     },
     async ({ messageId, project }) => {
-      const message = await pushToEngram({ messageId, project });
+      const message = await pushToEngram(withScope({ messageId, project }));
       return { content: [{ type: "text", text: JSON.stringify(message, null, 2) }] };
     }
   );
@@ -243,7 +257,7 @@ ACCESO MULTI-AGENTE: si NO pasás agentId, la última sesión puede ser de cualq
       agentId: z.string().optional().describe("Filtrar por ID de agente"),
     },
     async ({ project, agentId }) => {
-      const context = await getLastSessionContext({ project, agentId });
+      const context = await getLastSessionContext(withScope({ project, agentId }));
       return { content: [{ type: "text", text: JSON.stringify(context, null, 2) }] };
     }
   );
@@ -258,7 +272,7 @@ ACCESO MULTI-AGENTE: si NO pasás agentId, la última sesión puede ser de cualq
       summary: z.string().describe("Contenido del resumen"),
     },
     async ({ sessionId, project, summary }) => {
-      await saveSessionSummary({ sessionId, project, summary });
+      await saveSessionSummary(withScope({ sessionId, project, summary }));
       return { content: [{ type: "text", text: "Resumen guardado correctamente." }] };
     }
   );
@@ -272,7 +286,7 @@ ACCESO MULTI-AGENTE: si NO pasás agentId, la última sesión puede ser de cualq
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
     },
     async ({ sessionId, project }) => {
-      const summary = await getSessionSummary({ sessionId, project });
+      const summary = await getSessionSummary(withScope({ sessionId, project }));
       return {
         content: [
           {
@@ -293,7 +307,7 @@ ACCESO MULTI-AGENTE: si NO pasás agentId, la última sesión puede ser de cualq
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
     },
     async ({ sessionId, project }) => {
-      const result = await finalizeSession({ sessionId, project });
+      const result = await finalizeSession(withScope({ sessionId, project }));
       return { content: [{ type: "text", text: JSON.stringify(result) }] };
     }
   );
@@ -307,7 +321,7 @@ ACCESO MULTI-AGENTE: si NO pasás agentId, la última sesión puede ser de cualq
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
     },
     async ({ sessionId, project }) => {
-      await deleteSession({ sessionId, project });
+      await deleteSession(withScope({ sessionId, project }));
       return { content: [{ type: "text", text: `Sesión ${sessionId}, sus mensajes y resumen eliminados correctamente.` }] };
     }
   );
@@ -321,7 +335,7 @@ ACCESO MULTI-AGENTE: si NO pasás agentId, la última sesión puede ser de cualq
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
     },
     async ({ messageId, project }) => {
-      await deleteMessage({ messageId, project });
+      await deleteMessage(withScope({ messageId, project }));
       return { content: [{ type: "text", text: `Mensaje ${messageId} y su embedding eliminados correctamente.` }] };
     }
   );
@@ -335,7 +349,7 @@ ACCESO MULTI-AGENTE: si NO pasás agentId, la última sesión puede ser de cualq
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
     },
     async ({ messageId, project }) => {
-      await deleteMessagePair({ messageId, project });
+      await deleteMessagePair(withScope({ messageId, project }));
       return { content: [{ type: "text", text: `Par de mensajes con ${messageId} y sus embeddings eliminados correctamente.` }] };
     }
   );
@@ -351,10 +365,11 @@ ACCESO MULTI-AGENTE: si NO pasás agentId, la última sesión puede ser de cualq
       role: z.string().describe("Rol del emisor (user/assistant)"),
     },
     async ({ messageId, project, text, role }) => {
+      const scoped = withScope({ messageId, project, text, role });
       try {
         const message = await db.getAsync(
-          `SELECT id FROM conversations WHERE id = $1 AND project = $2`,
-          [messageId, project]
+          `SELECT id FROM conversations WHERE id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)`,
+          [scoped.messageId, scoped.project, scoped.owner ?? null]
         );
         if (!message) throw new Error("Mensaje no encontrado en el proyecto especificado");
         const generatedEmbedding = await generateEmbedding({ role, content: text });
@@ -370,4 +385,4 @@ ACCESO MULTI-AGENTE: si NO pasás agentId, la última sesión puede ser de cualq
   console.timeEnd("⏱️ Registering MCP tools");
 }
 
-module.exports = { registerMcpTools };
+module.exports = { registerMcpTools, withScope };

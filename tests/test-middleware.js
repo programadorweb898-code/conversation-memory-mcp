@@ -76,7 +76,7 @@ describe('requireBearerToken', () => {
     const next = sinon.stub();
     await requireBearerToken(req, res, next);
     expect(next.calledOnce).to.be.true;
-    expect(req.auth).to.deep.equal({ scope: null, master: true });
+    expect(req.auth).to.deep.equal({ scope: null, master: true, owner: null, apiKeyId: null });
   });
 
   it('should reject invalid token', async () => {
@@ -108,6 +108,7 @@ describe('requireBearerToken', () => {
     expect(next.calledOnce).to.be.true;
     expect(req.auth.scope).to.equal('proyecto-test');
     expect(req.auth.master).to.be.false;
+    expect(req.auth.owner).to.equal('test-scoped');
   });
 
   it('should inject the scoped project into a tools/call without project', async () => {

@@ -6,6 +6,7 @@
 const crypto = require("crypto");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { db } = require("../database");
+const { resolveWriteOwner } = require("../context");
 const extractMemories = require("./extractMemories");
 const memoryAdapterService = require("../services/memoryAdapter");
 const {
@@ -58,10 +59,10 @@ function candidateSearchQuery(candidate) {
  * @param {string} [params.agentId] - Filtro de agente.
  * @returns {Promise<Object>} Resultado de la auditoría.
  */
-async function memoryAudit({ sessionId, project, agentId }) {
+async function memoryAudit({ sessionId, project, agentId, owner }) {
   if (!project) throw new Error("El parámetro 'project' es obligatorio.");
 
-  const extraction = await extractMemories({ sessionId, project, agentId });
+  const extraction = await extractMemories({ sessionId, project, agentId, owner });
 
   // Sesión inexistente: respuesta controlada, sin auditar ni consultar el proveedor.
   if (!extraction.sessionExists) {
@@ -114,7 +115,7 @@ async function memoryAudit({ sessionId, project, agentId }) {
  * @param {Object} params
  * @returns {Promise<Object>} Decisión { candidateId, status, reason, relatedMemories, promotable }.
  */
-async function auditCandidate({ candidate, extraction, adapter, providerStatus, project, sessionId, agentId }) {
+async function auditCandidate({ candidate, extraction, adapter, providerStatus, project, sessionId, agentId, owner }) {
   const candidateId = computeCandidateId({ project, sessionId, candidate });
 
   const origin = verifySourceMessages({ candidate, messages: extraction.messages });
@@ -124,7 +125,7 @@ async function auditCandidate({ candidate, extraction, adapter, providerStatus, 
       status: "discard",
       reason: origin.reason,
       relatedMemories: [],
-    }, { project, sessionId, agentId, sourceMessageIds: [] });
+    }, { project, sessionId, agentId, owner, sourceMessageIds: [] });
   }
 
   // Proveedor no disponible: no se puede contrastar, queda pendiente.
@@ -135,7 +136,7 @@ async function auditCandidate({ candidate, extraction, adapter, providerStatus, 
       status: "pending",
       reason: `No se pudo contrastar contra ${adapter.provider}: ${why}`,
       relatedMemories: [],
-    }, { project, sessionId, agentId, sourceMessageIds: origin.traceableIds });
+    }, { project, sessionId, agentId, owner, sourceMessageIds: origin.traceableIds });
   }
 
   let related;
@@ -151,7 +152,7 @@ async function auditCandidate({ candidate, extraction, adapter, providerStatus, 
       status: "pending",
       reason: `No se pudo consultar ${adapter.provider}: ${err.message}`,
       relatedMemories: [],
-    }, { project, sessionId, agentId, sourceMessageIds: origin.traceableIds });
+    }, { project, sessionId, agentId, owner, sourceMessageIds: origin.traceableIds });
   }
 
   const decision = await decideCandidate({ candidate, related, project });
@@ -160,7 +161,7 @@ async function auditCandidate({ candidate, extraction, adapter, providerStatus, 
     status: decision.status,
     reason: decision.reason,
     relatedMemories: decision.relatedMemories,
-  }, { project, sessionId, agentId, sourceMessageIds: origin.traceableIds });
+  }, { project, sessionId, agentId, owner, sourceMessageIds: origin.traceableIds });
 }
 
 /**
@@ -263,11 +264,11 @@ async function llmVerdict({ candidate, related, project, apiKey }) {
  * la decisión final agregando "promotable".
  * @param {Object} candidate - Candidato original.
  * @param {Object} decision - { candidateId, status, reason, relatedMemories }.
- * @param {Object} meta - { project, sessionId, agentId, sourceMessageIds }.
+ * @param {Object} meta - { project, sessionId, agentId, owner, sourceMessageIds }.
  * @returns {Promise<Object>} Decisión final.
  */
-async function finishCandidate(candidate, decision, { project, sessionId, agentId, sourceMessageIds }) {
-  await persistCandidate(candidate, decision, { project, sessionId, agentId, sourceMessageIds });
+async function finishCandidate(candidate, decision, { project, sessionId, agentId, owner, sourceMessageIds }) {
+  await persistCandidate(candidate, decision, { project, sessionId, agentId, owner, sourceMessageIds });
   return { ...decision, promotable: decision.status === "missing" };
 }
 
@@ -277,15 +278,16 @@ async function finishCandidate(candidate, decision, { project, sessionId, agentI
  * etapa de promoción y no deben ser reiniciadas por una re-auditoría.
  * @param {Object} args
  */
-async function persistCandidate(candidate, decision, { project, sessionId, agentId, sourceMessageIds }) {
+async function persistCandidate(candidate, decision, { project, sessionId, agentId, owner, sourceMessageIds }) {
   const sql = `
     INSERT INTO memory_candidates (
-      id, project, session_id, agent_id, type, title, topic_key, what, why,
+      id, project, owner, session_id, agent_id, type, title, topic_key, what, why,
       where_context, learned, importance, status, source_message_ids,
       engram_id, engram_topic_key, audited_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
     ON CONFLICT (id) DO UPDATE SET
       project = EXCLUDED.project,
+      owner = EXCLUDED.owner,
       session_id = EXCLUDED.session_id,
       agent_id = EXCLUDED.agent_id,
       type = EXCLUDED.type,
@@ -299,10 +301,12 @@ async function persistCandidate(candidate, decision, { project, sessionId, agent
       status = EXCLUDED.status,
       source_message_ids = EXCLUDED.source_message_ids,
       audited_at = EXCLUDED.audited_at
+    WHERE memory_candidates.owner = EXCLUDED.owner
   `;
   await db.runAsync(sql, [
     decision.candidateId,
     project,
+    resolveWriteOwner(owner),
     sessionId,
     agentId || null,
     candidate.type,
