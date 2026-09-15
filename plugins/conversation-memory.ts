@@ -294,19 +294,23 @@ export const ConversationMemory: Plugin = async ({ client, project, directory })
         log(client, "info", `Guardados ${savedCount} mensaje(s) de la sesión ${sessionID}`, {
           project: projectName,
         })
+        return true
       }
+      return false
     } catch (error) {
       log(client, "error", "Error al guardar la sesión en conversation-memory", {
         sessionID,
         error: error instanceof Error ? error.message : String(error),
       })
+      return false
     }
   }
 
   return {
     event: async ({ event }) => {
       if (event.type === "session.idle") {
-        await savePending(event.properties.sessionID)
+        const sessionID = event.properties.sessionID
+        await savePending(sessionID)
       }
     },
     "tool.execute.before": async (input, output) => {

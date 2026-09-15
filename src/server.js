@@ -33,9 +33,11 @@ async function startServer() {
       console.log("Embedding worker disabled. Set ENABLE_EMBEDDING_WORKER=true to enable it.");
     }
 
-    console.time("Starting session monitor");
-    startSessionMonitor();
-    console.timeEnd("Starting session monitor");
+    if (process.env.ENABLE_SESSION_MONITOR === "true") {
+      console.time("Starting session monitor");
+      startSessionMonitor();
+      console.timeEnd("Starting session monitor");
+    }
   });
 }
 

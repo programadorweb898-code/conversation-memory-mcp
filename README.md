@@ -56,6 +56,16 @@ DATABASE_URL=postgresql://neondb_owner:tu_clave@ep-tu-proyecto-region.aws.neon.t
 
 **No compartas este archivo ni lo subas a git.** Contiene las credenciales de tu base.
 
+Además de `DATABASE_URL`, el `.env` admite variables **opcionales** (explicadas en `.env.example`):
+
+| Variable | Uso | Default |
+|---|---|---|
+| `OPENROUTER_API_KEY` | LLM para memoria durable (extracción/auditoría/resúmenes), usando Nemotron 120B. Sin ninguna key, la auditoría degrada a heurísticas. | — |
+| `AI_MODEL` | Forzar otro modelo (ej. `AI_MODEL=nvidia/nemotron-3-super-120b-a12b:free` para la variante gratuita con tope de ~50 req/día). | `nvidia/nemotron-3-super-120b-a12b` (paga) |
+| `AI_PROVIDER` | Forzar proveedor: `openrouter` o `gemini` (sin él se autodetecta por las keys presentes). | autodetección |
+| `GEMINI_API_KEY` | Proveedor alternativo de LLM (Gemini). | — |
+| `ENABLE_EMBEDDING_WORKER` | Poner en `false` desactiva el worker de embeddings en modo stdio. | habilitado |
+
 ### 3. Ejecutar
 
 ```bash
@@ -249,6 +259,22 @@ La cadena de conexión NO va en la configuración de opencode: va en el archivo 
 
 Reiniciá opencode. El plugin usa el MCP local `conversation-memory-local`, que conecta a tu base a través del `.env` del repo.
 
+### Guardado automático y finalización a pedido
+
+El plugin solo guarda el **historial crudo** automáticamente: cuando la sesión queda idle y hubo mensajes nuevos, persiste el par usuario/assistant en Neon (y sus embeddings). No genera resúmenes por su cuenta ni escribe en Engram.
+
+La **finalización de sesión es a pedido explícito del usuario** ("finalizá la sesión", "seguimos mañana", "después nos vemos", etc.):
+
+1. El agente obtiene el `sessionId` (si no lo tiene, con `lastSession`) y llama `finalizeSession`.
+2. `finalizeSession` genera un resumen **incremental**: solo resume los mensajes posteriores al último resumido (usa `last_processed_seq_id`), así que basta con pedirlo una vez aunque la sesión venga de un reinicio sin finalizar.
+
+El resumen usa el LLM configurado (por defecto Nemotron 120B vía OpenRouter; con `AI_MODEL=...:free`, la variante gratuita de ~50 req/día).
+
+La memoria durable (Engram) **ya no se alimenta automáticamente**: `extractMemories`, `memoryAudit` y `memoryPromote` quedan como **herramientas manuales**, y qué conocimiento durable entra a Engram lo decide el agente (`mem_save`) y lo adjudica Engram (`mem_judge`).
+
+> [!NOTE]
+> El monitor de sesiones inactivas (solo modo HTTP) está desactivado por defecto; para reactivarlo, `ENABLE_SESSION_MONITOR=true`.
+
 ## Misma memoria en otro dispositivo
 
 Como los datos viven en tu base de Neon, configurar otro dispositivo con **la misma `DATABASE_URL`** hace que ambos compartan el mismo historial:
@@ -397,6 +423,8 @@ También están disponibles herramientas para administrar el ciclo de vida de la
 
 Todas las operaciones relacionadas con datos utilizan `project` para mantener el aislamiento.
 
+La finalización (`finalizeSession`) se ejecuta **a pedido del usuario**, no automáticamente.
+
 ---
 
 # Embeddings
@@ -496,6 +524,9 @@ El flujo puede ser:
               ▼                 │
            Engram ◄─────────────┘
 ```
+
+> [!NOTE]
+> Este flujo ya **no se ejecuta automáticamente**: `extractMemories`, `memoryAudit` y `memoryPromote` son herramientas manuales. En el funcionamiento por defecto, el agente decide con `mem_save` qué conocimiento durable entra a Engram, y Engram adjudica duplicados/conflictos con `mem_judge`.
 
 Esto permite mantener una separación clara:
 

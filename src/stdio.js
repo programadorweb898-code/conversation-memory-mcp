@@ -2,6 +2,7 @@ const dotenv = require("dotenv");
 const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
 const { createMcpServer } = require("./createMcpServer");
 const { runMigrations } = require("../scripts/migrate");
+const { startWorker, stopWorker } = require("./services/embeddingWorker");
 
 dotenv.config();
 
@@ -24,7 +25,17 @@ async function startStdioServer() {
   const transport = new StdioServerTransport();
 
   await server.connect(transport);
+
+  // En modo stdio el worker de embeddings no corría (solo estaba en server.js con
+  // ENABLE_EMBEDDING_WORKER=true). Ahora arranca por defecto para que la búsqueda
+  // semántica tenga vectores; se desactiva explícitamente con ENABLE_EMBEDDING_WORKER=false.
+  if (process.env.ENABLE_EMBEDDING_WORKER !== "false") {
+    startWorker();
+  }
 }
+
+process.on("SIGINT", () => stopWorker());
+process.on("SIGTERM", () => stopWorker());
 
 if (require.main === module) {
   startStdioServer().catch((error) => {

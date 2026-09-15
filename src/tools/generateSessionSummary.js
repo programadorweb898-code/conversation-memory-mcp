@@ -1,25 +1,11 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-
-// Inicializar Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const { generateText } = require("../services/llmClient");
 
 /**
  * Genera un resumen incremental de una sesión utilizando LLM.
+ * Sin proveedor configurado o ante error, cae a un resumen local estructurado.
  */
 async function generateSessionSummary({ sessionId, previousSummary, newMessages }) {
   if (!newMessages || newMessages.length === 0) return previousSummary;
-
-  if (!process.env.GEMINI_API_KEY) {
-    const fallbackSummary = {
-      goal: "Resumen generado localmente por fallback",
-      discoveries: ["Se recibió una conversación nueva para resumir."],
-      accomplished: ["Se conservó el resumen previo si existía."],
-      next_steps: []
-    };
-    return JSON.stringify(fallbackSummary);
-  }
-
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
   const transcript = newMessages
     .map((row) => `[${new Date(row.timestamp).toLocaleTimeString()}] ${row.role.toUpperCase()}: ${row.content}`)
@@ -59,8 +45,8 @@ async function generateSessionSummary({ sessionId, previousSummary, newMessages 
   `;
 
   try {
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    const text = await generateText(prompt);
+    if (!text) throw new Error("No hay proveedor de LLM configurado.");
     // Clean potential markdown formatting
     const jsonString = text.replace(/```json\n?|\n?```/g, '').trim();
     // Validate parsing

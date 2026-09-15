@@ -1,5 +1,5 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
 const recoverSession = require("./recoverSession");
+const { generateText } = require("../services/llmClient");
 
 const MEMORY_TYPES = ["decision", "discovery", "constraint", "configuration", "lesson"];
 
@@ -21,10 +21,9 @@ const MAX_TEXT_FIELD_LENGTH = 2000;
 // están presentes deben ser strings razonables.
 const OPTIONAL_TEXT_FIELDS = ["why", "whereContext", "learned"];
 
-// El modelo es fijo, pero el cliente Gemini se resuelve dinámicamente en cada
-// llamada (lee GEMINI_API_KEY en el momento), igual que memoryAudit. Así una
-// key/configuración nueva se toma sin reiniciar el proceso.
-const EXTRACT_MODEL = "gemini-2.5-flash-lite";
+// El modelo lo resuelve llmClient (por defecto Nemotron 120B vía OpenRouter),
+// pero el proveedor se resuelve dinámicamente en cada llamada (lee la API key
+// en el momento), así una key/configuración nueva se toma sin reiniciar el proceso.
 
 /**
  * Recupera una sesión completa, la analiza con un LLM y prepara una lista de
@@ -84,14 +83,6 @@ async function extractMemories({ sessionId, project, agentId, owner }) {
  * @returns {Promise<Array>} - Lista de candidatos.
  */
 async function extractCandidates(messages) {
-  // Gemini se obtiene dinámicamente: la API key se lee al momento de la llamada
-  // (no al cargar el módulo) para soportar configuración tardía o rotación.
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return [];
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: EXTRACT_MODEL });
-
   const transcript = messages
     .map((row) => `[msg ${row.id}] ${row.role.toUpperCase()}: ${row.content}`)
     .join("\n");
@@ -150,8 +141,8 @@ async function extractCandidates(messages) {
   `;
 
   try {
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    const text = await generateText(prompt);
+    if (!text) return [];
     const jsonString = text.replace(/```json\n?|\n?```/g, "").trim();
     const parsed = JSON.parse(jsonString);
     const rawCandidates = Array.isArray(parsed.candidates) ? parsed.candidates : [];

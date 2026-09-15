@@ -4,10 +4,10 @@
 // heurístico) y persiste el resultado en Neon (memory_candidates).
 // NO promueve memorias a Engram: eso es responsabilidad de memoryPromote.
 const crypto = require("crypto");
-const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { db } = require("../database");
 const { resolveWriteOwner } = require("../context");
 const extractMemories = require("./extractMemories");
+const { generateText } = require("../services/llmClient");
 const memoryAdapterService = require("../services/memoryAdapter");
 const {
   decideHeuristically,
@@ -18,7 +18,6 @@ const {
 // Estados que el LLM puede decidir directamente (nunca pending/discard).
 const LLM_STATUSES = new Set(["missing", "already_exists", "related", "possible_duplicate", "conflict"]);
 
-const AUDIT_MODEL = "gemini-2.5-flash-lite";
 const SEARCH_LIMIT = 5;
 
 /**
@@ -172,13 +171,10 @@ async function auditCandidate({ candidate, extraction, adapter, providerStatus, 
  * @returns {Promise<Object>} Decisión { status, reason, relatedMemories }.
  */
 async function decideCandidate({ candidate, related, project }) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (apiKey) {
-    try {
-      return await llmVerdict({ candidate, related, project, apiKey });
-    } catch (err) {
-      console.error("Error en la decisión LLM de auditoría:", err.message);
-    }
+  try {
+    return await llmVerdict({ candidate, related });
+  } catch (err) {
+    console.error("Error en la decisión LLM de auditoría:", err.message);
   }
   return heuristicVerdict(candidate, related);
 }
@@ -204,10 +200,7 @@ function heuristicVerdict(candidate, related) {
  * @param {Object} params
  * @returns {Promise<Object>}
  */
-async function llmVerdict({ candidate, related, project, apiKey }) {
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: AUDIT_MODEL });
-
+async function llmVerdict({ candidate, related }) {
   const relatedText = related.length > 0
     ? related.map((m) => `- [${m.id}] (${m.type || "unknown"}) "${m.title}"\n  ${m.content || ""}`).join("\n")
     : "No hay memorias existentes relacionadas.";
@@ -240,8 +233,8 @@ async function llmVerdict({ candidate, related, project, apiKey }) {
     ${JSON.stringify(candidate, null, 2)}
   `;
 
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
+  const text = await generateText(prompt);
+  if (!text) return heuristicVerdict(candidate, related);
   const jsonString = text.replace(/```json\n?|\n?```/g, "").trim();
   const parsed = JSON.parse(jsonString);
 
