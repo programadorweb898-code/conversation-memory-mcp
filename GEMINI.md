@@ -63,11 +63,12 @@ No instales librerías, no ejecutes archivos ni ejecutes tests automáticamente,
 Al iniciar cualquier sesión o ante cualquier consulta sobre eventos pasados, seguiré este protocolo:
 
 1. **Uso del MCP:** Para consultar el pasado, utilizaré las herramientas de `conversation-memory-mcp`.
-2. **Intento inicial:** Consultar `getLastSessionContext` para obtener el contexto de la última sesión. Si responde a la pregunta, finaliza aquí.
-3. **Búsqueda escalonada:** Si el contexto es insuficiente, utilizar `searchMessages` o `semanticSearchMessages` en el historial persistente.
-4. **Fallback estratégico:** Si el historial persistente es inaccesible o no contiene la información necesaria y Engram está disponible, consultar Engram (`mem_context`, `mem_search`) como fuente secundaria.
+2. **Preguntas generales:** Para consultas como "¿qué hicimos ayer?", buscaré primero sesiones y resúmenes relevantes con `searchSessionsBySummary`. Si existe un resumen adecuado, lo utilizaré como contexto principal y no volveré a resumir todos los turnos.
+3. **Preguntas específicas:** Si la consulta requiere precisión sobre un hecho concreto, utilizaré `searchMessages` o `semanticSearchMessages` para recuperar los mensajes originales relevantes, aunque exista un resumen.
+4. **Sin resumen:** Si no existe un resumen adecuado, recuperaré los mensajes originales necesarios y generaré la respuesta en el momento.
+5. **Fallback estratégico:** Si el historial persistente es inaccesible o no contiene la información necesaria y Engram está disponible, consultaré Engram (`mem_context`, `mem_search`) como fuente secundaria.
 
-Esto garantiza que el contexto sea relevante para la consulta actual, explorando más allá de la última sesión cuando sea necesario.
+`conversation-memory-mcp` proporciona el contexto persistente; la respuesta final la genera el agente. No crearé un nuevo resumen persistente únicamente por responder una pregunta histórica.
 
 ### Reglas de Interacción y Búsqueda
 
@@ -97,6 +98,7 @@ Al finalizar una sesión, después de llamar a `finalizeSession`, comprobar si E
 
 - Si Engram no está instalado, configurado o disponible, no ejecutar la auditoría de Engram.
 - Si Engram está disponible y `finalizeSession` devuelve `auditRequired: true`, llamar a `memoryAudit` para la sesión actual.
+- Si `finalizeSession` devuelve `auditRequired: false` porque el resumen no pudo generarse por falta de LLM, no ejecutar la auditoría automática en ese momento.
 - No llamar primero a `extractMemories`: `memoryAudit` ya realiza esa extracción internamente.
 
 `memoryAudit` audita la sesión contra las memorias durables existentes y **no modifica Engram por sí mismo**. El agente debe interpretar el resultado y utilizar las tools de Engram disponibles:
@@ -119,10 +121,13 @@ El sistema cuenta con:
 
 - **Persistencia de Historial Crudo:** almacenamiento de mensajes y sesiones en PostgreSQL (Neon).
 - **Gestión de Sesiones:** recuperación de sesiones completas y contexto de la última sesión.
+- **Resúmenes incrementales:** `finalizeSession` resume solo los mensajes posteriores al último `last_processed_seq_id`.
+- **Recuperación eficiente:** para preguntas generales sobre sesiones anteriores se priorizan resúmenes existentes; para preguntas específicas se recuperan mensajes originales relevantes.
 - **Búsqueda:** búsqueda por palabras clave y búsqueda semántica.
 - **Memoria durable opcional:** integración con Engram mediante un adapter y herramientas de auditoría/promoción.
 - **Persistencia Proactiva:** mecanismos para guardar historial de conversación.
 - **Aislamiento por proyecto:** las llamadas al MCP deben incluir siempre `project`.
+- **LLM configurable:** OpenRouter usa Nemotron 120B gratuito como modelo predeterminado; el usuario puede cambiar `AI_MODEL` o `AI_PROVIDER`.
 
 ## Reglas de desarrollo
 
