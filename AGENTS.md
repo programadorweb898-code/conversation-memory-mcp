@@ -6,6 +6,17 @@ Cuando uses `conversation-memory-mcp`, mantené el aislamiento por proyecto y ut
 
 Los turnos sustanciosos deben persistirse mediante `saveMessage` siguiendo las reglas documentadas en el README.
 
+## Recuperación de conversaciones anteriores
+
+Cuando el usuario pregunte por una sesión o período anterior:
+
+- Para preguntas generales como "¿qué hicimos ayer?", buscá primero sesiones y resúmenes relevantes con `searchSessionsBySummary` cuando existan.
+- Si existe un resumen adecuado, utilizalo como contexto principal. No vuelvas a resumir todos los turnos de esa sesión solo para responder la pregunta.
+- Para preguntas específicas que requieren precisión, utilizá `searchMessages` o `semanticSearchMessages` para recuperar los mensajes originales relevantes, aunque exista un resumen.
+- Si no existe un resumen adecuado, recuperá los mensajes originales necesarios y generá la respuesta en el momento.
+- `conversation-memory-mcp` proporciona el contexto persistente; la respuesta final la genera el agente.
+- No crees un nuevo resumen persistente únicamente por responder una pregunta histórica. Los resúmenes persistentes se generan mediante `finalizeSession`.
+
 ## Auditoría automática de Engram al finalizar una sesión
 
 Al finalizar una sesión, después de llamar a `finalizeSession`, verificá si Engram está disponible en el proyecto.
@@ -13,6 +24,7 @@ Al finalizar una sesión, después de llamar a `finalizeSession`, verificá si E
 - Si Engram **no está instalado, configurado o disponible**, no ejecutes la auditoría de Engram y continuá normalmente.
 - Si Engram **sí está disponible** y `finalizeSession` indica que hay una auditoría pendiente (`auditRequired: true`), llamá a `memoryAudit` para la sesión actual.
 - No es necesario llamar primero a `extractMemories`: `memoryAudit` realiza la extracción de candidatos internamente.
+- Si `finalizeSession` devuelve `auditRequired: false` porque el resumen no pudo generarse por falta de LLM, no ejecutes la auditoría automática en ese momento.
 
 ### Qué hacer con el resultado de `memoryAudit`
 
