@@ -60,11 +60,39 @@ Además de `DATABASE_URL`, el `.env` admite variables **opcionales** (explicadas
 
 | Variable | Uso | Default |
 |---|---|---|
-| `OPENROUTER_API_KEY` | LLM para memoria durable (extracción/auditoría/resúmenes), usando Nemotron 120B. Sin ninguna key, la auditoría degrada a heurísticas. | — |
-| `AI_MODEL` | Forzar otro modelo (ej. `AI_MODEL=nvidia/nemotron-3-super-120b-a12b:free` para la variante gratuita con tope de ~50 req/día). | `nvidia/nemotron-3-super-120b-a12b` (paga) |
+| `OPENROUTER_API_KEY` | Proveedor LLM usado por defecto cuando está configurado. Se utiliza para resúmenes de sesión y tareas de memoria que requieren LLM. | — |
+| `AI_MODEL` | Permite elegir el modelo. Con OpenRouter, si se omite, se usa Nemotron 120B gratuito. | `nvidia/nemotron-3-super-120b-a12b:free` |
 | `AI_PROVIDER` | Forzar proveedor: `openrouter` o `gemini` (sin él se autodetecta por las keys presentes). | autodetección |
 | `GEMINI_API_KEY` | Proveedor alternativo de LLM (Gemini). | — |
 | `ENABLE_EMBEDDING_WORKER` | Poner en `false` desactiva el worker de embeddings en modo stdio. | habilitado |
+
+### Modelo LLM predeterminado
+
+El proveedor OpenRouter utiliza por defecto:
+
+```text
+nvidia/nemotron-3-super-120b-a12b:free
+```
+
+Es la variante gratuita de Nemotron y está sujeta al límite y disponibilidad establecidos por OpenRouter (actualmente alrededor de **50 solicitudes por día por cuenta/modelo**, según la cuota vigente del proveedor).
+
+**El límite pertenece al proveedor, no a `conversation-memory-mcp`.** Si querés evitar ese límite o preferís otro modelo, podés cambiarlo mediante `AI_MODEL` sin modificar el código.
+
+Ejemplo:
+
+```bash
+AI_MODEL=otro-modelo-compatible
+```
+
+También podés seleccionar otro proveedor:
+
+```bash
+AI_PROVIDER=gemini
+GEMINI_API_KEY=tu_clave
+AI_MODEL=gemini-2.5-flash-lite
+```
+
+El LLM se utiliza para tareas que necesitan generación o análisis, principalmente **resúmenes de sesión, extracción de memorias y auditoría**. El almacenamiento y recuperación normal del historial no depende de un LLM.
 
 ### 3. Ejecutar
 
@@ -93,7 +121,7 @@ Agregá el MCP a la configuración de tu agente (por ejemplo, opencode):
 }
 ```
 
-Y recordá instructar al agente para que incluya `project` en cada llamada al MCP (ver [Configuración obligatoria para agentes](#configuración-obligatoria-para-agentes)).
+Y recordá instruir al agente para que incluya `project` en cada llamada al MCP (ver [Configuración obligatoria para agentes](#configuración-obligatoria-para-agentes)).
 
 ### 5. ¿Por qué es privado?
 
@@ -142,7 +170,7 @@ Contiene el nombre del servidor de Neon, el nombre de usuario y la contraseña. 
 #### Un consejo para no romper el aislamiento
 
 - **Compartí la cadena solo con quien quieras que vea tus datos** (por ejemplo: tu otro dispositivo o un asistente de confianza).
-- **Nunca la pegues en un chat, un ticket, una captura o un repositorio público.** Si se filtra, alguien podría conectarse a tu base. En ese caso, creá una nueva base en Neon y cambiá la cadena en todos tus dispositivos.
+- **Nunca la pegues en un chat, un ticket, una captura o un repositorio público.** Si se filtra, creá una nueva base en Neon y cambiá la cadena en todos tus dispositivos.
 
 ---
 
@@ -169,6 +197,65 @@ Esto evita mezclar accidentalmente conversaciones de proyectos diferentes.
 Ejemplo de instrucción para un agente:
 
 > "Cuando necesites información histórica de este proyecto, utiliza las herramientas del MCP `conversation-memory`. Incluye siempre el parámetro `project` en las llamadas para mantener el aislamiento de datos."
+
+---
+
+# Cómo recupera conversaciones y resúmenes anteriores
+
+`conversation-memory-mcp` conserva tanto los **mensajes originales** como los **resúmenes de sesión**. El agente no debería volver a resumir todos los turnos cada vez que necesita recordar algo.
+
+### Preguntas generales sobre una sesión o un período
+
+Si existe un resumen de la sesión correspondiente, el agente debe utilizarlo primero.
+
+Por ejemplo:
+
+> "¿Qué hicimos ayer?"
+
+El flujo recomendado es:
+
+```text
+Pregunta histórica
+      ↓
+Buscar sesiones/resúmenes relevantes
+      ↓
+¿Existe resumen?
+   ┌──┴──┐
+  Sí     No
+   ↓      ↓
+Usarlo  Buscar mensajes originales
+   └──┬──┘
+      ↓
+    Agente
+      ↓
+Respuesta
+```
+
+Esto evita enviar nuevamente todos los turnos al LLM solo para reconstruir una sesión que ya tiene un resumen persistente.
+
+### Preguntas específicas
+
+Cuando la pregunta requiere precisión sobre algo concreto, el agente puede buscar los **mensajes originales relevantes** aunque exista un resumen.
+
+Por ejemplo:
+
+> "¿Qué error encontramos ayer con `memoryAudit`?"
+
+En ese caso, puede utilizar `searchMessages` o `semanticSearchMessages` para recuperar el contexto específico.
+
+### Si no existe un resumen
+
+Si una sesión todavía no tiene resumen, el agente puede recuperar sus mensajes originales y construir la respuesta a partir de ellos. Esto **no crea automáticamente un nuevo resumen persistente**: el resumen se genera mediante `finalizeSession` cuando corresponde.
+
+### Principio
+
+```text
+Resumen existente → usarlo primero para preguntas generales
+Mensajes originales → usar cuando hace falta precisión
+Sin resumen → recuperar mensajes y responder con ese contexto
+```
+
+La respuesta la genera el **agente en el momento**. `conversation-memory-mcp` proporciona el contexto persistente; no reemplaza al modelo que responde al usuario.
 
 ---
 
@@ -266,11 +353,29 @@ El plugin solo guarda el **historial crudo** automáticamente: cuando la sesión
 La **finalización de sesión es a pedido explícito del usuario** ("finalizá la sesión", "seguimos mañana", "después nos vemos", etc.):
 
 1. El agente obtiene el `sessionId` (si no lo tiene, con `lastSession`) y llama `finalizeSession`.
-2. `finalizeSession` genera un resumen **incremental**: solo resume los mensajes posteriores al último resumido (usa `last_processed_seq_id`), así que basta con pedirlo una vez aunque la sesión venga de un reinicio sin finalizar.
+2. `finalizeSession` genera un resumen **incremental**: solo resume los mensajes posteriores al último resumido (usa `last_processed_seq_id`). Por eso, cuando ya existe un resumen, no vuelve a procesar toda la sesión.
+3. Si el LLM está disponible, se guarda el nuevo resumen y `auditRequired` queda en `true` para que el agente pueda ejecutar la auditoría de Engram si Engram está disponible.
+4. Si el LLM **no está disponible o falla**, la sesión y sus mensajes igualmente quedan guardados, pero no se genera un resumen artificial, no se ejecuta la auditoría automática de Engram y los mensajes quedan pendientes para poder resumirse más adelante cuando vuelva a estar disponible un LLM.
 
-El resumen usa el LLM configurado (por defecto Nemotron 120B vía OpenRouter; con `AI_MODEL=...:free`, la variante gratuita de ~50 req/día).
+El resumen usa el LLM configurado. En OpenRouter, el modelo predeterminado es **Nemotron 120B gratuito** (`nvidia/nemotron-3-super-120b-a12b:free`), sujeto a la cuota y disponibilidad del proveedor. Podés cambiarlo con `AI_MODEL` o cambiar de proveedor con `AI_PROVIDER`.
 
-La memoria durable (Engram) **ya no se alimenta automáticamente**: `extractMemories`, `memoryAudit` y `memoryPromote` quedan como **herramientas manuales**, y qué conocimiento durable entra a Engram lo decide el agente (`mem_save`) y lo adjudica Engram (`mem_judge`).
+### Auditoría automática de Engram al finalizar
+
+Si Engram está instalado, configurado y disponible para el agente, y `finalizeSession` devuelve `auditRequired: true`, el agente debe llamar a `memoryAudit` para la sesión actual.
+
+`memoryAudit` no modifica Engram por sí mismo. El agente interpreta el resultado y utiliza las tools reales de Engram cuando corresponda:
+
+- `missing` → `mem_save` si representa conocimiento durable importante.
+- `already_exists` → no crear duplicados.
+- `related` → `mem_save` solo si aporta conocimiento durable nuevo y relevante.
+- `possible_duplicate` → resolver con las capacidades disponibles de Engram, sin guardar duplicados a ciegas.
+- `conflict` → utilizar `mem_judge` antes de modificar la memoria.
+- Si una decisión o configuración durable existente cambió de forma relevante → utilizar la tool de actualización disponible, por ejemplo `mem_update`.
+
+No es necesario llamar primero a `extractMemories`: `memoryAudit` realiza esa extracción internamente.
+
+> [!NOTE]
+> La auditoría automática depende de que exista un LLM disponible para finalizar la sesión. Si `finalizeSession` no puede generar el resumen por falta de LLM, `auditRequired` es `false` y la auditoría automática no se aplica en ese momento.
 
 > [!NOTE]
 > El monitor de sesiones inactivas (solo modo HTTP) está desactivado por defecto; para reactivarlo, `ENABLE_SESSION_MONITOR=true`.
@@ -338,7 +443,7 @@ Realiza búsquedas semánticas utilizando embeddings y pgvector.
 
 ### `searchSessionsBySummary`
 
-Busca sesiones mediante sus resúmenes semánticos y permite recuperar el historial correspondiente.
+Busca sesiones mediante sus resúmenes semánticos y permite recuperar el historial correspondiente. Es especialmente útil para preguntas generales sobre sesiones anteriores cuando ya existe un resumen.
 
 ### `lastSession`
 
@@ -396,6 +501,8 @@ El auditado se persiste en PostgreSQL.
 
 `memoryAudit` **no escribe directamente en Engram**.
 
+En el flujo automático de finalización, se ejecuta cuando el resumen se pudo generar, Engram está disponible y el agente recibe `auditRequired: true`.
+
 ---
 
 ## `memoryPromote`
@@ -423,7 +530,11 @@ También están disponibles herramientas para administrar el ciclo de vida de la
 
 Todas las operaciones relacionadas con datos utilizan `project` para mantener el aislamiento.
 
-La finalización (`finalizeSession`) se ejecuta **a pedido del usuario**, no automáticamente.
+La finalización (`finalizeSession`) se ejecuta **a pedido del usuario**, no automáticamente en el modo stdio habitual.
+
+El resumen es **incremental**: si ya existe un resumen, solo se procesan los mensajes posteriores a `last_processed_seq_id`.
+
+Si el LLM no está disponible, `finalizeSession` no genera un resumen artificial ni avanza el cursor de mensajes resumidos. De esa forma, el contenido queda pendiente y puede procesarse cuando vuelva a estar disponible un LLM.
 
 ---
 
@@ -498,35 +609,38 @@ En otras palabras:
 
 ### Juntos
 
-El flujo puede ser:
+El flujo de finalización puede ser:
 
 ```text
-                    AGENTE
-                       │
-                       ▼
-             conversation-memory-mcp
-                       │
-              Historial completo
-                       │
-                       ▼
-              extractMemories
-                       │
-                       ▼
-                memoryAudit
-                       │
-              ┌────────┴────────┐
-              │                 │
-          No existe         Ya existe /
-              │              relacionado
-              ▼                 │
-       memoryPromote            │
-              │                 │
-              ▼                 │
-           Engram ◄─────────────┘
+Sesión actual
+     │
+     ▼
+finalizeSession
+     │
+     ├── LLM no disponible → resumen pendiente, sin auditoría
+     │
+     └── resumen generado
+              │
+              ▼
+     Engram disponible?
+              │
+              ▼
+        memoryAudit
+              │
+       ┌──────┼─────────┐
+       │      │         │
+    missing conflict related/existing
+       │      │         │
+       ▼      ▼         ▼
+  mem_save  mem_judge  decidir si mem_save
+       │      │         │
+       └──────┴─────────┘
+              │
+              ▼
+        Engram durable
 ```
 
-> [!NOTE]
-> Este flujo ya **no se ejecuta automáticamente**: `extractMemories`, `memoryAudit` y `memoryPromote` son herramientas manuales. En el funcionamiento por defecto, el agente decide con `mem_save` qué conocimiento durable entra a Engram, y Engram adjudica duplicados/conflictos con `mem_judge`.
+La auditoría no convierte automáticamente cada conversación en memoria durable. El agente interpreta los resultados y utiliza las herramientas propias de Engram (`mem_save`, `mem_update`, `mem_judge`, cuando estén disponibles) para decidir qué conocimiento debe persistir.
 
 Esto permite mantener una separación clara:
 
@@ -562,7 +676,6 @@ Usuario
 Agente
    │
    ├── saveMessage()
-   │
    ├── saveMessage()
    │
    ▼
@@ -572,41 +685,60 @@ conversation-memory-mcp
 PostgreSQL + pgvector
 ```
 
-Más adelante, el agente necesita recuperar información:
+Al finalizar una sesión:
 
 ```text
 Agente
    │
    ▼
-searchMessages()
+finalizeSession()
    │
-   ▼
-Historial persistente
+   ├── LLM disponible
+   │      ↓
+   │   resumen incremental
+   │      ↓
+   │   auditRequired=true
+   │      ↓
+   │   memoryAudit()
+   │      ↓
+   │   Agente + tools de Engram
+   │
+   └── LLM no disponible
+          ↓
+       resumen pendiente
+          ↓
+       auditRequired=false
 ```
 
-Si durante una sesión se descubre una decisión técnica importante:
+Más adelante, si el agente necesita recuperar información:
 
 ```text
-Conversación
-     │
-     ▼
-extractMemories
-     │
-     ▼
-memoryAudit
-     │
-     ├── duplicado / existente
-     │
-     └── nueva memoria
-              │
-              ▼
-       memoryPromote
-              │
-              ▼
-           Engram
+Pregunta general sobre una sesión anterior
+        │
+        ▼
+searchSessionsBySummary()
+        │
+        ├── hay resumen → usar resumen
+        │
+        └── no hay resumen → buscar mensajes
 ```
 
-Así, el historial completo permanece disponible en `conversation-memory-mcp`, mientras que el conocimiento técnico seleccionado puede convertirse en memoria durable.
+Si necesita precisión sobre un hecho concreto:
+
+```text
+Pregunta específica
+        │
+        ▼
+searchMessages() / semanticSearchMessages()
+        │
+        ▼
+Mensajes relevantes
+        │
+        ▼
+Agente
+```
+
+Así, el historial completo permanece disponible en `conversation-memory-mcp`, mientras que los resúmenes evitan reprocesar innecesariamente sesiones completas y el conocimiento técnico seleccionado puede convertirse en memoria durable mediante Engram.
 
 ---
 
@@ -630,7 +762,7 @@ Si no se pasa `--owner`, se usa `MCP_DEFAULT_OWNER`.
 
 ### Aislamiento por usuario (`owner`)
 
-Cada API key pertenece a un **owner**. Todos los datos quedan asociados al `owner` del token que los escribió. Un usuario solo puede leer/escribir sus propios datos dentro del proyecto que su token autoriza.
+Cada API key pertenece a un **owner**. Todos los datos quedan asociados al **owner del token** que los escribió. Un usuario solo puede leer/escribir sus propios datos dentro del proyecto que su token autoriza.
 
 ```text
 Token master (MCP_BEARER_TOKEN)  → owner = null  → acceso ADMIN a todo
