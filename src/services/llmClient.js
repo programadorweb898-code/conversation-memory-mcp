@@ -6,9 +6,8 @@
 //
 // Proveedores soportados (se resuelven en cada llamada):
 //   - "openrouter": API compatible con OpenAI. Modelo por defecto:
-//     nvidia/nemotron-3-super-120b-a12b (Nemotron 120B, versión paga; cuesta
-//     ~$0.08/M input y ~$0.45/M output). La variante ":free" existe pero tiene
-//     tope de ~50 req/día; se elige con AI_MODEL si se prefiere.
+//     nvidia/nemotron-3-super-120b-a12b:free (Nemotron 120B, variante gratuita
+//     sujeta al límite y disponibilidad establecidos por OpenRouter).
 //   - "gemini": SDK @google/generative-ai. Modelo por defecto:
 //     gemini-2.5-flash-lite.
 //
@@ -16,14 +15,12 @@
 //   - AI_PROVIDER=openrouter|gemini fuerza uno.
 //   - Sin AI_PROVIDER, se autodetecta: si hay OPENROUTER_API_KEY usamos
 //     OpenRouter; si no, si hay GEMINI_API_KEY usamos Gemini; si no hay
-//     ninguna, generateText devuelve null (y cada tool cae a su fallback).
+//     ninguna, generateText devuelve null.
 
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const GEMINI_DEFAULT_MODEL = "gemini-2.5-flash-lite";
-// Versión paga de Nemotron 120B: sin tope diario de requsts. La variante ":free"
-// (agregar ":free" al slug) es gratuita pero limitada a ~50 req/día por cuenta.
-const OPENROUTER_DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b";
+const OPENROUTER_DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 function detectProvider() {
@@ -74,8 +71,7 @@ async function generateWithOpenRouter(prompt) {
 
 /**
  * Devuelve el texto plano generado por el LLM para un prompt, o null si no hay
- * proveedor configurado (las tools usan su fallback local en ese caso).
- * Las API keys se leen en el momento de la llamada (no al cargar el módulo).
+ * proveedor configurado. Las API keys se leen en el momento de la llamada.
  * @param {string} prompt - Prompt completo para el modelo.
  * @returns {Promise<string|null>}
  */

@@ -1,8 +1,9 @@
-const { generateText } = require("../services/llmClient");
+const llmClient = require("../services/llmClient");
 
 /**
  * Genera un resumen incremental de una sesión utilizando LLM.
- * Sin proveedor configurado o ante error, cae a un resumen local estructurado.
+ * Si no hay proveedor configurado o el LLM falla, devuelve null para que
+ * finalizeSession no marque los mensajes como resumidos.
  */
 async function generateSessionSummary({ sessionId, previousSummary, newMessages }) {
   if (!newMessages || newMessages.length === 0) return previousSummary;
@@ -11,10 +12,9 @@ async function generateSessionSummary({ sessionId, previousSummary, newMessages 
     .map((row) => `[${new Date(row.timestamp).toLocaleTimeString()}] ${row.role.toUpperCase()}: ${row.content}`)
     .join("\n");
 
-  // Attempt to parse previousSummary to JSON, or use a default structure if invalid
   let previousJson;
   try {
-    previousJson = typeof previousSummary === 'string' ? JSON.parse(previousSummary) : previousSummary;
+    previousJson = typeof previousSummary === "string" ? JSON.parse(previousSummary) : previousSummary;
   } catch {
     previousJson = { goal: "", discoveries: [], accomplished: [], next_steps: [] };
   }
@@ -45,23 +45,15 @@ async function generateSessionSummary({ sessionId, previousSummary, newMessages 
   `;
 
   try {
-    const text = await generateText(prompt);
-    if (!text) throw new Error("No hay proveedor de LLM configurado.");
-    // Clean potential markdown formatting
+    const text = await llmClient.generateText(prompt);
+    if (!text) return null;
+
     const jsonString = text.replace(/```json\n?|\n?```/g, '').trim();
-    // Validate parsing
     JSON.parse(jsonString);
     return jsonString;
   } catch (err) {
     console.error("Error generating incremental summary with LLM:", err.message);
-    // Fallback: si falla el LLM, devolvemos un resumen estructurado local
-    const fallbackSummary = {
-      goal: previousJson?.goal || "Resumen de sesión",
-      discoveries: previousJson?.discoveries || ["Se recibió una conversación nueva para resumir."],
-      accomplished: previousJson?.accomplished || ["Se conservó el resumen previo si existía."],
-      next_steps: []
-    };
-    return JSON.stringify(fallbackSummary);
+    return null;
   }
 }
 

@@ -41,8 +41,8 @@ describe('requireBearerToken', () => {
     this.timeout(20000);
     process.env.MCP_BEARER_TOKEN = 'secret';
 
-    const scoped = await createApiKey({ name: 'test-scoped', project: 'proyecto-test' });
-    const toRevoke = await createApiKey({ name: 'test-to-revoke', project: 'proyecto-test' });
+    const scoped = await createApiKey({ name: 'test-scoped', project: 'proyecto-test', owner: 'test-scoped' });
+    const toRevoke = await createApiKey({ name: 'test-to-revoke', project: 'proyecto-test', owner: 'test-to-revoke' });
 
     await db.runAsync(`UPDATE api_keys SET token_hash = $1 WHERE id = $2`, [hashToken(SCOPED_TOKEN), scoped.key.id]);
     await db.runAsync(`UPDATE api_keys SET token_hash = $1 WHERE id = $2`, [hashToken(REVOKE_TOKEN), toRevoke.key.id]);

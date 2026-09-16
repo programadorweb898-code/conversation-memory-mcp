@@ -1,7 +1,18 @@
 /*
-  NOTA: Este test requiere que la variable de entorno GEMINI_API_KEY esté configurada para interactuar con la API de Gemini y generar los resúmenes.
+  Los tests de resumen usan un stub determinista del cliente LLM.
+  No requieren una API key ni acceso a un proveedor externo.
 */
 const { expect } = require('chai');
+const sinon = require('sinon');
+const llmClient = require('../src/services/llmClient');
+
+const summaryFixture = JSON.stringify({
+  goal: 'Generar un resumen de la conversación.',
+  discoveries: ['La conversación contiene mensajes de prueba.'],
+  accomplished: ['Se generó un resumen válido.'],
+  next_steps: ['Continuar con la siguiente tarea.'],
+});
+
 const finalizeSession = require("../src/tools/finalizeSession");
 const getSessionSummary = require("../src/tools/getSessionSummary");
 const saveMessage = require("../src/tools/saveMessage");
@@ -14,6 +25,10 @@ describe('Session Summaries Tool', () => {
   const testMessage3 = { sessionId: testSessionId, project: "test", role: "user", content: "Necesito un resumen de esta conversación." };
 
   beforeEach(async () => {
+    // Otros suites llaman sinon.restore() en sus afterEach globales. Por eso el
+    // stub debe crearse antes de cada test de este suite, no al cargar el archivo.
+    sinon.stub(llmClient, 'generateText').resolves(summaryFixture);
+
     try {
       await db.runAsync(`DELETE FROM conversations WHERE session_id = $1`, [testSessionId]);
       await db.runAsync(`DELETE FROM session_summaries WHERE session_id = $1`, [testSessionId]);
@@ -32,6 +47,8 @@ describe('Session Summaries Tool', () => {
       await db.runAsync(`DELETE FROM session_summaries WHERE session_id = $1`, [testSessionId]);
     } catch (err) {
       console.error("Error en limpieza final de test-summaries:", err.message);
+    } finally {
+      sinon.restore();
     }
   }).timeout(30000);
 

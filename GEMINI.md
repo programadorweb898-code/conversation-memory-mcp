@@ -1,4 +1,4 @@
-Conversation Memory MCP Project
+# Conversation Memory MCP Project
 
 You are helping build a production-ready MCP server called "conversation-memory-mcp".
 
@@ -22,7 +22,7 @@ The system must allow future agents to answer questions such as:
 - "Recover the previous session."
 - "Find conversations related to Stripe."
 
-Technical Requirements
+## Technical Requirements
 
 Stack:
 
@@ -31,7 +31,7 @@ Stack:
 - MCP SDK
 - UUID
 - Zod
-- Optional future vector search support
+- Optional vector search support
 
 Architecture:
 
@@ -50,42 +50,86 @@ conversation-memory-mcp/
 │   │   └── deleteSession.js
 │   └── services/
 ├── tests/
-
 └── package.json
 
-Development Rules
+## Development Rules
+
 Responde siempre en español.
 
-No instales librerias, no ejecutes archivos  ni ejecutes test automaticamente, solo dame los comandos para ejecutarlos manualmente.
+No instales librerías, no ejecutes archivos ni ejecutes tests automáticamente, solo dame los comandos para ejecutarlos manualmente.
 
 ### Regla de Orientación al Inicio (Obligatorio)
-Al iniciar cualquier sesión o ante cualquier consulta sobre eventos pasados, seguiré este protocolo estrictamente:
 
-1. **Uso Exclusivo de MCP:** Para consultar el pasado, utilizaré ÚNICAMENTE las herramientas del MCP `conversation-memory-mcp`. Está TERMINANTEMENTE PROHIBIDO leer archivos del proyecto, ejecutar scripts o buscar en el sistema de archivos para obtener información sobre conversaciones previas.
-2. **Intento Inicial (Postgres - Resumen):** Consultar `getLastSessionContext` para obtener el resumen de la última sesión. Si este resumen responde a la pregunta, finaliza aquí.
-3. **Búsqueda Inteligente Escalonada (Postgres - Historial Completo):** Si el resumen es insuficiente, realizaré búsquedas (`searchMessages` o `semanticSearchMessages`) en todo el historial crudo.
-4. **Fallback Estratégico (Engram):** Si Postgres es inaccesible o no contiene información, consultar Engram (`mem_context`, `mem_search`) como fuente secundaria.
+Al iniciar cualquier sesión o ante cualquier consulta sobre eventos pasados, seguiré este protocolo:
 
-Esto garantiza que el contexto sea siempre relevante para la consulta actual, explorando más allá de la última sesión si es necesario.
+1. **Uso del MCP:** Para consultar el pasado, utilizaré las herramientas de `conversation-memory-mcp`.
+2. **Preguntas generales:** Para consultas como "¿qué hicimos ayer?", buscaré primero sesiones y resúmenes relevantes con `searchSessionsBySummary`. Si existe un resumen adecuado, lo utilizaré como contexto principal y no volveré a resumir todos los turnos.
+3. **Preguntas específicas:** Si la consulta requiere precisión sobre un hecho concreto, utilizaré `searchMessages` o `semanticSearchMessages` para recuperar los mensajes originales relevantes, aunque exista un resumen.
+4. **Sin resumen:** Si no existe un resumen adecuado, recuperaré los mensajes originales necesarios y generaré la respuesta en el momento.
+5. **Fallback estratégico:** Si el historial persistente es inaccesible o no contiene la información necesaria y Engram está disponible, consultaré Engram (`mem_context`, `mem_search`) como fuente secundaria.
+
+`conversation-memory-mcp` proporciona el contexto persistente; la respuesta final la genera el agente. No crearé un nuevo resumen persistente únicamente por responder una pregunta histórica.
 
 ### Reglas de Interacción y Búsqueda
-- **Protocolo de Inicialización:** Seguir el escalonamiento (Resumen -> Historial -> Engram) al iniciar la sesión para obtener contexto.
-- **Protocolo de Búsqueda Fallida:** Si el usuario consulta sobre algo del pasado y, tras realizar la búsqueda escalonada, la información no se encuentra, el asistente DEBE responder explícitamente: "Eso no lo hablamos", seguido de la respuesta basada en conocimiento general o razonamiento actual.
-- **Consulta de Recursos:** Siempre que el usuario pregunte algo sobre el pasado, usá la base de datos para obtener recursos, hazlo exclusivamente con las herramientas del MCP `
+
+- Seguir el escalonamiento Resumen → Historial → Engram cuando corresponda.
+- Si el usuario consulta sobre algo del pasado y, tras realizar la búsqueda escalonada, la información no se encuentra, responder explícitamente: "Eso no lo hablamos", seguido de la respuesta basada en conocimiento general o razonamiento actual.
+- El usuario no debe tener que recordar guardar el historial o el conocimiento; es responsabilidad del agente.
+
+## Guardado de conversación
+
+El servidor solo persiste información recibida mediante `saveMessage`.
+
+Cuando no exista un plugin o hook que capture automáticamente los turnos:
+
+1. Guardar cada turno sustancioso del usuario con `saveMessage`.
+2. Conservar el `messageId` devuelto.
+3. Guardar la respuesta del asistente utilizando `relatedMessageId`.
+4. Mantener el mismo `sessionId` durante la sesión.
+5. Incluir siempre `project`.
+6. Identificar el agente mediante `agentId`.
+7. Omitir saludos, confirmaciones cortas y mensajes sin valor de recuperación.
+
+Si existe un plugin/hook que ya automatiza el guardado, no duplicar las llamadas manualmente.
+
+## Auditoría automática de Engram al finalizar una sesión
+
+Al finalizar una sesión, después de llamar a `finalizeSession`, comprobar si Engram está disponible en el proyecto.
+
+- Si Engram no está instalado, configurado o disponible, no ejecutar la auditoría de Engram.
+- Si Engram está disponible y `finalizeSession` devuelve `auditRequired: true`, llamar a `memoryAudit` para la sesión actual.
+- Si `finalizeSession` devuelve `auditRequired: false` porque el resumen no pudo generarse por falta de LLM, no ejecutar la auditoría automática en ese momento.
+- No llamar primero a `extractMemories`: `memoryAudit` ya realiza esa extracción internamente.
+
+`memoryAudit` audita la sesión contra las memorias durables existentes y **no modifica Engram por sí mismo**. El agente debe interpretar el resultado y utilizar las tools de Engram disponibles:
+
+- `missing`: si el conocimiento es durable, importante y todavía no existe, usar `mem_save`.
+- `already_exists`: no guardar nada para evitar duplicados.
+- `related`: guardar con `mem_save` solo si aporta conocimiento durable nuevo y relevante que no esté suficientemente cubierto.
+- `possible_duplicate`: no crear otra memoria automáticamente; resolverlo con las capacidades de Engram cuando corresponda.
+- `conflict`: utilizar `mem_judge` para resolver el conflicto antes de modificar una memoria.
+- Si una decisión, configuración o conocimiento durable existente cambió de forma relevante, utilizar la tool de actualización de Engram disponible, por ejemplo `mem_update`.
+- No promover a Engram información trivial, temporal o descartada.
+
+Engram debe seguir funcionando normalmente durante la sesión. Esta auditoría es una capa adicional al finalizar y tiene tres objetivos: detectar conocimiento importante que faltó guardar, evitar duplicados y mantener actualizadas las decisiones relevantes del proyecto.
+
+No inventar operaciones de Engram: utilizar únicamente las tools que el agente tenga realmente disponibles.
 
 ## Capacidades del Proyecto
-El sistema ya cuenta con las siguientes funcionalidades terminadas:
-- **Persistencia de Historial Crudo:** Almacenamiento completo de mensajes (user/assistant) y sesiones en PostgreSQL (Neon).
-- **Gestión de Sesiones:** Recuperación de sesiones completas y obtención del contexto de la última sesión (`getLastSessionContext`).
-- **Búsqueda:** Funcionalidad de búsqueda por palabras clave y capacidad de búsqueda semántica.
-- **Integración con Engram:** Capacidad de enviar mensajes críticos a Engram (`pushToEngram`) para memoria semántica de largo plazo.
-- **Persistencia Proactiva:** Mecanismos automáticos de guardado de mensajes (raw) y decisiones/aprendizajes (semantic/Engram).
-- **Protocolo de Fallo:** Fallback automático a Engram para recuperar contexto estratégico si la base de datos remota es inaccesible.
-    - Si la base de datos está inaccesible (error de conexión, base dormida, etc.): Responderé obligatoriamente: "No pude establecer conexión con la base de datos de historial".
-    - Si la base de datos está operativa pero vacía (sin historial): Responderé obligatoriamente: "La base de datos de historial está vacía".
 
+El sistema cuenta con:
 
-El usuario no debe tener que recordar guardar el historial o el conocimiento; es responsabilidad exclusiva del agente.
+- **Persistencia de Historial Crudo:** almacenamiento de mensajes y sesiones en PostgreSQL (Neon).
+- **Gestión de Sesiones:** recuperación de sesiones completas y contexto de la última sesión.
+- **Resúmenes incrementales:** `finalizeSession` resume solo los mensajes posteriores al último `last_processed_seq_id`.
+- **Recuperación eficiente:** para preguntas generales sobre sesiones anteriores se priorizan resúmenes existentes; para preguntas específicas se recuperan mensajes originales relevantes.
+- **Búsqueda:** búsqueda por palabras clave y búsqueda semántica.
+- **Memoria durable opcional:** integración con Engram mediante un adapter y herramientas de auditoría/promoción.
+- **Persistencia Proactiva:** mecanismos para guardar historial de conversación.
+- **Aislamiento por proyecto:** las llamadas al MCP deben incluir siempre `project`.
+- **LLM configurable:** OpenRouter usa Nemotron 120B gratuito como modelo predeterminado; el usuario puede cambiar `AI_MODEL` o `AI_PROVIDER`.
+
+## Reglas de desarrollo
 
 Work incrementally.
 
@@ -108,43 +152,6 @@ Always:
 - keep database access centralized
 - prefer maintainability over clever code
 
-Integration Workflow with Engram
+## Regla de Verificación de Estado (Obligatorio)
 
-To bridge raw conversation history with Engram's semantic memory:
-1. Use `getLastSessionContext` to get the full raw history.
-2. Use `pushToEngram` on specific `messageId`s that contain critical decisions, findings, or learned patterns.
-3. Call Engram's `mem_save` with the content retrieved from `pushToEngram` to store it semantically.
-
-Database Requirements
-
-Store:
-
-- id
-- session_id
-- timestamp
-- project
-- role
-- content
-
-Support:
-
-- save message
-- search by keyword
-- recover session
-- retrieve last session
-- push to Engram
-- get last session context
-- delete message
-- delete session
-Future Roadmap
-
-The design must allow later addition of:
-
-- embeddings
-- semantic search
-- ChromaDB or Qdrant
-- automatic session summaries
-- multi-agent memory sharing
-
-### Regla de Verificación de Estado (Obligatorio)
-Antes de declarar que una funcionalidad falta o debe ser implementada, el agente DEBE consultar Engram (`mem_context`, `mem_search`) y los resúmenes de sesión previos. La memoria de Engram es la única fuente de verdad sobre el estado real de la implementación. Nunca asumas que algo falta solo porque no aparece en una inspección de archivos superficial.
+Antes de declarar que una funcionalidad falta o debe ser implementada, el agente DEBE consultar Engram (`mem_context`, `mem_search`) y los resúmenes de sesión previos cuando estén disponibles. Nunca asumas que algo falta solo porque no aparece en una inspección de archivos superficial.
