@@ -14,6 +14,8 @@ describe('Memory Audit owner isolation E2E', function () {
   const agentId = 'owner-isolation-e2e';
   const ownerA = 'owner-a';
   const ownerB = 'owner-b';
+  const messageIdA = `${ownerA}-message`;
+  const messageIdB = `${ownerB}-message`;
 
   const candidateFor = (messageId) => ({
     type: 'decision',
@@ -27,8 +29,11 @@ describe('Memory Audit owner isolation E2E', function () {
   });
 
   let adapter;
+  let activeSourceMessageId;
 
   beforeEach(async () => {
+    activeSourceMessageId = null;
+
     sinon.stub(llmClient, 'generateText').callsFake(async (prompt) => {
       if (String(prompt).includes('JSON AUDIT')) {
         return JSON.stringify({
@@ -38,9 +43,9 @@ describe('Memory Audit owner isolation E2E', function () {
         });
       }
 
-      const match = String(prompt).match(/\[msg ([^\]]+)\]/);
-      const messageId = match ? match[1] : 'unknown';
-      return JSON.stringify({ candidates: [candidateFor(messageId)] });
+      return JSON.stringify({
+        candidates: [candidateFor(activeSourceMessageId)],
+      });
     });
 
     adapter = {
@@ -59,8 +64,7 @@ describe('Memory Audit owner isolation E2E', function () {
     };
     sinon.stub(memoryAdapterService, 'getMemoryAdapter').returns(adapter);
 
-    for (const owner of [ownerA, ownerB]) {
-      const messageId = `${owner}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    for (const [owner, messageId] of [[ownerA, messageIdA], [ownerB, messageIdB]]) {
       await db.runAsync(
         `INSERT INTO conversations (id, session_id, project, owner, role, content, timestamp)
          VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
@@ -83,7 +87,10 @@ describe('Memory Audit owner isolation E2E', function () {
   });
 
   it('crea candidatos independientes para owners distintos aunque compartan project y sessionId', async () => {
+    activeSourceMessageId = messageIdA;
     const auditA = await memoryAudit({ sessionId, project, agentId, owner: ownerA });
+
+    activeSourceMessageId = messageIdB;
     const auditB = await memoryAudit({ sessionId, project, agentId, owner: ownerB });
 
     expect(auditA.candidates).to.have.lengthOf(1);
@@ -106,8 +113,11 @@ describe('Memory Audit owner isolation E2E', function () {
   });
 
   it('mantiene idempotencia por owner y bloquea la promoción cruzada', async () => {
+    activeSourceMessageId = messageIdA;
     const auditA1 = await memoryAudit({ sessionId, project, agentId, owner: ownerA });
     const auditA2 = await memoryAudit({ sessionId, project, agentId, owner: ownerA });
+
+    activeSourceMessageId = messageIdB;
     const auditB = await memoryAudit({ sessionId, project, agentId, owner: ownerB });
 
     const candidateA = auditA1.candidates[0].candidateId;
