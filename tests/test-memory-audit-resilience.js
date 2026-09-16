@@ -72,7 +72,7 @@ describe('Memory Audit resilience', function () {
     const memoryAudit = loadMemoryAuditWithExtraction({
       sessionExists: true,
       messageCount: 1,
-      messages: [{ id: 'msg-1' }],
+      messages: [{ id: '1' }],
       candidates: [candidate()],
     });
 
@@ -100,7 +100,7 @@ describe('Memory Audit resilience', function () {
     const memoryAudit = loadMemoryAuditWithExtraction({
       sessionExists: true,
       messageCount: 1,
-      messages: [{ id: 'msg-1' }],
+      messages: [{ id: '1' }],
       candidates: [candidate()],
     });
 
@@ -122,7 +122,7 @@ describe('Memory Audit resilience', function () {
     const memoryAudit = loadMemoryAuditWithExtraction({
       sessionExists: true,
       messageCount: 1,
-      messages: [{ id: 'msg-1' }],
+      messages: [{ id: '1' }],
       candidates: [candidate()],
     });
 
