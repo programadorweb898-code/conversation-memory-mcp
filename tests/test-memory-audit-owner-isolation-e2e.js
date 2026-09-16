@@ -25,7 +25,7 @@ describe('Memory Audit owner isolation E2E', function () {
     whereContext: 'conversation-memory-mcp',
     learned: 'La persistencia queda centralizada en Neon',
     importance: 'high',
-    sourceMessageIds: [messageId],
+    sourceMessageIds: [`msg-${messageId}`],
   });
 
   let adapter;
