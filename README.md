@@ -74,9 +74,9 @@ El proveedor OpenRouter utiliza por defecto:
 nvidia/nemotron-3-super-120b-a12b:free
 ```
 
-Es la variante gratuita de Nemotron y está sujeta al límite y disponibilidad establecidos por OpenRouter (actualmente alrededor de **50 solicitudes por día por cuenta/modelo**, según la cuota vigente del proveedor).
+Es la variante gratuita de Nemotron y está sujeta a los límites y a la disponibilidad establecidos por OpenRouter. La cuota puede cambiar según las condiciones vigentes del proveedor.
 
-**El límite pertenece al proveedor, no a `conversation-memory-mcp`.** Si querés evitar ese límite o preferís otro modelo, podés cambiarlo mediante `AI_MODEL` sin modificar el código.
+**Las restricciones pertenecen al proveedor, no a `conversation-memory-mcp`.** Si querés evitar las restricciones de un modelo gratuito o preferís otro modelo, podés cambiarlo mediante `AI_MODEL` sin modificar el código.
 
 Ejemplo:
 
