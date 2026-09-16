@@ -9,6 +9,9 @@ const embeddingService = require('../src/services/embeddingService');
 
 function resetServerModule() {
   delete require.cache[require.resolve('../src/server')];
+  delete require.cache[require.resolve('../src/app')];
+  delete require.cache[require.resolve('../src/routes')];
+  delete require.cache[require.resolve('../src/createMcpServer')];
 }
 
 function listen(app) {
