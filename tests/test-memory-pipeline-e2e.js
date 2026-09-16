@@ -76,6 +76,7 @@ describe('Memory pipeline MCP E2E', function () {
     expect(audit.candidates).to.have.lengthOf(1);
     expect(audit.candidates[0].status).to.equal('missing');
     expect(audit.candidates[0].promotable).to.equal(true);
+    expect(audit.memoryProvider.provider).to.equal('engram-local');
 
     const candidateId = audit.candidates[0].candidateId;
     const promoted = parseToolResult(await client.callTool({ name: 'memoryPromote', arguments: { sessionId, project, agentId: 'e2e-agent', candidateIds: [candidateId] } }));
