@@ -48,5 +48,6 @@ jobs:
       - name: Run tests
         run: npm test
 
+      # Trigger CI again after the test-suite fixes on the feature branch.
       - name: Run lint
         run: npm run lint
