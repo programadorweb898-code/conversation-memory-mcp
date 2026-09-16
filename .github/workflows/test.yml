@@ -7,6 +7,7 @@ on:
       - feature/automatic-engram-session-audit
       - feature/memory-audit-e2e
       - feature/memory-audit-resilience-tests
+      - feature/memory-audit-engram-integration
   pull_request:
     branches:
       - main
