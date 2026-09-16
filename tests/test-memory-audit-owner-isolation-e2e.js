@@ -23,11 +23,10 @@ describe('Memory Audit owner isolation E2E', function () {
     whereContext: 'conversation-memory-mcp',
     learned: 'La persistencia queda centralizada en Neon',
     importance: 'high',
-    sourceMessageIds: [`msg-${messageId}`],
+    sourceMessageIds: [messageId],
   });
 
   let adapter;
-  let messageIds = [];
 
   beforeEach(async () => {
     sinon.stub(llmClient, 'generateText').callsFake(async (prompt) => {
@@ -62,7 +61,6 @@ describe('Memory Audit owner isolation E2E', function () {
 
     for (const owner of [ownerA, ownerB]) {
       const messageId = `${owner}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-      messageIds.push(messageId);
       await db.runAsync(
         `INSERT INTO conversations (id, session_id, project, owner, role, content, timestamp)
          VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
@@ -82,7 +80,6 @@ describe('Memory Audit owner isolation E2E', function () {
     sinon.restore();
     await db.runAsync('DELETE FROM memory_candidates WHERE session_id = $1 AND project = $2', [sessionId, project]);
     await db.runAsync('DELETE FROM conversations WHERE session_id = $1 AND project = $2', [sessionId, project]);
-    messageIds = [];
   });
 
   it('crea candidatos independientes para owners distintos aunque compartan project y sessionId', async () => {
