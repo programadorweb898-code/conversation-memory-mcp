@@ -66,13 +66,14 @@ describe('Memory Audit owner isolation E2E', function () {
 
     for (const [owner, messageId] of [[ownerA, messageIdA], [ownerB, messageIdB]]) {
       await db.runAsync(
-        `INSERT INTO conversations (id, session_id, project, owner, role, content, timestamp)
-         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+        `INSERT INTO conversations (id, session_id, project, owner, agent_id, role, content, timestamp)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
         [
           messageId,
           sessionId,
           project,
           owner,
+          agentId,
           'user',
           'Decidimos usar PostgreSQL para guardar el historial de conversaciones.',
         ]
