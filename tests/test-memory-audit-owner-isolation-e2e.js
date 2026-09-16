@@ -14,8 +14,8 @@ describe('Memory Audit owner isolation E2E', function () {
   const agentId = 'owner-isolation-e2e';
   const ownerA = 'owner-a';
   const ownerB = 'owner-b';
-  const messageIdA = `${ownerA}-message`;
-  const messageIdB = `${ownerB}-message`;
+  const messageIdA = '00000000-0000-4000-8000-00000000000a';
+  const messageIdB = '00000000-0000-4000-8000-00000000000b';
 
   const candidateFor = (messageId) => ({
     type: 'decision',
