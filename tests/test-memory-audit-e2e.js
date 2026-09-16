@@ -132,8 +132,8 @@ describe('Memory Audit MCP E2E', function () {
       },
     }));
 
-    expect(finalized.sessionId).to.equal(sessionId);
     expect(finalized.summaryGenerated).to.equal(true);
+    expect(finalized.auditRequired).to.equal(true);
 
     const audit = parseToolResult(await client.callTool({
       name: 'memoryAudit',
