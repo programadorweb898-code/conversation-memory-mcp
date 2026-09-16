@@ -2,10 +2,15 @@ const { expect } = require('chai');
 const sinon = require('sinon');
 const { Client } = require('@modelcontextprotocol/sdk/client/index.js');
 const { InMemoryTransport } = require('@modelcontextprotocol/sdk/inMemory.js');
-const { createMcpServer } = require('../src/createMcpServer');
 const llmClient = require('../src/services/llmClient');
 const memoryAdapterService = require('../src/services/memoryAdapter');
 const { db } = require('./test-helper');
+
+function resetMemoryAuditModules() {
+  delete require.cache[require.resolve('../src/createMcpServer')];
+  delete require.cache[require.resolve('../src/mcpTools')];
+  delete require.cache[require.resolve('../src/tools/memoryAudit')];
+}
 
 function parseToolResult(result) {
   const text = result?.content?.find((item) => item.type === 'text')?.text;
@@ -24,15 +29,7 @@ describe('Memory Audit MCP E2E', function () {
   const project = `e2e-memory-audit-${Date.now()}`;
 
   beforeEach(async () => {
-    server = createMcpServer();
-    client = new Client({ name: 'memory-audit-e2e-test', version: '1.0.0' });
-
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    await Promise.all([
-      server.connect(serverTransport),
-      client.connect(clientTransport),
-    ]);
-
+    resetMemoryAuditModules();
     sinon.stub(llmClient, 'generateText').callsFake(async (prompt) => {
       if (String(prompt).includes('JSON AUDIT')) {
         return JSON.stringify({
@@ -65,11 +62,26 @@ describe('Memory Audit MCP E2E', function () {
     };
     sinon.stub(memoryAdapterService, 'getMemoryAdapter').returns(adapter);
 
+    const { createMcpServer } = require('../src/createMcpServer');
+    server = createMcpServer();
+    client = new Client({ name: 'memory-audit-e2e-test', version: '1.0.0' });
+
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([
+      server.connect(serverTransport),
+      client.connect(clientTransport),
+    ]);
+
     sessionId = `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   });
 
   afterEach(async () => {
-    sinon.restore();
+    try {
+      if (client) await client.close();
+    } finally {
+      if (server) await server.close();
+      sinon.restore();
+    }
 
     if (sessionId) {
       await db.runAsync('DELETE FROM memory_candidates WHERE session_id = $1', [sessionId]);
@@ -82,12 +94,6 @@ describe('Memory Audit MCP E2E', function () {
         [sessionId]
       );
       await db.runAsync('DELETE FROM conversations WHERE session_id = $1', [sessionId]);
-    }
-
-    try {
-      await client.close();
-    } finally {
-      await server.close();
     }
   });
 
