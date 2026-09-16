@@ -122,3 +122,58 @@ describe('requireBearerToken', () => {
     expect(next.calledOnce).to.be.true;
     expect(req.body.params.arguments.project).to.equal('proyecto-test');
   });
+
+  it('should allow a tools/call when project matches the token', async () => {
+    const body = toolCall({ project: 'proyecto-test', searchTerm: 'hola' });
+    const req = mockReq({ authorization: `Bearer ${SCOPED_TOKEN}`, body, method: 'POST' });
+    const res = mockRes();
+    const next = sinon.stub();
+
+    await requireBearerToken(req, res, next);
+
+    expect(next.calledOnce).to.be.true;
+    expect(req.body.params.arguments.project).to.equal('proyecto-test');
+  });
+
+  it('should reject a tools/call with a different project (403)', async () => {
+    const body = toolCall({ project: 'otro-proyecto' });
+    const req = mockReq({ authorization: `Bearer ${SCOPED_TOKEN}`, body, method: 'POST' });
+    const res = mockRes();
+    const next = sinon.stub();
+
+    await requireBearerToken(req, res, next);
+
+    expect(res.status.calledWith(403)).to.be.true;
+    expect(next.called).to.be.false;
+  });
+
+  it('should not alter non-tool-call messages for a scoped token', async () => {
+    const body = {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/list',
+    };
+    const req = mockReq({ authorization: `Bearer ${SCOPED_TOKEN}`, body, method: 'POST' });
+    const res = mockRes();
+    const next = sinon.stub();
+
+    await requireBearerToken(req, res, next);
+
+    expect(next.calledOnce).to.be.true;
+    expect(req.body.params).to.equal(undefined);
+  });
+
+  it('should reject a disabled scoped token (401)', async () => {
+    const toRevoke = await db.getAsync(`SELECT id FROM api_keys WHERE name = 'test-to-revoke'`);
+    await revokeApiKey(toRevoke.id);
+
+    const req = mockReq({ authorization: `Bearer ${REVOKE_TOKEN}` });
+    const res = mockRes();
+    const next = sinon.stub();
+
+    await requireBearerToken(req, res, next);
+
+    expect(res.status.calledWith(401)).to.be.true;
+    expect(next.called).to.be.false;
+  });
+});
