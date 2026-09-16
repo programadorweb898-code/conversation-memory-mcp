@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/automatic-engram-session-audit
+      - feature/memory-audit-e2e
   pull_request:
     branches:
       - main
@@ -48,6 +49,5 @@ jobs:
       - name: Run tests
         run: npm test
 
-      # Trigger CI again after the test-suite fixes on the feature branch.
       - name: Run lint
         run: npm run lint
