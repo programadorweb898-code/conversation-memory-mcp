@@ -13,8 +13,6 @@ const summaryFixture = JSON.stringify({
   next_steps: ['Continuar con la siguiente tarea.'],
 });
 
-const generateTextStub = sinon.stub(llmClient, 'generateText').resolves(summaryFixture);
-
 const finalizeSession = require("../src/tools/finalizeSession");
 const getSessionSummary = require("../src/tools/getSessionSummary");
 const saveMessage = require("../src/tools/saveMessage");
@@ -27,7 +25,9 @@ describe('Session Summaries Tool', () => {
   const testMessage3 = { sessionId: testSessionId, project: "test", role: "user", content: "Necesito un resumen de esta conversación." };
 
   beforeEach(async () => {
-    generateTextStub.resetHistory();
+    // Otros suites llaman sinon.restore() en sus afterEach globales. Por eso el
+    // stub debe crearse antes de cada test de este suite, no al cargar el archivo.
+    sinon.stub(llmClient, 'generateText').resolves(summaryFixture);
 
     try {
       await db.runAsync(`DELETE FROM conversations WHERE session_id = $1`, [testSessionId]);
@@ -47,12 +47,10 @@ describe('Session Summaries Tool', () => {
       await db.runAsync(`DELETE FROM session_summaries WHERE session_id = $1`, [testSessionId]);
     } catch (err) {
       console.error("Error en limpieza final de test-summaries:", err.message);
+    } finally {
+      sinon.restore();
     }
   }).timeout(30000);
-
-  after(() => {
-    generateTextStub.restore();
-  });
 
   it('debería generar y guardar un resumen de sesión correctamente', async function() {
     this.timeout(30000);
