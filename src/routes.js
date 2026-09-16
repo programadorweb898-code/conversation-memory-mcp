@@ -1,4 +1,4 @@
-const { SSEServerTransport } = require("@modelcontextprotocol/sdk/server/sse.js");
+const sseSdk = require("@modelcontextprotocol/sdk/server/sse.js");
 const { StreamableHTTPServerTransport } = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
 
 const transports = new Map();
@@ -34,7 +34,7 @@ function setupMcpRoutes(app, { createMcpServer }) {
   app.get("/sse", async (req, res) => {
     console.log("Client connecting to SSE...");
 
-    const transport = new SSEServerTransport("/messages", res);
+    const transport = new sseSdk.SSEServerTransport("/messages", res);
     const sessionId = transport.sessionId || createSessionId();
     transport.sessionId = sessionId;
     transports.set(sessionId, transport);

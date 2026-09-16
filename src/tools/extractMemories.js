@@ -1,5 +1,5 @@
 const recoverSession = require("./recoverSession");
-const { generateText } = require("../services/llmClient");
+const llmClient = require("../services/llmClient");
 
 const MEMORY_TYPES = ["decision", "discovery", "constraint", "configuration", "lesson"];
 
@@ -141,7 +141,7 @@ async function extractCandidates(messages) {
   `;
 
   try {
-    const text = await generateText(prompt);
+    const text = await llmClient.generateText(prompt);
     if (!text) return [];
     const jsonString = text.replace(/```json\n?|\n?```/g, "").trim();
     const parsed = JSON.parse(jsonString);
