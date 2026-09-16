@@ -8,6 +8,7 @@ on:
       - feature/memory-audit-e2e
       - feature/memory-audit-resilience-tests
       - feature/memory-audit-engram-integration
+      - feature/memory-audit-decision-states
   pull_request:
     branches:
       - main
