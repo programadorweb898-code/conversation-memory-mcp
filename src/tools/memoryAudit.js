@@ -15,23 +15,19 @@ const {
   isValidStatus,
 } = require("../services/memoryAuditEngine");
 
-// Estados que el LLM puede decidir directamente (nunca pending/discard).
 const LLM_STATUSES = new Set(["missing", "already_exists", "related", "possible_duplicate", "conflict"]);
-
 const SEARCH_LIMIT = 5;
 
 /**
  * Calcula un id estable para un candidato, permitiendo re-auditar la misma
- * sesión sin duplicar filas (idempotencia).
- * @param {Object} params
- * @param {string} params.project
- * @param {string} params.sessionId
- * @param {Object} params.candidate
- * @returns {string} Hash sha256 truncado.
+ * sesión sin duplicar filas. El owner forma parte de la identidad para evitar
+ * colisiones entre tenants que compartan project/sessionId.
  */
-function computeCandidateId({ project, sessionId, candidate }) {
+function computeCandidateId({ project, sessionId, candidate, owner }) {
+  const writeOwner = resolveWriteOwner(owner);
   const key = [
     project,
+    writeOwner,
     sessionId,
     String(candidate.type || "").toLowerCase(),
     String(candidate.title || "").toLowerCase().trim(),
@@ -39,31 +35,17 @@ function computeCandidateId({ project, sessionId, candidate }) {
   return crypto.createHash("sha256").update(key).digest("hex").slice(0, 32);
 }
 
-/**
- * Texto de búsqueda para contrastar un candidato contra el proveedor.
- * @param {Object} candidate
- * @returns {string}
- */
 function candidateSearchQuery(candidate) {
   return [candidate.title, candidate.what, candidate.whereContext, candidate.learned]
     .filter(Boolean)
     .join(" ");
 }
 
-/**
- * Audita los candidatos de una sesión contra el proveedor de memoria.
- * @param {Object} params
- * @param {string} params.sessionId - ID de la sesión a auditar.
- * @param {string} params.project - Proyecto (obligatorio).
- * @param {string} [params.agentId] - Filtro de agente.
- * @returns {Promise<Object>} Resultado de la auditoría.
- */
 async function memoryAudit({ sessionId, project, agentId, owner }) {
   if (!project) throw new Error("El parámetro 'project' es obligatorio.");
 
   const extraction = await extractMemories({ sessionId, project, agentId, owner });
 
-  // Sesión inexistente: respuesta controlada, sin auditar ni consultar el proveedor.
   if (!extraction.sessionExists) {
     return {
       sessionId,
@@ -94,6 +76,7 @@ async function memoryAudit({ sessionId, project, agentId, owner }) {
       project,
       sessionId,
       agentId,
+      owner,
     });
     candidates.push(audited);
   }
@@ -109,13 +92,8 @@ async function memoryAudit({ sessionId, project, agentId, owner }) {
   };
 }
 
-/**
- * Audita un candidato individual: trazabilidad, contraste y persistencia.
- * @param {Object} params
- * @returns {Promise<Object>} Decisión { candidateId, status, reason, relatedMemories, promotable }.
- */
 async function auditCandidate({ candidate, extraction, adapter, providerStatus, project, sessionId, agentId, owner }) {
-  const candidateId = computeCandidateId({ project, sessionId, candidate });
+  const candidateId = computeCandidateId({ project, sessionId, candidate, owner });
 
   const origin = verifySourceMessages({ candidate, messages: extraction.messages });
   if (!origin.valid) {
@@ -127,7 +105,6 @@ async function auditCandidate({ candidate, extraction, adapter, providerStatus, 
     }, { project, sessionId, agentId, owner, sourceMessageIds: [] });
   }
 
-  // Proveedor no disponible: no se puede contrastar, queda pendiente.
   if (!providerStatus.available) {
     const why = providerStatus.error ? providerStatus.error : "proveedor no disponible";
     return finishCandidate(candidate, {
@@ -163,13 +140,6 @@ async function auditCandidate({ candidate, extraction, adapter, providerStatus, 
   }, { project, sessionId, agentId, owner, sourceMessageIds: origin.traceableIds });
 }
 
-/**
- * Decide el estado de un candidato: LLM si hay API key en el momento de la
- * llamada (testeable), si no, heurística determinista. El paso LLM no es
- * obligatorio: sin API key la auditoría sigue funcionando con la heurística.
- * @param {Object} params
- * @returns {Promise<Object>} Decisión { status, reason, relatedMemories }.
- */
 async function decideCandidate({ candidate, related, project }) {
   try {
     return await llmVerdict({ candidate, related });
@@ -179,12 +149,6 @@ async function decideCandidate({ candidate, related, project }) {
   return heuristicVerdict(candidate, related);
 }
 
-/**
- * Veredicto por heurística pura (fallback determinista).
- * @param {Object} candidate
- * @param {Array} related
- * @returns {Object}
- */
 function heuristicVerdict(candidate, related) {
   const decision = decideHeuristically(candidate, related);
   return {
@@ -194,12 +158,6 @@ function heuristicVerdict(candidate, related) {
   };
 }
 
-/**
- * Veredicto por LLM. Se degrada a heurística si el LLM no devuelve un estado
- * válido (evita que una respuesta corrupta rompa la auditoría).
- * @param {Object} params
- * @returns {Promise<Object>}
- */
 async function llmVerdict({ candidate, related }) {
   const relatedText = related.length > 0
     ? related.map((m) => `- [${m.id}] (${m.type || "unknown"}) "${m.title}"\n  ${m.content || ""}`).join("\n")
@@ -252,25 +210,11 @@ async function llmVerdict({ candidate, related }) {
   };
 }
 
-/**
- * Persiste el resultado en Neon (upsert idempotente por candidateId) y devuelve
- * la decisión final agregando "promotable".
- * @param {Object} candidate - Candidato original.
- * @param {Object} decision - { candidateId, status, reason, relatedMemories }.
- * @param {Object} meta - { project, sessionId, agentId, owner, sourceMessageIds }.
- * @returns {Promise<Object>} Decisión final.
- */
 async function finishCandidate(candidate, decision, { project, sessionId, agentId, owner, sourceMessageIds }) {
   await persistCandidate(candidate, decision, { project, sessionId, agentId, owner, sourceMessageIds });
   return { ...decision, promotable: decision.status === "missing" };
 }
 
-/**
- * Upsert en memory_candidates. En el conflicto nunca toca engram_id,
- * engram_topic_key, promoted_at ni created_at: esas columnas pertenecen a la
- * etapa de promoción y no deben ser reiniciadas por una re-auditoría.
- * @param {Object} args
- */
 async function persistCandidate(candidate, decision, { project, sessionId, agentId, owner, sourceMessageIds }) {
   const sql = `
     INSERT INTO memory_candidates (
@@ -304,7 +248,7 @@ async function persistCandidate(candidate, decision, { project, sessionId, agent
     agentId || null,
     candidate.type,
     candidate.title,
-    null, // topic_key: se completa en la promoción
+    null,
     candidate.what || null,
     candidate.why || null,
     candidate.whereContext || null,
@@ -312,8 +256,8 @@ async function persistCandidate(candidate, decision, { project, sessionId, agent
     candidate.importance || null,
     decision.status,
     JSON.stringify(sourceMessageIds || []),
-    null, // engram_id: se completa en la promoción
-    null, // engram_topic_key: se completa en la promoción
+    null,
+    null,
     new Date().toISOString(),
   ]);
 }
