@@ -1,4 +1,4 @@
-const { generateText } = require("../services/llmClient");
+const llmClient = require("../services/llmClient");
 
 /**
  * Genera un resumen incremental de una sesión utilizando LLM.
@@ -45,7 +45,7 @@ async function generateSessionSummary({ sessionId, previousSummary, newMessages 
   `;
 
   try {
-    const text = await generateText(prompt);
+    const text = await llmClient.generateText(prompt);
     if (!text) return null;
 
     const jsonString = text.replace(/```json\n?|\n?```/g, '').trim();
