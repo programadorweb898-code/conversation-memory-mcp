@@ -137,13 +137,40 @@ describe('Memory Audit -> Engram promotion contract', function () {
 
   it('already_exists -> no promotion is attempted', async () => {
     const sessionId = await seed();
-    adapter.searchRelated.resolves([{
-      id: 'engram-existing',
-      topicKey: 'decisions/postgres',
-      type: 'decision',
-      title: 'usar postgres para el historial',
-      content: 'PostgreSQL para persistir el historial',
-    }]);
+
+    sinon.restore();
+    resetMemoryModules();
+
+    sinon.stub(llmClient, 'generateText').callsFake(async (prompt) => {
+      if (String(prompt).includes('JSON AUDIT')) {
+        return JSON.stringify({
+          status: 'already_exists',
+          reason: 'Ya existe una memoria durable equivalente.',
+          relatedMemoryIds: ['engram-existing'],
+        });
+      }
+
+      return JSON.stringify({
+        candidates: [{ ...candidate, sourceMessageIds: [sourceMessageId] }],
+      });
+    });
+
+    adapter = {
+      provider: 'engram-local',
+      getStatus: sinon.stub().resolves({ available: true, provider: 'engram-local', version: 'integration-test' }),
+      searchRelated: sinon.stub().resolves([{
+        id: 'engram-existing',
+        topicKey: 'decisions/postgres',
+        type: 'decision',
+        title: 'usar postgres para el historial',
+        content: 'PostgreSQL para persistir el historial',
+      }]),
+      promote: sinon.stub().resolves({ success: true, memoryId: 'engram-should-not-exist' }),
+    };
+    sinon.stub(memoryAdapterService, 'getMemoryAdapter').returns(adapter);
+
+    memoryAudit = require('../src/tools/memoryAudit');
+    memoryPromote = require('../src/tools/memoryPromote');
 
     const audit = await memoryAudit({ sessionId, project: 'integration-test' });
 
