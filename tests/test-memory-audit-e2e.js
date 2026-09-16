@@ -19,6 +19,8 @@ describe('Memory Audit MCP E2E', function () {
   let client;
   let server;
   let sessionId;
+  let adapter;
+  let sourceMessageId;
   const project = `e2e-memory-audit-${Date.now()}`;
 
   beforeEach(async () => {
@@ -50,17 +52,18 @@ describe('Memory Audit MCP E2E', function () {
             whereContext: 'conversation-memory-mcp',
             learned: '',
             importance: 'high',
-            sourceMessageIds: [],
+            sourceMessageIds: sourceMessageId ? [sourceMessageId] : [],
           },
         ],
       });
     });
 
-    sinon.stub(memoryAdapterService, 'getMemoryAdapter').returns({
+    adapter = {
       provider: 'engram-local',
       getStatus: sinon.stub().resolves({ available: true, provider: 'engram-local', version: 'e2e-test' }),
       searchRelated: sinon.stub().resolves([]),
-    });
+    };
+    sinon.stub(memoryAdapterService, 'getMemoryAdapter').returns(adapter);
 
     sessionId = `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   });
@@ -102,6 +105,8 @@ describe('Memory Audit MCP E2E', function () {
 
     const userMessageText = userMessage?.content?.find((item) => item.type === 'text')?.text || '';
     expect(userMessageText).to.include('Mensaje guardado correctamente');
+    sourceMessageId = userMessageText.match(/ID:\s*(\S+)/)?.[1];
+    expect(sourceMessageId).to.be.a('string');
 
     const assistantMessage = await client.callTool({
       name: 'saveMessage',
@@ -111,6 +116,7 @@ describe('Memory Audit MCP E2E', function () {
         role: 'assistant',
         content: 'Queda registrado como decisión técnica del proyecto.',
         agentId: 'e2e-agent',
+        relatedMessageId: sourceMessageId,
       },
     });
 
@@ -144,6 +150,7 @@ describe('Memory Audit MCP E2E', function () {
     expect(audit.candidates).to.have.lengthOf(1);
     expect(audit.candidates[0].status).to.equal('missing');
     expect(audit.candidates[0].promotable).to.equal(true);
-    expect(memoryAdapterService.getMemoryAdapter().searchRelated.called).to.equal(true);
+    expect(audit.candidates[0].relatedMemories).to.deep.equal([]);
+    expect(adapter.searchRelated.calledOnce).to.equal(true);
   });
 });
