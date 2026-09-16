@@ -17,23 +17,19 @@ describe('Push To Engram Tool', () => {
     }
   });
 
-  it('debería recuperar un mensaje específico por su ID', async () => {
+  it('debería recuperar un mensaje específico y preparar una sugerencia manual', async () => {
     testSessionId = `test-session-${Date.now()}`;
     const content = "Contenido crítico";
-    
-    // Guardamos un mensaje
-    await saveMessage({ sessionId: testSessionId, project: "test", role: "user", content });
-    
-    // Obtenemos el ID del mensaje recién guardado utilizando db.getAsync
-    const message = await db.getAsync(`SELECT id FROM conversations WHERE session_id = $1`, [testSessionId]);
 
-    // Probamos la herramienta
+    await saveMessage({ sessionId: testSessionId, project: "test", role: "user", content });
+
+    const message = await db.getAsync(`SELECT id FROM conversations WHERE session_id = $1`, [testSessionId]);
     const result = await pushToEngram({ messageId: message.id, project: "test" });
-    
-    // Validamos la nueva estructura
+
     expect(result).to.have.property('message');
     expect(result).to.have.property('suggestion');
     expect(result.message.content).to.equal(content);
     expect(result.suggestion).to.have.property('title');
+    expect(result.suggestion.type).to.equal('manual');
   });
 });

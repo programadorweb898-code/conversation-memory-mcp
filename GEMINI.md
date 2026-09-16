@@ -101,15 +101,19 @@ Al finalizar una sesión, después de llamar a `finalizeSession`, comprobar si E
 - Si `finalizeSession` devuelve `auditRequired: false` porque el resumen no pudo generarse por falta de LLM, no ejecutar la auditoría automática en ese momento.
 - No llamar primero a `extractMemories`: `memoryAudit` ya realiza esa extracción internamente.
 
-`memoryAudit` audita la sesión contra las memorias durables existentes y **no modifica Engram por sí mismo**. El agente debe interpretar el resultado y utilizar las tools de Engram disponibles:
+`memoryAudit` audita la sesión contra las memorias durables existentes y **no modifica Engram por sí mismo**. Después de la auditoría, `memoryPromote` es la ruta controlada para promover candidatos con estado `missing` hacia Engram a través de `MemoryAdapter`.
 
-- `missing`: si el conocimiento es durable, importante y todavía no existe, usar `mem_save`.
+Flujo de decisión:
+
+- `missing`: si el conocimiento es durable e importante, llamar a `memoryPromote` con el candidato. No llamar directamente a `mem_save` para el mismo candidato.
 - `already_exists`: no guardar nada para evitar duplicados.
-- `related`: guardar con `mem_save` solo si aporta conocimiento durable nuevo y relevante que no esté suficientemente cubierto.
+- `related`: no promover automáticamente; si el conocimiento nuevo realmente debe persistir, utilizar las capacidades de Engram disponibles de forma consciente.
 - `possible_duplicate`: no crear otra memoria automáticamente; resolverlo con las capacidades de Engram cuando corresponda.
 - `conflict`: utilizar `mem_judge` para resolver el conflicto antes de modificar una memoria.
 - Si una decisión, configuración o conocimiento durable existente cambió de forma relevante, utilizar la tool de actualización de Engram disponible, por ejemplo `mem_update`.
 - No promover a Engram información trivial, temporal o descartada.
+
+`memoryPromote` es idempotente y controla la promoción mediante el adapter. `pushToEngram` no es una segunda vía de promoción: solamente prepara el contenido de un mensaje para una inspección o backfill manual y no escribe en Engram. Para el flujo automático/auditado, utilizar siempre `memoryAudit` → `memoryPromote`.
 
 Engram debe seguir funcionando normalmente durante la sesión. Esta auditoría es una capa adicional al finalizar y tiene tres objetivos: detectar conocimiento importante que faltó guardar, evitar duplicados y mantener actualizadas las decisiones relevantes del proyecto.
 

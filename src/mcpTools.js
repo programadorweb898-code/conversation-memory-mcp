@@ -235,7 +235,11 @@ ACCESO MULTI-AGENTE: si NO pasás agentId, listás sesiones de todos los agentes
   // 6. pushToEngram
   server.tool(
     "pushToEngram",
-    "Prepara un mensaje para ser enviado a Engram",
+    `Prepara un mensaje existente del historial para un backfill manual hacia Engram.
+Recupera el mensaje y genera una sugerencia estructurada para posible incorporación a Engram.
+NO guarda, envía ni modifica nada en Engram.
+Usá esta herramienta únicamente cuando el usuario solicite preparar una conversación o memoria histórica para posible incorporación a Engram.
+Para recuperar información del historial sin intención de guardarla, usá searchMessages, semanticSearchMessages, searchSessionsBySummary o recoverSession.`,
     {
       messageId: z.string().describe("ID del mensaje a recuperar"),
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
