@@ -13,8 +13,9 @@ async function finalizeSession({ sessionId, project, owner }) {
     [sessionId, project, owner ?? null]
   );
 
-  // 2. Obtener mensajes nuevos (delta). Si el LLM no está disponible, no se
-  // avanza last_processed_seq_id para poder resumir estos mensajes más adelante.
+  // 2. Obtener mensajes nuevos (delta). El orden por sequence_id garantiza que
+  // el último mensaje procesado sea realmente el de mayor secuencia, sin
+  // depender de timestamp ni de ctid.
   let query = `
     SELECT id, sequence_id, role, content, timestamp
     FROM conversations
@@ -27,7 +28,7 @@ async function finalizeSession({ sessionId, project, owner }) {
     params.push(existingSummary.last_processed_seq_id);
   }
 
-  query += " ORDER BY timestamp ASC, ctid ASC";
+  query += " ORDER BY sequence_id ASC";
 
   const newMessages = await db.allAsync(query, params);
 
@@ -62,7 +63,7 @@ async function finalizeSession({ sessionId, project, owner }) {
     };
   }
 
-  // 4. Guardar nuevo resumen y actualizar el ID del último mensaje procesado.
+  // 4. Guardar nuevo resumen y actualizar el ID del último mensaje.
   const lastMessageSeqId = newMessages[newMessages.length - 1].sequence_id;
 
   await saveSessionSummary({
