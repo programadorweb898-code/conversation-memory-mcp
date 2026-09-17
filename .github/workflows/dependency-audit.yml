@@ -25,4 +25,4 @@ jobs:
       - name: Run npm audit
         run: npm audit --json > npm-audit.json || true
       - name: Print audit summary
-        run: node -e "const a=require('./npm-audit.json'); console.log(JSON.stringify({metadata:a.metadata,vulnerabilities:a.vulnerabilities},null,2))"
+        run: node -e "const a=require('./npm-audit.json'); for (const [name,v] of Object.entries(a.vulnerabilities)) console.log(JSON.stringify({name,severity:v.severity,direct:v.isDirect,range:v.range,nodes:v.nodes,effects:v.effects,fixAvailable:v.fixAvailable}));"
