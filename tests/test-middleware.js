@@ -1,6 +1,6 @@
 const { expect } = require('chai');
 const sinon = require('sinon');
-const { requireBearerToken } = require('../src/middleware');
+const { requireBearerToken, requireJson } = require('../src/middleware');
 const { db } = require('../src/database');
 const {
   createApiKey,
@@ -12,11 +12,12 @@ const {
 const SCOPED_TOKEN = 'scoped-test-token-123';
 const REVOKE_TOKEN = 'revoke-test-token-456';
 
-function mockReq({ path = '/other', authorization = '', body = null, method = 'GET' } = {}) {
+function mockReq({ path = '/other', authorization = '', body = null, method = 'GET', contentType = '' } = {}) {
   return {
     path,
     method,
     body,
+    headers: { 'content-type': contentType },
     get: (h) => (h === 'authorization' ? authorization : ''),
   };
 }
@@ -174,6 +175,56 @@ describe('requireBearerToken', () => {
     await requireBearerToken(req, res, next);
 
     expect(res.status.calledWith(401)).to.be.true;
+    expect(next.called).to.be.false;
+  });
+});
+
+describe('requireJson', () => {
+  it('should allow GET, HEAD and OPTIONS without Content-Type', () => {
+    for (const method of ['GET', 'HEAD', 'OPTIONS']) {
+      const req = mockReq({ method });
+      const res = mockRes();
+      const next = sinon.stub();
+
+      requireJson(req, res, next);
+
+      expect(next.calledOnce, `${method} should call next`).to.be.true;
+      expect(res.status.called).to.be.false;
+    }
+  });
+
+  it('should reject write requests without application/json', () => {
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+      const req = mockReq({ method, contentType: 'text/plain' });
+      const res = mockRes();
+      const next = sinon.stub();
+
+      requireJson(req, res, next);
+
+      expect(res.status.calledWith(415), `${method} should return 415`).to.be.true;
+      expect(next.called).to.be.false;
+    }
+  });
+
+  it('should accept application/json with parameters', () => {
+    const req = mockReq({ method: 'POST', contentType: 'application/json; charset=utf-8' });
+    const res = mockRes();
+    const next = sinon.stub();
+
+    requireJson(req, res, next);
+
+    expect(next.calledOnce).to.be.true;
+    expect(res.status.called).to.be.false;
+  });
+
+  it('should reject an unrelated media type even when it contains json as a substring', () => {
+    const req = mockReq({ method: 'POST', contentType: 'application/not-json' });
+    const res = mockRes();
+    const next = sinon.stub();
+
+    requireJson(req, res, next);
+
+    expect(res.status.calledWith(415)).to.be.true;
     expect(next.called).to.be.false;
   });
 });
