@@ -32,7 +32,9 @@ describe('stdio server', () => {
   });
 
   it('should fail fast when DATABASE_URL is missing', async () => {
-    delete process.env.DATABASE_URL;
+    // Use an empty value instead of deleting it so dotenv.config() cannot
+    // repopulate DATABASE_URL from a local .env file when stdio.js is loaded.
+    process.env.DATABASE_URL = '';
     const exitStub = sinon.stub(process, 'exit').callsFake(() => {});
     const errorStub = sinon.stub(console, 'error');
 
@@ -51,7 +53,9 @@ describe('stdio server', () => {
     const createMcpServerStub = sinon.stub(createMcp, 'createMcpServer').returns({
       connect: sinon.stub().resolves(),
     });
-    const transport = {};
+    const transport = {
+      start: sinon.stub().resolves(),
+    };
     sinon.stub(sdk, 'StdioServerTransport').returns(transport);
     const startWorkerStub = sinon.stub(embeddingWorker, 'startWorker');
 
@@ -74,7 +78,9 @@ describe('stdio server', () => {
     sinon.stub(createMcp, 'createMcpServer').returns({
       connect: sinon.stub().resolves(),
     });
-    sinon.stub(sdk, 'StdioServerTransport').returns({});
+    sinon.stub(sdk, 'StdioServerTransport').returns({
+      start: sinon.stub().resolves(),
+    });
     const startWorkerStub = sinon.stub(embeddingWorker, 'startWorker');
 
     const { startStdioServer } = require('../src/stdio');
