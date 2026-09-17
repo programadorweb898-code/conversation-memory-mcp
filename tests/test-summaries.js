@@ -25,8 +25,6 @@ describe('Session Summaries Tool', () => {
   const testMessage3 = { sessionId: testSessionId, project: "test", role: "user", content: "Necesito un resumen de esta conversación." };
 
   beforeEach(async () => {
-    // Otros suites llaman sinon.restore() en sus afterEach globales. Por eso el
-    // stub debe crearse antes de cada test de este suite, no al cargar el archivo.
     sinon.stub(llmClient, 'generateText').resolves(summaryFixture);
 
     try {
@@ -84,5 +82,99 @@ describe('Session Summaries Tool', () => {
     expect(parsedSummary).to.have.property('discoveries');
     expect(parsedSummary).to.have.property('accomplished');
     expect(parsedSummary).to.have.property('next_steps');
+  });
+
+  it('no llama nuevamente al LLM cuando no hay mensajes nuevos', async function() {
+    await finalizeSession({ sessionId: testSessionId, project: "test" });
+    const callsAfterFirstFinalize = llmClient.generateText.callCount;
+
+    const result = await finalizeSession({ sessionId: testSessionId, project: "test" });
+
+    expect(llmClient.generateText.callCount).to.equal(callsAfterFirstFinalize);
+    expect(result.summaryGenerated).to.equal(true);
+    expect(result.auditRequired).to.equal(false);
+    expect(result.summaryPending).to.equal(false);
+  });
+
+  it('procesa solo los mensajes posteriores al cursor del resumen', async function() {
+    await finalizeSession({ sessionId: testSessionId, project: "test" });
+    const before = await db.getAsync(
+      `SELECT last_processed_seq_id FROM session_summaries WHERE session_id = $1`,
+      [testSessionId]
+    );
+
+    await saveMessage({
+      sessionId: testSessionId,
+      project: "test",
+      role: "assistant",
+      content: "Mensaje posterior al primer resumen.",
+    });
+    await finalizeSession({ sessionId: testSessionId, project: "test" });
+
+    const after = await db.getAsync(
+      `SELECT last_processed_seq_id FROM session_summaries WHERE session_id = $1`,
+      [testSessionId]
+    );
+
+    expect(Number(after.last_processed_seq_id)).to.be.greaterThan(Number(before.last_processed_seq_id));
+    expect(llmClient.generateText.callCount).to.equal(2);
+    expect(llmClient.generateText.secondCall.args[0]).to.include("Mensaje posterior al primer resumen.");
+    expect(llmClient.generateText.secondCall.args[0]).to.not.include("Hola, ¿cómo estás?");
+  });
+
+  it('mantiene el resumen y el cursor cuando el LLM no está disponible', async function() {
+    await finalizeSession({ sessionId: testSessionId, project: "test" });
+    const before = await db.getAsync(
+      `SELECT summary, last_processed_seq_id FROM session_summaries WHERE session_id = $1`,
+      [testSessionId]
+    );
+
+    await saveMessage({
+      sessionId: testSessionId,
+      project: "test",
+      role: "assistant",
+      content: "Mensaje pendiente de resumir.",
+    });
+    llmClient.generateText.rejects(new Error("LLM unavailable"));
+
+    const result = await finalizeSession({ sessionId: testSessionId, project: "test" });
+    const after = await db.getAsync(
+      `SELECT summary, last_processed_seq_id FROM session_summaries WHERE session_id = $1`,
+      [testSessionId]
+    );
+
+    expect(result.summaryGenerated).to.equal(false);
+    expect(result.summaryPending).to.equal(true);
+    expect(result.reason).to.equal("llm_unavailable");
+    expect(after.summary).to.equal(before.summary);
+    expect(Number(after.last_processed_seq_id)).to.equal(Number(before.last_processed_seq_id));
+  });
+
+  it('no expone un resumen a otro owner', async function() {
+    const ownerA = "summary-owner-a";
+    const ownerB = "summary-owner-b";
+    const sessionId = `owner-summary-${Date.now()}`;
+
+    await saveMessage({
+      sessionId,
+      project: "test",
+      owner: ownerA,
+      role: "user",
+      content: "Dato privado del owner A",
+    });
+    await db.runAsync(
+      `INSERT INTO session_summaries (session_id, project, owner, summary)
+       VALUES ($1, $2, $3, $4)`,
+      [sessionId, "test", ownerA, "Resumen privado A"]
+    );
+
+    const visibleToA = await getSessionSummary({ sessionId, project: "test", owner: ownerA });
+    const visibleToB = await getSessionSummary({ sessionId, project: "test", owner: ownerB });
+
+    expect(visibleToA.summary).to.equal("Resumen privado A");
+    expect(visibleToB).to.equal(null);
+
+    await db.runAsync(`DELETE FROM session_summaries WHERE session_id = $1`, [sessionId]);
+    await db.runAsync(`DELETE FROM conversations WHERE session_id = $1`, [sessionId]);
   });
 });
