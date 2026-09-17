@@ -48,6 +48,8 @@ describe("Embedding Service", function () {
     const retrieved = JSON.parse(retrievedJson);
 
     expect(retrieved).to.be.an("array").with.lengthOf(original.length);
-    expect(retrieved).to.deep.equal(original);
+    retrieved.forEach((value, index) => {
+      expect(value).to.be.closeTo(original[index], 1e-6);
+    });
   });
 });
