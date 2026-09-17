@@ -53,6 +53,11 @@ describe('Delete Message Tool', () => {
     const nonExistentId = uuidv4();
     await deleteMessage({ messageId: nonExistentId, project: "test-project-del" });
 
-    expect(true).to.be.true; 
+    const conversationRows = await db.allAsync(
+      `SELECT id FROM conversations WHERE project = $1`,
+      ["test-project-del"]
+    );
+    expect(conversationRows).to.have.lengthOf(1);
+    expect(conversationRows[0].id).to.equal(testMessageId);
   });
 });
