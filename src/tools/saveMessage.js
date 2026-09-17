@@ -46,12 +46,15 @@ async function saveMessage(params) {
   // proyecto/owner y las escrituras concurrentes deben observar esa identidad
   // antes de insertar. El advisory lock es a nivel de PostgreSQL/cluster, por
   // lo que también protege entre procesos o instancias que compartan la DB.
+  // Las operaciones dentro de la sección crítica usan el mismo client que
+  // mantiene la transacción y el advisory lock; esto evita agotar el pool
+  // cuando llegan muchas escrituras concurrentes.
   try {
-    await withAdvisoryLock(`session_identity:${sessionId}`, async () => {
-      const existingSessionProject = await db.getAsync(
+    await withAdvisoryLock(`session_identity:${sessionId}`, async (client) => {
+      const existingSessionProject = (await client.query(
         `SELECT project, owner FROM conversations WHERE session_id = $1 LIMIT 1`,
         [sessionId]
-      );
+      )).rows[0];
 
       if (existingSessionProject && existingSessionProject.project !== project) {
         const error = new Error(
@@ -73,7 +76,7 @@ async function saveMessage(params) {
         VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6, $7, $8)
       `;
 
-      await db.runAsync(sql, [messageId, sessionId, project ?? null, role, content, agentId ?? null, relatedMessageId ?? null, writeOwner]);
+      await client.query(sql, [messageId, sessionId, project ?? null, role, content, agentId ?? null, relatedMessageId ?? null, writeOwner]);
     });
   } catch (err) {
     console.error("Error saving message:", err.message);
