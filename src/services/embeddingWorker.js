@@ -57,7 +57,6 @@ async function processNextEmbeddingTask() {
   let batchTasks = [];
 
   try {
-
     while (batchTasks.length < batchSize) {
       const queuedTask = embeddingQueue.getNextTask();
       if (queuedTask) {
@@ -122,8 +121,6 @@ let workerInterval;
 
 function startWorker() {
   console.log("Starting embedding worker (model will load on first use)...");
-  // NO cargar el modelo aquí - lazy load cuando se procese la primera tarea
-  // Esto permite que Gemini CLI se conecte inmediatamente
   workerInterval = setInterval(processNextEmbeddingTask, workerIntervalMs);
 }
 
@@ -135,4 +132,6 @@ function stopWorker() {
 module.exports = {
   startWorker,
   stopWorker,
+  processNextEmbeddingTask,
+  recordEmbeddingFailure,
 };
