@@ -1,18 +1,17 @@
 const { expect } = require('chai');
 const deleteSession = require('../src/tools/deleteSession');
-const { db } = require('./test-helper');
+const { db } = require('../src/database');
 const { v4: uuidv4 } = require('uuid');
 const fakeEmbedding = require('./helpers/fakeEmbedding');
 
 describe('Delete Session Tool', () => {
   let testSessionId;
   let messageIds = [];
+  const project = "test-project-session";
 
   beforeEach(async () => {
     testSessionId = uuidv4();
     messageIds = [];
-    const project = "test-project-session";
-    const role = "user";
 
     const messagesToInsert = [
       { content: "Mensaje 1 de la sesión", embedding: fakeEmbedding(0.1) },
@@ -26,7 +25,7 @@ describe('Delete Session Tool', () => {
 
       await db.runAsync(
         `INSERT INTO conversations (id, session_id, project, role, content) VALUES ($1, $2, $3, $4, $5)`,
-        [messageId, testSessionId, project, role, msg.content]
+        [messageId, testSessionId, project, "user", msg.content]
       );
 
       await db.runAsync(
@@ -37,8 +36,8 @@ describe('Delete Session Tool', () => {
   });
 
   afterEach(async () => {
-    // Limpieza segura de base de datos después de cada prueba
     try {
+      await db.runAsync(`DELETE FROM memory_candidates WHERE session_id = $1`, [testSessionId]);
       await db.runAsync(`DELETE FROM message_embeddings WHERE message_id IN (SELECT id FROM conversations WHERE session_id = $1)`, [testSessionId]);
       await db.runAsync(`DELETE FROM conversations WHERE session_id = $1`, [testSessionId]);
     } catch (err) {
@@ -47,22 +46,52 @@ describe('Delete Session Tool', () => {
   });
 
   it('debería eliminar todos los mensajes y sus embeddings asociados para una sesión', async () => {
-    await deleteSession({ sessionId: testSessionId, project: "test-project-session" });
+    await deleteSession({ sessionId: testSessionId, project });
 
-    // Verificar que no hay mensajes para la sesión en conversations
     const conversationRows = await db.allAsync(`SELECT * FROM conversations WHERE session_id = $1`, [testSessionId]);
     expect(conversationRows).to.have.lengthOf(0);
 
-    // Verificar que no hay embeddings para los mensajes de la sesión
     const placeholders = messageIds.map((_, i) => `$${i + 1}`).join(',');
     const embeddingRows = await db.allAsync(`SELECT * FROM message_embeddings WHERE message_id IN (${placeholders})`, messageIds);
     expect(embeddingRows).to.have.lengthOf(0);
   });
 
+  it('debería eliminar también los candidatos de memoria de la sesión', async () => {
+    const candidateId = `candidate-delete-session-${uuidv4()}`;
+
+    await db.runAsync(
+      `INSERT INTO memory_candidates (
+        id, project, session_id, type, title, content, status, source_message_ids, audited_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)`,
+      [
+        candidateId,
+        project,
+        testSessionId,
+        'decision',
+        'Candidato de prueba',
+        'Contenido de prueba',
+        'missing',
+        JSON.stringify(messageIds),
+      ]
+    );
+
+    const beforeDelete = await db.getAsync('SELECT id FROM memory_candidates WHERE id = $1', [candidateId]);
+    expect(beforeDelete).to.not.equal(null);
+
+    await deleteSession({ sessionId: testSessionId, project });
+
+    const afterDelete = await db.getAsync('SELECT id FROM memory_candidates WHERE id = $1', [candidateId]);
+    expect(afterDelete).to.equal(null);
+  });
+
   it('debería resolver correctamente si la sesión a eliminar no existe', async () => {
     const nonExistentSessionId = uuidv4();
-    await deleteSession({ sessionId: nonExistentSessionId, project: "test-project-session" });
+    await deleteSession({ sessionId: nonExistentSessionId, project });
 
-    expect(true).to.be.true;
+    const candidates = await db.allAsync(
+      `SELECT id FROM memory_candidates WHERE session_id = $1`,
+      [nonExistentSessionId]
+    );
+    expect(candidates).to.have.lengthOf(0);
   });
 });
