@@ -76,12 +76,12 @@ describe('Delete Session Tool', () => {
     );
 
     const beforeDelete = await db.getAsync('SELECT id FROM memory_candidates WHERE id = $1', [candidateId]);
-    expect(beforeDelete).to.not.equal(null);
+    expect(beforeDelete).to.not.equal(undefined);
 
     await deleteSession({ sessionId: testSessionId, project });
 
     const afterDelete = await db.getAsync('SELECT id FROM memory_candidates WHERE id = $1', [candidateId]);
-    expect(afterDelete).to.equal(null);
+    expect(afterDelete).to.equal(undefined);
   });
 
   it('debería resolver correctamente si la sesión a eliminar no existe', async () => {
