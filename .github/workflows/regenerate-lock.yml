@@ -1,4 +1,5 @@
 name: Regenerate lockfile
+# temporary hardening workflow
 
 on:
   push:
