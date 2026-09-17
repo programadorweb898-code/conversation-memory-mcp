@@ -6,8 +6,6 @@ const memoryAudit = require('../src/tools/memoryAudit');
 const memoryAdapterService = require('../src/services/memoryAdapter');
 const { db } = require('./test-helper');
 
-const AUDIT_MARKER = 'JSON AUDIT';
-
 const originalApiKey = process.env.GEMINI_API_KEY;
 
 function candidateFor(messageId, title = 'decidimos usar postgres en neon') {
@@ -116,7 +114,7 @@ describe('Memory Audit edge cases', function () {
     const candidate = candidateFor(ids[0]);
     stubLlm([
       JSON.stringify({ candidates: [candidate] }),
-      { response: { text: () => '' } },
+      '',
     ]);
     stubAdapter([]);
 
