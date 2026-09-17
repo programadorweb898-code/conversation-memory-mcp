@@ -1,5 +1,6 @@
 const { expect } = require('chai');
 const { db } = require('./test-helper');
+const { loadMigrations } = require('../scripts/migrate');
 
 describe('Database Initialization', () => {
   it('debería inicializar correctamente', async () => {
@@ -17,6 +18,22 @@ describe('Database Initialization', () => {
     expect(agentIdColumn).to.exist;
     expect(agentIdColumn.data_type).to.equal('text');
   }).timeout(10000);
+
+  it('debería poder ejecutar dos veces la migración base sin fallar', async () => {
+    const migrations = loadMigrations();
+    const initialMigration = migrations.find((migration) => migration.version === 1);
+    expect(initialMigration).to.exist;
+
+    await db.query(initialMigration.sql);
+    await db.query(initialMigration.sql);
+
+    const migrationRecord = await db.getAsync(
+      `SELECT version, name FROM schema_migrations WHERE version = $1`,
+      [1]
+    );
+    expect(migrationRecord).to.exist;
+    expect(migrationRecord.name).to.equal(initialMigration.name);
+  }).timeout(20000);
 
   it('debería crear de forma idempotente sequence_id y last_processed_seq_id durante el bootstrap', async () => {
     const conversationsColumns = await db.allAsync(`
