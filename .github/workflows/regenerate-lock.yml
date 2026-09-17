@@ -1,16 +1,15 @@
-name: Regenerate lockfile
-# temporary hardening workflow
+name: Dependency fix diagnostic
 
 on:
-  push:
+  pull_request:
     branches:
-      - hardening-dependency-security
+      - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  lockfile:
+  audit-fix:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,16 +17,8 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - name: Apply compatible npm audit fixes
-        run: npm audit fix --package-lock-only
-      - name: Verify audit
-        run: npm audit --json > npm-audit-after.json || true
-      - name: Print audit summary
-        run: node -e "const a=require('./npm-audit-after.json'); console.log(JSON.stringify({metadata:a.metadata, vulnerabilities:Object.fromEntries(Object.entries(a.vulnerabilities||{}).map(([n,v])=>[n,{severity:v.severity,fixAvailable:v.fixAvailable}]))},null,2));"
-      - name: Commit lockfile
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json
-          git diff --cached --quiet || git commit -m "chore: apply compatible npm audit fixes"
-          git push
+      - run: npm ci
+      - name: Dry-run compatible audit fixes
+        run: npm audit fix --dry-run --json > npm-audit-fix.json || true
+      - name: Print remediation summary
+        run: node -e "const a=require('./npm-audit-fix.json'); console.log(JSON.stringify({audit:a.audit,added:a.added,removed:a.removed,updated:a.updated,moved:a.moved,failed:a.failed},null,2));"
