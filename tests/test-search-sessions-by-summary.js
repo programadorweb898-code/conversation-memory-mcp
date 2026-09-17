@@ -147,7 +147,22 @@ describe("Search Sessions By Summary", function () {
   });
 
   it("valida los parámetros obligatorios antes de consultar", async () => {
-    await expect(searchSessionsBySummary({ project, owner: ownerA })).to.be.rejectedWith("La consulta no puede estar vacía");
-    await expect(searchSessionsBySummary({ query: "hola", owner: ownerA })).to.be.rejectedWith("El parámetro 'project' es obligatorio");
+    let error;
+    try {
+      await searchSessionsBySummary({ project, owner: ownerA });
+    } catch (err) {
+      error = err;
+    }
+    expect(error).to.be.instanceOf(Error);
+    expect(error.message).to.include("La consulta no puede estar vacía");
+
+    error = undefined;
+    try {
+      await searchSessionsBySummary({ query: "hola", owner: ownerA });
+    } catch (err) {
+      error = err;
+    }
+    expect(error).to.be.instanceOf(Error);
+    expect(error.message).to.include("El parámetro 'project' es obligatorio");
   });
 });
