@@ -6,3 +6,6 @@ conversations.db
 test-output.txt
 11.16.0
 temp_check_last.js
+mocha-results.json
+test-results.json
+tmp-migrate.js
