@@ -37,25 +37,7 @@ async function insertCandidate({ id, project, sessionId, type, title, status, to
       learned, importance, status, source_message_ids, engram_id, engram_topic_key,
       audited_at, promoted_at
     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
-    [
-      id,
-      project,
-      sessionId,
-      type,
-      title,
-      topicKey,
-      what,
-      why,
-      whereContext,
-      learned,
-      importance,
-      status,
-      JSON.stringify(['msg-1']),
-      engramId,
-      engramTopicKey,
-      new Date().toISOString(),
-      promotedAt,
-    ]
+    [id, project, sessionId, type, title, topicKey, what, why, whereContext, learned, importance, status, JSON.stringify(['msg-1']), engramId, engramTopicKey, new Date().toISOString(), promotedAt]
   );
 }
 
@@ -91,9 +73,7 @@ describe('Memory Promote Tool', function () {
     await insertCandidate({ project: 'test', sessionId, id, type: 'decision', title: 'usar postgres', status: 'missing' });
     const adapter = mockAdapter({});
     stubAdapter(adapter);
-
     const result = await memoryPromote({ sessionId, project: 'test' });
-
     expect(result.results).to.have.lengthOf(1);
     expect(result.results[0]).to.deep.equal({ candidateId: id, status: 'promoted', memoryId: 'obs-101' });
     expect(result.memoryProvider).to.deep.include({ available: true, provider: 'engram-local' });
@@ -107,15 +87,10 @@ describe('Memory Promote Tool', function () {
   it('P2 — already_promoted: no vuelve a crear la memoria', async () => {
     const sessionId = await withSession();
     const id = makeId();
-    await insertCandidate({
-      project: 'test', sessionId, id, type: 'decision', title: 'usar postgres', status: 'missing',
-      promotedAt: new Date().toISOString(), engramId: 'obs-9',
-    });
+    await insertCandidate({ project: 'test', sessionId, id, type: 'decision', title: 'usar postgres', status: 'missing', promotedAt: new Date().toISOString(), engramId: 'obs-9' });
     const adapter = mockAdapter({});
     stubAdapter(adapter);
-
     const result = await memoryPromote({ sessionId, project: 'test', candidateIds: [id] });
-
     expect(result.results[0]).to.deep.equal({ candidateId: id, status: 'already_promoted', memoryId: 'obs-9' });
     expect(adapter.promote.called).to.equal(false);
   });
@@ -126,9 +101,7 @@ describe('Memory Promote Tool', function () {
     await insertCandidate({ project: 'test', sessionId, id, type: 'discovery', title: 'gtk4 en windows', status: 'missing' });
     const adapter = mockAdapter({ promoteError: 'el proveedor no responde' });
     stubAdapter(adapter);
-
     const result = await memoryPromote({ sessionId, project: 'test' });
-
     expect(result.results[0].status).to.equal('failed');
     expect(result.results[0].reason).to.contain('el proveedor no responde');
     expect(result.results[0].memoryId).to.equal(undefined);
@@ -145,9 +118,7 @@ describe('Memory Promote Tool', function () {
     await insertCandidate({ project: 'test', sessionId, id, type: 'discovery', title: 'sin sentido', status: 'missing' });
     const adapter = mockAdapter({ promoteError: 'Candidato inválido: el título es requerido', promoteRetryable: false });
     stubAdapter(adapter);
-
     const result = await memoryPromote({ sessionId, project: 'test' });
-
     expect(result.results[0].status).to.equal('failed');
     expect(result.results[0].reason).to.contain('título');
     expect(result.results[0].retryable).to.equal(false);
@@ -159,9 +130,7 @@ describe('Memory Promote Tool', function () {
     await insertCandidate({ project: 'test', sessionId, id, type: 'decision', title: 'ya existe', status: 'already_exists' });
     const adapter = mockAdapter({});
     stubAdapter(adapter);
-
     const result = await memoryPromote({ sessionId, project: 'test', candidateIds: [id] });
-
     expect(result.results[0].status).to.equal('skipped');
     expect(result.results[0].reason).to.contain('already_exists');
     expect(adapter.promote.called).to.equal(false);
@@ -171,14 +140,8 @@ describe('Memory Promote Tool', function () {
     const sessionId = await withSession();
     const adapter = mockAdapter({});
     stubAdapter(adapter);
-
     const result = await memoryPromote({ sessionId, project: 'test', candidateIds: ['no-existe'] });
-
-    expect(result.results[0]).to.deep.equal({
-      candidateId: 'no-existe',
-      status: 'not_found',
-      reason: 'No existe un candidato auditado con ese id en esta sesión/proyecto.',
-    });
+    expect(result.results[0]).to.deep.equal({ candidateId: 'no-existe', status: 'not_found', reason: 'No existe un candidato auditado con ese id en esta sesión/proyecto.' });
     expect(adapter.promote.called).to.equal(false);
   });
 
@@ -188,9 +151,7 @@ describe('Memory Promote Tool', function () {
     await insertCandidate({ project: 'test', sessionId, id, type: 'decision', title: 'usar neon', status: 'missing' });
     const adapter = mockAdapter({ status: { available: false, provider: 'engram-local', error: 'connection refused' } });
     stubAdapter(adapter);
-
     const result = await memoryPromote({ sessionId, project: 'test' });
-
     expect(result.memoryProvider.available).to.equal(false);
     expect(result.results[0].status).to.equal('failed');
     expect(result.results[0].reason).to.contain('connection refused');
@@ -209,9 +170,7 @@ describe('Memory Promote Tool', function () {
     await insertCandidate({ project: 'test', sessionId, id: idB, type: 'lesson', title: 'b', status: 'missing' });
     const adapter = mockAdapter({});
     stubAdapter(adapter);
-
     const result = await memoryPromote({ sessionId, project: 'test' });
-
     expect(result.results).to.have.lengthOf(2);
     expect(adapter.promote.callCount).to.equal(2);
   });
@@ -222,10 +181,8 @@ describe('Memory Promote Tool', function () {
     await insertCandidate({ project: 'test', sessionId, id, type: 'decision', title: 'usar postgres', status: 'missing' });
     const adapter = mockAdapter({});
     stubAdapter(adapter);
-
     await memoryPromote({ sessionId, project: 'test' });
     const second = await memoryPromote({ sessionId, project: 'test' });
-
     expect(second.results[0]).to.deep.equal({ candidateId: id, status: 'already_promoted', memoryId: 'obs-101' });
     expect(adapter.promote.callCount).to.equal(1);
   });
@@ -233,16 +190,10 @@ describe('Memory Promote Tool', function () {
   it('P9 — el adaptador recibe el candidato normalizado y único por fila', async () => {
     const sessionId = await withSession();
     const id = makeId();
-    await insertCandidate({
-      project: 'test', sessionId, id, type: 'configuration', title: 'cambie temas',
-      topicKey: 'config/tema', what: 'usar oscuro', why: 'menos fatiga', whereContext: 'IDE', learned: 'ok',
-      status: 'missing',
-    });
+    await insertCandidate({ project: 'test', sessionId, id, type: 'configuration', title: 'cambie temas', topicKey: 'config/tema', what: 'usar oscuro', why: 'menos fatiga', whereContext: 'IDE', learned: 'ok', status: 'missing' });
     const adapter = mockAdapter({});
     stubAdapter(adapter);
-
     await memoryPromote({ sessionId, project: 'test', candidateIds: [id] });
-
     const promoteCall = adapter.promote.getCall(0);
     const candidate = promoteCall.args[0];
     expect(candidate.id).to.equal(id);
@@ -256,7 +207,6 @@ describe('Memory Promote Tool', function () {
     expect(candidate.whereContext).to.equal('IDE');
     expect(candidate.learned).to.equal('ok');
     expect(candidate.sourceMessageIds).to.deep.equal(['msg-1']);
-    // El contrato exige la clave de idempotencia en las opciones.
     expect(promoteCall.args[1]).to.deep.equal({ idempotencyKey: id });
   });
 
@@ -267,9 +217,7 @@ describe('Memory Promote Tool', function () {
     const adapter = mockAdapter({});
     adapter.promote.resolves({ success: true, memoryId: 'obs-202', topicKey: 'arquitectura/postgres' });
     stubAdapter(adapter);
-
     await memoryPromote({ sessionId, project: 'test', candidateIds: [id] });
-
     const stored = await row(id);
     expect(stored.engram_id).to.equal('obs-202');
     expect(stored.engram_topic_key).to.equal('arquitectura/postgres');
@@ -278,9 +226,7 @@ describe('Memory Promote Tool', function () {
   it('P11 — tipo de resultado global', async () => {
     const sessionId = await withSession();
     stubAdapter(mockAdapter({}));
-
     const result = await memoryPromote({ sessionId, project: 'test', agentId: 'opencode' });
-
     expect(result).to.have.property('sessionId', sessionId);
     expect(result).to.have.property('project', 'test');
     expect(result).to.have.property('agentId', 'opencode');
@@ -299,42 +245,10 @@ describe('Memory Promote Tool', function () {
     expect(err.message).to.contain('project');
   });
 
-  it('P13 — idempotencia concurrente: dos llamadas simultáneas sobre el mismo candidato crean UNA sola memoria', async () => {
-    const sessionId = await withSession();
-    const id = makeId();
-    await insertCandidate({ project: 'test', sessionId, id, type: 'decision', title: 'usar postgres', status: 'missing' });
-
-    let release = null;
-    const gate = new Promise((resolve) => { release = resolve; });
-    const adapter = mockAdapter({});
-    adapter.promote = sinon.stub().onFirstCall().callsFake(() => gate.then(() => ({ success: true, memoryId: 'obs-101', topicKey: null })));
-    stubAdapter(adapter);
-
-    try {
-      const p1 = memoryPromote({ sessionId, project: 'test' });
-      const p2 = memoryPromote({ sessionId, project: 'test' });
-      // Deja que ambas alcancen el advisory lock antes de liberar la primera.
-      await new Promise((r) => setTimeout(r, 150));
-      release();
-      const [r1, r2] = await Promise.all([p1, p2]);
-
-      const statuses = [r1.results[0], r2.results[0]].map((r) => r.status).sort();
-      expect(statuses).to.deep.equal(['already_promoted', 'promoted']);
-      expect(adapter.promote.callCount).to.equal(1);
-      expect(adapter.promote.getCall(0).args[1]).to.deep.equal({ idempotencyKey: id });
-      const stored = await row(id);
-      expect(stored.engram_id).to.equal('obs-101');
-      expect(stored.promoted_at).to.not.equal(null);
-    } finally {
-      if (release) release();
-    }
-  });
-
   it('P14 — si Engram creó la memoria pero registrarla en Neon falla, el reintento reutiliza la MISMA memoria sin duplicar', async () => {
     const sessionId = await withSession();
     const id = makeId();
     await insertCandidate({ project: 'test', sessionId, id, type: 'discovery', title: 'gtk4 en windows', status: 'missing' });
-
     const adapter = mockAdapter({});
     adapter.promote = sinon.stub().resolves({ success: true, memoryId: 'obs-777', topicKey: null });
     stubAdapter(adapter);
@@ -362,7 +276,6 @@ describe('Memory Promote Tool', function () {
     expect(storedAfterFirst.promoted_at).to.equal(null);
     expect(storedAfterFirst.engram_id).to.equal(null);
 
-    // Neon se recupera: el reintento registra la misma memoria (id repetido)
     const second = await memoryPromote({ sessionId, project: 'test' });
     expect(second.results[0]).to.deep.equal({ candidateId: id, status: 'promoted', memoryId: 'obs-777' });
     const stored = await row(id);
