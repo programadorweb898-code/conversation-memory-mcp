@@ -78,7 +78,7 @@ describe("Embedding Worker", function () {
       "SELECT attempts FROM embedding_failures WHERE message_id = $1",
       [messageId]
     );
-    expect(failure).to.equal(null);
+    expect(failure).to.equal(undefined);
   });
 
   it("hace fallback al procesamiento serial si falla la generación en lote", async () => {
