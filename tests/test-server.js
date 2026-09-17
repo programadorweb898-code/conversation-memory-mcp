@@ -5,6 +5,7 @@ const http = require('http');
 
 const mcpSdk = require('@modelcontextprotocol/sdk/server/mcp.js');
 const sseSdk = require('@modelcontextprotocol/sdk/server/sse.js');
+const streamableHttpSdk = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const embeddingService = require('../src/services/embeddingService');
 
 function resetServerModule() {
@@ -65,12 +66,17 @@ function openSse(server) {
 describe('Server HTTP layer', () => {
   let connectStub;
   let transportConstructorStub;
+  let streamableTransportConstructorStub;
   let transportInstance;
   let httpServer;
   let sseConnection;
+  let previousBearerToken;
 
   beforeEach(() => {
     resetServerModule();
+
+    previousBearerToken = process.env.MCP_BEARER_TOKEN;
+    process.env.MCP_BEARER_TOKEN = 'test-token';
 
     transportInstance = {
       response: null,
@@ -78,14 +84,20 @@ describe('Server HTTP layer', () => {
       handlePostMessage: sinon.stub().callsFake((req, res) => {
         res.status(200).json({ ok: true });
       }),
+      handleRequest: sinon.stub().callsFake(async (req, res) => {
+        res.status(200).json({ jsonrpc: '2.0', result: { ok: true } });
+      }),
     };
     connectStub = sinon.stub().callsFake(async () => {
-      transportInstance.response.write(': connected\n\n');
+      if (transportInstance.response) {
+        transportInstance.response.write(': connected\n\n');
+      }
     });
     transportConstructorStub = sinon.stub().callsFake((path, res) => {
       transportInstance.response = res;
       return transportInstance;
     });
+    streamableTransportConstructorStub = sinon.stub().callsFake(() => transportInstance);
 
     sinon.stub(mcpSdk, 'McpServer').callsFake(() => ({
       tool: sinon.stub(),
@@ -93,6 +105,7 @@ describe('Server HTTP layer', () => {
       close: sinon.stub(),
     }));
     sinon.stub(sseSdk, 'SSEServerTransport').callsFake(transportConstructorStub);
+    sinon.stub(streamableHttpSdk, 'StreamableHTTPServerTransport').callsFake(streamableTransportConstructorStub);
     sinon.stub(embeddingService, 'initializeEmbeddingPipeline').resolves();
   });
 
@@ -106,6 +119,12 @@ describe('Server HTTP layer', () => {
     if (httpServer) {
       await close(httpServer);
       httpServer = null;
+    }
+
+    if (previousBearerToken === undefined) {
+      delete process.env.MCP_BEARER_TOKEN;
+    } else {
+      process.env.MCP_BEARER_TOKEN = previousBearerToken;
     }
 
     sinon.restore();
@@ -147,12 +166,29 @@ describe('Server HTTP layer', () => {
     const response = await request(httpServer)
       .post('/messages')
       .set('content-type', 'application/json')
-      .set('authorization', 'Bearer test-token') // Added token
+      .set('authorization', 'Bearer test-token')
       .set('x-client-id', clientId)
       .send({ hello: 'world' });
 
     expect(response.status).to.equal(200);
     expect(transportInstance.handlePostMessage.calledOnce).to.be.true;
+  });
+
+  it('should forward authenticated POST /mcp through the Streamable HTTP transport', async () => {
+    const { app } = require('../src/server');
+
+    const response = await request(app)
+      .post('/mcp')
+      .set('content-type', 'application/json')
+      .set('authorization', 'Bearer test-token')
+      .send({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+
+    expect(response.status).to.equal(200);
+    expect(response.body).to.deep.equal({ jsonrpc: '2.0', result: { ok: true } });
+    expect(streamableTransportConstructorStub.calledOnce).to.equal(true);
+    expect(connectStub.calledOnce).to.equal(true);
+    expect(transportInstance.handleRequest.calledOnce).to.equal(true);
+    expect(transportInstance.handleRequest.firstCall.args[0].method).to.equal('POST');
   });
 
   it('should reject requests without token', async () => {
