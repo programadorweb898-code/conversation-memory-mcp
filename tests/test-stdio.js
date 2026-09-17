@@ -32,26 +32,62 @@ describe('stdio server', () => {
   });
 
   it('should fail fast when DATABASE_URL is missing', async () => {
-    // Use an empty value instead of deleting it so dotenv.config() cannot
-    // repopulate DATABASE_URL from a local .env file when stdio.js is loaded.
     process.env.DATABASE_URL = '';
-    const exitStub = sinon.stub(process, 'exit').callsFake(() => {});
+    const fatalExit = new Error('process.exit called');
+    const exitStub = sinon.stub(process, 'exit').callsFake(() => {
+      throw fatalExit;
+    });
     const errorStub = sinon.stub(console, 'error');
 
     const { startStdioServer } = require('../src/stdio');
-    await startStdioServer();
 
+    let thrownError;
+    try {
+      await startStdioServer();
+    } catch (error) {
+      thrownError = error;
+    }
+
+    expect(thrownError).to.equal(fatalExit);
     expect(exitStub.calledWith(1)).to.be.true;
     expect(errorStub.calledWith('Fatal error: DATABASE_URL environment variable is required.')).to.be.true;
   });
 
   it('should run migrations, connect MCP over stdio and start embeddings worker by default', async () => {
     process.env.DATABASE_URL = 'postgresql://test';
-    delete process.env.ENABLE_EMBEDDING_WORKER;
+    process.env.ENABLE_EMBEDDING_WORKER = 'true';
 
     const runMigrationsStub = sinon.stub(migrate, 'runMigrations').resolves();
+    const connectStub = sinon.stub().resolves();
     const createMcpServerStub = sinon.stub(createMcp, 'createMcpServer').returns({
-      connect: sinon.stub().resolves(),
+      connect: connectStub,
+    });
+    const transport = {
+      start: sinon.stub().resolves(),
+    };
+    const transportConstructorStub = sinon.stub(sdk, 'StdioServerTransport').returns(transport);
+    const startWorkerStub = sinon.stub(embeddingWorker, 'startWorker');
+
+    const { startStdioServer } = require('../src/stdio');
+    await startStdioServer();
+
+    expect(runMigrationsStub.calledOnce).to.be.true;
+    expect(runMigrationsStub.firstCall.args[0].logger.log).to.be.a('function');
+    expect(runMigrationsStub.firstCall.args[0].logger.error).to.be.a('function');
+    expect(createMcpServerStub.calledOnce).to.be.true;
+    expect(transportConstructorStub.calledOnce).to.be.true;
+    expect(connectStub.calledOnceWithExactly(transport)).to.be.true;
+    expect(startWorkerStub.calledOnce).to.be.true;
+  });
+
+  it('should skip the embeddings worker when explicitly disabled', async () => {
+    process.env.DATABASE_URL = 'postgresql://test';
+    process.env.ENABLE_EMBEDDING_WORKER = 'false';
+
+    sinon.stub(migrate, 'runMigrations').resolves();
+    const connectStub = sinon.stub().resolves();
+    sinon.stub(createMcp, 'createMcpServer').returns({
+      connect: connectStub,
     });
     const transport = {
       start: sinon.stub().resolves(),
@@ -62,30 +98,7 @@ describe('stdio server', () => {
     const { startStdioServer } = require('../src/stdio');
     await startStdioServer();
 
-    expect(runMigrationsStub.calledOnce).to.be.true;
-    expect(runMigrationsStub.firstCall.args[0].logger.log).to.be.a('function');
-    expect(runMigrationsStub.firstCall.args[0].logger.error).to.be.a('function');
-    expect(createMcpServerStub.calledOnce).to.be.true;
-    expect(sdk.StdioServerTransport.calledOnce).to.be.true;
-    expect(startWorkerStub.calledOnce).to.be.true;
-  });
-
-  it('should skip the embeddings worker when explicitly disabled', async () => {
-    process.env.DATABASE_URL = 'postgresql://test';
-    process.env.ENABLE_EMBEDDING_WORKER = 'false';
-
-    sinon.stub(migrate, 'runMigrations').resolves();
-    sinon.stub(createMcp, 'createMcpServer').returns({
-      connect: sinon.stub().resolves(),
-    });
-    sinon.stub(sdk, 'StdioServerTransport').returns({
-      start: sinon.stub().resolves(),
-    });
-    const startWorkerStub = sinon.stub(embeddingWorker, 'startWorker');
-
-    const { startStdioServer } = require('../src/stdio');
-    await startStdioServer();
-
+    expect(connectStub.calledOnceWithExactly(transport)).to.be.true;
     expect(startWorkerStub.called).to.be.false;
   });
 });
