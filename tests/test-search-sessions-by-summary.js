@@ -22,7 +22,7 @@ describe("Search Sessions By Summary", function () {
 
   beforeEach(() => {
     sessionIds = [];
-    sinon.stub(embeddingService, "generateEmbedding").resolves(JSON.stringify(fakeEmbedding(0.1)));
+    sinon.stub(embeddingService, "generateEmbedding").resolves(fakeEmbedding(0.1));
   });
 
   afterEach(async () => {
@@ -50,7 +50,7 @@ describe("Search Sessions By Summary", function () {
     await db.runAsync(
       `INSERT INTO session_summary_embeddings (session_id, embedding)
        VALUES ($1, $2)`,
-      [sessionId, JSON.stringify(summaryEmbedding)]
+      [sessionId, summaryEmbedding]
     );
   }
 
@@ -124,7 +124,7 @@ describe("Search Sessions By Summary", function () {
     await db.runAsync(
       `INSERT INTO session_summary_embeddings (session_id, embedding)
        VALUES ($1, $2)`,
-      [sessionId, JSON.stringify(fakeEmbedding(0.1))]
+      [sessionId, fakeEmbedding(0.1)]
     );
 
     const history = await searchSessionsBySummary({
