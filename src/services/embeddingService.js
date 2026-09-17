@@ -4,13 +4,13 @@ const { db } = require("../database");
 
 // Specify the model and ensure it's quantized for efficiency
 const model = "Xenova/all-MiniLM-L6-v2";
-let extractor = null; // Will store the initialized pipeline
-let initializationPromise = null; // New variable to store the initialization promise
+let extractor = null;
+let initializationPromise = null;
 let transformersModulePromise = null;
 
 async function loadTransformers() {
   if (!transformersModulePromise) {
-    transformersModulePromise = import("@xenova/transformers");
+    transformersModulePromise = import("@huggingface/transformers");
   }
 
   return transformersModulePromise;
@@ -25,7 +25,7 @@ async function initializeEmbeddingPipeline() {
     initializationPromise = (async () => {
       const { pipeline } = await loadTransformers();
       console.log(`Loading embedding model: ${model}`);
-      extractor = await pipeline("feature-extraction", model, { quantized: true });
+      extractor = await pipeline("feature-extraction", model, { dtype: "q8" });
       console.log("Embedding model loaded.");
     })();
   }
@@ -39,18 +39,12 @@ async function initializeEmbeddingPipeline() {
  */
 async function generateEmbedding(message) {
   if (!extractor) {
-    // Ensure the pipeline is initialized before use.
     await initializeEmbeddingPipeline();
   }
 
-  // Enriquecer: concatenamos rol + contenido para dar más contexto semántico
   const enrichedText = `${message.role}: ${message.content}`;
-
-  // Generate embeddings
   const output = await extractor(enrichedText, { pooling: "mean", normalize: true });
-  // The output is typically a Tensor. Convert it to a plain array.
-  const embedding = output.data; // This gets the raw data from the Tensor
-  return JSON.stringify(Array.from(embedding)); // Convert TypedArray to standard Array and then to JSON string
+  return JSON.stringify(Array.from(output.data));
 }
 
 async function generateEmbeddings(messages) {
