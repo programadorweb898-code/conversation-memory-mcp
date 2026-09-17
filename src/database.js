@@ -26,7 +26,8 @@ pool.on('error', (err) => {
  * se cae la conexión. Los advisory locks son a nivel de cluster, así que
  * serializa también entre procesos/instancias que compartan la base.
  * @param {string} key - Identificador de la sección crítica.
- * @param {Function} work - Trabajo a ejecutar bajo el lock.
+ * @param {Function} work - Trabajo a ejecutar bajo el lock. Recibe la misma
+ * conexión/client que mantiene la transacción y el advisory lock.
  * @returns {Promise<*>} Resultado de `work`.
  */
 async function withAdvisoryLock(key, work) {
@@ -37,7 +38,7 @@ async function withAdvisoryLock(key, work) {
     await client.query(`BEGIN`);
     transactionActive = true;
     await client.query(`SELECT pg_advisory_xact_lock($1)`, [lockValue]);
-    const result = await work();
+    const result = await work(client);
     await client.query(`COMMIT`);
     transactionActive = false;
     return result;
