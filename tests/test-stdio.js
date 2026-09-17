@@ -1,13 +1,45 @@
 const { expect } = require('chai');
 const sinon = require('sinon');
+const Module = require('module');
 
-const sdk = require('@modelcontextprotocol/sdk/server/stdio.js');
 const migrate = require('../scripts/migrate');
 const createMcp = require('../src/createMcpServer');
 const embeddingWorker = require('../src/services/embeddingWorker');
+const realStdioSdk = require('@modelcontextprotocol/sdk/server/stdio.js');
 
 function resetStdioModule() {
   delete require.cache[require.resolve('../src/stdio')];
+}
+
+function loadStdioWithDependencies({ runMigrations, createMcpServer, startWorker, StdioServerTransport }) {
+  const originalLoad = Module._load;
+
+  Module._load = function patchedLoad(request, parent, isMain) {
+    if (request === '../scripts/migrate' && parent?.filename?.endsWith(`${require('path').sep}src${require('path').sep}stdio.js`)) {
+      return { ...migrate, runMigrations };
+    }
+
+    if (request === './createMcpServer' && parent?.filename?.endsWith(`${require('path').sep}src${require('path').sep}stdio.js`)) {
+      return { ...createMcp, createMcpServer };
+    }
+
+    if (request === './services/embeddingWorker' && parent?.filename?.endsWith(`${require('path').sep}src${require('path').sep}stdio.js`)) {
+      return { ...embeddingWorker, startWorker, stopWorker: embeddingWorker.stopWorker };
+    }
+
+    if (request === '@modelcontextprotocol/sdk/server/stdio.js') {
+      return { ...realStdioSdk, StdioServerTransport };
+    }
+
+    return originalLoad.apply(this, arguments);
+  };
+
+  resetStdioModule();
+  try {
+    return require('../src/stdio');
+  } finally {
+    Module._load = originalLoad;
+  }
 }
 
 describe('stdio server', () => {
@@ -39,7 +71,12 @@ describe('stdio server', () => {
     });
     const errorStub = sinon.stub(console, 'error');
 
-    const { startStdioServer } = require('../src/stdio');
+    const { startStdioServer } = loadStdioWithDependencies({
+      runMigrations: sinon.stub(),
+      createMcpServer: sinon.stub(),
+      startWorker: sinon.stub(),
+      StdioServerTransport: sinon.stub(),
+    });
 
     let thrownError;
     try {
@@ -57,18 +94,20 @@ describe('stdio server', () => {
     process.env.DATABASE_URL = 'postgresql://test';
     process.env.ENABLE_EMBEDDING_WORKER = 'true';
 
-    const runMigrationsStub = sinon.stub(migrate, 'runMigrations').resolves();
+    const runMigrationsStub = sinon.stub().resolves();
     const connectStub = sinon.stub().resolves();
-    const createMcpServerStub = sinon.stub(createMcp, 'createMcpServer').returns({
-      connect: connectStub,
-    });
-    const transport = {
-      start: sinon.stub().resolves(),
-    };
-    const transportConstructorStub = sinon.stub(sdk, 'StdioServerTransport').returns(transport);
-    const startWorkerStub = sinon.stub(embeddingWorker, 'startWorker');
+    const createMcpServerStub = sinon.stub().returns({ connect: connectStub });
+    const transport = { start: sinon.stub().resolves() };
+    const transportConstructorStub = sinon.stub().returns(transport);
+    const startWorkerStub = sinon.stub();
 
-    const { startStdioServer } = require('../src/stdio');
+    const { startStdioServer } = loadStdioWithDependencies({
+      runMigrations: runMigrationsStub,
+      createMcpServer: createMcpServerStub,
+      startWorker: startWorkerStub,
+      StdioServerTransport: transportConstructorStub,
+    });
+
     await startStdioServer();
 
     expect(runMigrationsStub.calledOnce).to.be.true;
@@ -84,18 +123,20 @@ describe('stdio server', () => {
     process.env.DATABASE_URL = 'postgresql://test';
     process.env.ENABLE_EMBEDDING_WORKER = 'false';
 
-    sinon.stub(migrate, 'runMigrations').resolves();
+    const runMigrationsStub = sinon.stub().resolves();
     const connectStub = sinon.stub().resolves();
-    sinon.stub(createMcp, 'createMcpServer').returns({
-      connect: connectStub,
-    });
-    const transport = {
-      start: sinon.stub().resolves(),
-    };
-    sinon.stub(sdk, 'StdioServerTransport').returns(transport);
-    const startWorkerStub = sinon.stub(embeddingWorker, 'startWorker');
+    const createMcpServerStub = sinon.stub().returns({ connect: connectStub });
+    const transport = { start: sinon.stub().resolves() };
+    const transportConstructorStub = sinon.stub().returns(transport);
+    const startWorkerStub = sinon.stub();
 
-    const { startStdioServer } = require('../src/stdio');
+    const { startStdioServer } = loadStdioWithDependencies({
+      runMigrations: runMigrationsStub,
+      createMcpServer: createMcpServerStub,
+      startWorker: startWorkerStub,
+      StdioServerTransport: transportConstructorStub,
+    });
+
     await startStdioServer();
 
     expect(connectStub.calledOnceWithExactly(transport)).to.be.true;
