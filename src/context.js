@@ -30,14 +30,22 @@ function getAuth() {
 /**
  * Resuelve el owner con el que se PERSISTE un dato. Nunca devuelve null: las
  * columnas owner son NOT NULL. Si no hay owner autenticado (token master o
- * modo stdio), se usa el dueño por defecto MCP_DEFAULT_OWNER.
+ * modo stdio), MCP_DEFAULT_OWNER debe estar configurado explícitamente.
  * Para LEER, en cambio, se usa el owner crudo de getAuth(): null significa
  * admin y permite ver todos los owners (filtro $x::text IS NULL OR owner=$x).
  * @param {string|undefined} owner - Owner autenticado (lo provee withScope).
  * @returns {string}
  */
 function resolveWriteOwner(owner) {
-  return owner || process.env.MCP_DEFAULT_OWNER || "luis";
+  const resolvedOwner = owner || process.env.MCP_DEFAULT_OWNER;
+
+  if (!resolvedOwner) {
+    throw new Error(
+      "MCP_DEFAULT_OWNER environment variable is required when no authenticated owner is available."
+    );
+  }
+
+  return resolvedOwner;
 }
 
 module.exports = { runWithAuth, getAuth, resolveWriteOwner };
