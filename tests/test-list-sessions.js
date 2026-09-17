@@ -30,11 +30,11 @@ describe('List Sessions Tool', () => {
     await saveMessage({ sessionId: sessionId2, project, role: "user", content: "M2" });
 
     const sessions = await listSessions({ project });
-    
+
     // Verificamos que al menos nuestras dos sesiones estén en la lista
-    const sessionIds = sessions.map(s => s.session_id);
-    expect(sessionIds).to.include(sessionId1);
-    expect(sessionIds).to.include(sessionId2);
+    const listedSessionIds = sessions.map(s => s.session_id);
+    expect(listedSessionIds).to.include(sessionId1);
+    expect(listedSessionIds).to.include(sessionId2);
   });
 
   it('debería listar sesiones filtradas por agentId', async () => {
@@ -47,10 +47,10 @@ describe('List Sessions Tool', () => {
     await saveMessage({ sessionId: sessionId2, project, role: "user", content: "M2", agentId: 'other-agent' });
 
     const sessions = await listSessions({ project, agentId });
-    
+
     // Verificamos que solo la sesión del agente esté en la lista
-    const sessionIds = sessions.map(s => s.session_id);
-    expect(sessionIds).to.include(sessionId1);
-    expect(sessionIds).to.not.include(sessionId2);
+    const listedSessionIds = sessions.map(s => s.session_id);
+    expect(listedSessionIds).to.include(sessionId1);
+    expect(listedSessionIds).to.not.include(sessionId2);
   });
 });
