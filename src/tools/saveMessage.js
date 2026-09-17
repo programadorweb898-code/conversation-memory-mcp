@@ -1,4 +1,4 @@
-const { db, withAdvisoryLock } = require("../database");
+const { withAdvisoryLock } = require("../database");
 const { randomUUID } = require("crypto");
 const { z } = require("zod");
 const embeddingQueue = require("../services/embeddingQueue");
