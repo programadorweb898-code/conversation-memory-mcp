@@ -50,11 +50,12 @@ describe("Embedding Worker", function () {
 
     await embeddingWorker.processNextEmbeddingTask();
 
-    expect(generateEmbeddings).to.have.been.calledWith(sinon.match.array.deepEquals([
+    expect(generateEmbeddings.calledOnce).to.equal(true);
+    expect(generateEmbeddings.firstCall.args[0]).to.deep.equal([
       { role: "user", content: "Primer mensaje para embedding" },
       { role: "user", content: "Segundo mensaje para embedding" },
-    ]));
-    expect(saveEmbedding).to.have.been.calledTwice;
+    ]);
+    expect(saveEmbedding.calledTwice).to.equal(true);
     expect(saveEmbedding.firstCall.args).to.deep.equal([firstId, generated[0]]);
     expect(saveEmbedding.secondCall.args).to.deep.equal([secondId, generated[1]]);
     expect(embeddingQueue.getProcessingStatus()).to.equal(false);
@@ -82,26 +83,26 @@ describe("Embedding Worker", function () {
 
   it("hace fallback al procesamiento serial si falla la generación en lote", async () => {
     const messageId = await insertMessage("Mensaje para fallback serial");
-    const batchError = new Error("batch failed");
 
-    sinon.stub(embeddingService, "generateEmbeddings").rejects(batchError);
+    sinon.stub(embeddingService, "generateEmbeddings").rejects(new Error("batch failed"));
     const generateEmbedding = sinon.stub(embeddingService, "generateEmbedding").resolves(JSON.stringify(fakeEmbedding(0.4)));
     const saveEmbedding = sinon.stub(embeddingService, "saveEmbedding").resolves();
 
     await embeddingWorker.processNextEmbeddingTask();
 
-    expect(generateEmbedding).to.have.been.calledOnceWithExactly({
-      role: "user",
-      content: "Mensaje para fallback serial",
-    });
-    expect(saveEmbedding).to.have.been.calledOnceWithExactly(messageId, JSON.stringify(fakeEmbedding(0.4)));
+    expect(generateEmbedding.calledOnce).to.equal(true);
+    expect(generateEmbedding.firstCall.args).to.deep.equal([
+      { role: "user", content: "Mensaje para fallback serial" },
+    ]);
+    expect(saveEmbedding.calledOnce).to.equal(true);
+    expect(saveEmbedding.firstCall.args).to.deep.equal([messageId, JSON.stringify(fakeEmbedding(0.4))]);
   });
 
   it("registra fallos y deja de reintentar después de tres intentos", async () => {
     const messageId = await insertMessage("Mensaje que falla siempre");
 
     sinon.stub(embeddingService, "generateEmbeddings").rejects(new Error("batch failed"));
-    sinon.stub(embeddingService, "generateEmbedding").rejects(new Error("model failed"));
+    const generateEmbedding = sinon.stub(embeddingService, "generateEmbedding").rejects(new Error("model failed"));
 
     await embeddingWorker.processNextEmbeddingTask();
     await embeddingWorker.processNextEmbeddingTask();
@@ -115,6 +116,7 @@ describe("Embedding Worker", function () {
 
     expect(failure.attempts).to.equal(3);
     expect(failure.last_error).to.equal("model failed");
+    expect(generateEmbedding.callCount).to.equal(3);
   });
 
   it("no procesa otra tarea mientras el worker está marcado como ocupado", async () => {
@@ -125,7 +127,7 @@ describe("Embedding Worker", function () {
 
     await embeddingWorker.processNextEmbeddingTask();
 
-    expect(generateEmbeddings).to.not.have.been.called;
+    expect(generateEmbeddings.called).to.equal(false);
     expect(embeddingQueue.getProcessingStatus()).to.equal(true);
   });
 });
