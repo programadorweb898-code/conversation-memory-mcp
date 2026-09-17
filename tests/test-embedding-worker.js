@@ -59,12 +59,20 @@ describe("Embedding Worker", function () {
     ]);
     expect(generatedMessages.every((message) => message.role === "user")).to.equal(true);
 
-    expect(saveEmbedding.calledTwice).to.equal(true);
+    const messageIdByContent = new Map([
+      ["Primer mensaje para embedding", firstId],
+      ["Segundo mensaje para embedding", secondId],
+    ]);
+    const expectedEmbeddingByMessageId = new Map(
+      generatedMessages.map((message, index) => [messageIdByContent.get(message.content), generated[index]])
+    );
     const savedByMessageId = new Map(
       saveEmbedding.getCalls().map((call) => [call.args[0], call.args[1]])
     );
-    expect(savedByMessageId.get(firstId)).to.equal(generated[0]);
-    expect(savedByMessageId.get(secondId)).to.equal(generated[1]);
+
+    expect(saveEmbedding.calledTwice).to.equal(true);
+    expect(savedByMessageId.get(firstId)).to.equal(expectedEmbeddingByMessageId.get(firstId));
+    expect(savedByMessageId.get(secondId)).to.equal(expectedEmbeddingByMessageId.get(secondId));
     expect(embeddingQueue.getProcessingStatus()).to.equal(false);
   });
 
