@@ -20,7 +20,6 @@ async function checkAndFinalizeInactiveSessions() {
       GROUP BY c.session_id, c.project, c.owner
     `);
 
-// ...
     const now = Date.now();
 
     for (const session of activeSessions) {
@@ -54,11 +53,13 @@ function startSessionMonitor() {
 function stopSessionMonitor() {
   if (sessionMonitorInterval) {
     clearInterval(sessionMonitorInterval);
+    sessionMonitorInterval = null;
     console.log("Monitor de inactividad de sesiones detenido.");
   }
 }
 
 module.exports = {
+  checkAndFinalizeInactiveSessions,
   startSessionMonitor,
   stopSessionMonitor
 };
