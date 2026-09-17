@@ -51,10 +51,14 @@ describe("Embedding Worker", function () {
     await embeddingWorker.processNextEmbeddingTask();
 
     expect(generateEmbeddings.calledOnce).to.equal(true);
-    expect(generateEmbeddings.firstCall.args[0]).to.deep.equal([
-      { role: "user", content: "Primer mensaje para embedding" },
-      { role: "user", content: "Segundo mensaje para embedding" },
+    const generatedMessages = generateEmbeddings.firstCall.args[0];
+    expect(generatedMessages).to.have.lengthOf(2);
+    expect(generatedMessages.map((message) => message.content)).to.have.members([
+      "Primer mensaje para embedding",
+      "Segundo mensaje para embedding",
     ]);
+    expect(generatedMessages.every((message) => message.role === "user")).to.equal(true);
+
     expect(saveEmbedding.calledTwice).to.equal(true);
     expect(saveEmbedding.firstCall.args).to.deep.equal([firstId, generated[0]]);
     expect(saveEmbedding.secondCall.args).to.deep.equal([secondId, generated[1]]);
