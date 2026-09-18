@@ -53,10 +53,23 @@ function loadMigrations() {
 }
 
 async function runMigrations({ logger = console } = {}) {
-  const pool = getPool();
-  const client = await pool.connect();
+  let pool;
+  let client;
+  let connectionErrorLogged = false;
 
   try {
+    pool = getPool();
+
+    try {
+      client = await pool.connect();
+    } catch (error) {
+      connectionErrorLogged = true;
+      logger.error(
+        "No se pudo conectar a la base de datos. Revisá que DATABASE_URL en tu .env sea correcta y que el proyecto de Neon esté activo."
+      );
+      logger.error(error);
+      throw error;
+    }
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock($1)", [MIGRATION_LOCK_KEY]);
 
@@ -101,12 +114,16 @@ async function runMigrations({ logger = console } = {}) {
     await client.query("COMMIT");
     logger.log("Database migrations completed successfully.");
   } catch (error) {
-    await client.query("ROLLBACK");
-    logger.error("Database migration failed:", error.message);
+    if (client) {
+      await client.query("ROLLBACK");
+    }
+    if (!connectionErrorLogged) {
+      logger.error("Database migration failed:", error.message);
+    }
     throw error;
   } finally {
-    client.release();
-    await pool.end();
+    client?.release();
+    await pool?.end();
   }
 }
 
