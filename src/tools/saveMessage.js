@@ -1,4 +1,4 @@
-const { db } = require("../database");
+const { withAdvisoryLock } = require("../database");
 const { randomUUID } = require("crypto");
 const { z } = require("zod");
 const embeddingQueue = require("../services/embeddingQueue");
@@ -39,39 +39,45 @@ async function saveMessage(params) {
   }
 
   const messageId = randomUUID();
-
-  // El owner de CHECK es el autenticado crudo: si es admin (undefined/null) no
-  // se valida propiedad, solo el proyecto. El owner que se PERSISTE nunca es
-  // null (columna NOT NULL): cae al dueño por defecto si no hay auth.
   const authOwner = owner || null;
   const writeOwner = resolveWriteOwner(owner);
 
-  const existingSessionProject = await db.getAsync(
-    `SELECT project, owner FROM conversations WHERE session_id = $1 LIMIT 1`,
-    [sessionId]
-  );
-  if (existingSessionProject && existingSessionProject.project !== project) {
-    const error = new Error(
-      `La sesión ${sessionId} ya pertenece al proyecto "${existingSessionProject.project}". No se permite mezclar datos entre proyectos.`
-    );
-    error.code = "PROJECT_CONFLICT";
-    throw error;
-  }
-
-  if (existingSessionProject && authOwner && existingSessionProject.owner !== authOwner) {
-    const error = new Error(`La sesión ${sessionId} ya existe y no pertenece a este usuario.`);
-    error.code = "OWNER_CONFLICT";
-    throw error;
-  }
-
+  // session_id es una identidad lógica de sesión: el primer mensaje fija su
+  // proyecto/owner y las escrituras concurrentes deben observar esa identidad
+  // antes de insertar. El advisory lock es a nivel de PostgreSQL/cluster, por
+  // lo que también protege entre procesos o instancias que compartan la DB.
+  // Las operaciones dentro de la sección crítica usan el mismo client que
+  // mantiene la transacción y el advisory lock; esto evita agotar el pool
+  // cuando llegan muchas escrituras concurrentes.
   try {
-    const sql = `
-      INSERT INTO conversations
-      (id, session_id, timestamp, project, role, content, agent_id, related_message_id, owner)
-      VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6, $7, $8)
-    `;
+    await withAdvisoryLock(`session_identity:${sessionId}`, async (client) => {
+      const existingSessionProject = (await client.query(
+        `SELECT project, owner FROM conversations WHERE session_id = $1 LIMIT 1`,
+        [sessionId]
+      )).rows[0];
 
-    await db.runAsync(sql, [messageId, sessionId, project ?? null, role, content, agentId ?? null, relatedMessageId ?? null, writeOwner]);
+      if (existingSessionProject && existingSessionProject.project !== project) {
+        const error = new Error(
+          `La sesión ${sessionId} ya pertenece al proyecto "${existingSessionProject.project}". No se permite mezclar datos entre proyectos.`
+        );
+        error.code = "PROJECT_CONFLICT";
+        throw error;
+      }
+
+      if (existingSessionProject && authOwner && existingSessionProject.owner !== authOwner) {
+        const error = new Error(`La sesión ${sessionId} ya existe y no pertenece a este usuario.`);
+        error.code = "OWNER_CONFLICT";
+        throw error;
+      }
+
+      const sql = `
+        INSERT INTO conversations
+        (id, session_id, timestamp, project, role, content, agent_id, related_message_id, owner)
+        VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6, $7, $8)
+      `;
+
+      await client.query(sql, [messageId, sessionId, project ?? null, role, content, agentId ?? null, relatedMessageId ?? null, writeOwner]);
+    });
   } catch (err) {
     console.error("Error saving message:", err.message);
     throw err;
