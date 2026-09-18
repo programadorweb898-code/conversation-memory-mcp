@@ -1,7 +1,4 @@
--- Completa tablas embedding_failures creadas antes de que existiera el contador.
-ALTER TABLE embedding_failures
-  ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0;
-
+-- Completa bases que ya habían aplicado 006 antes de que existieran estos metadatos.
 ALTER TABLE embedding_failures
   ADD COLUMN IF NOT EXISTS last_error TEXT;
 

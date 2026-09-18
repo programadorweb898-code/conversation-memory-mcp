@@ -1,10 +1,9 @@
 const { z } = require("zod");
-const { db } = require("./database");
 const { getAuth } = require("./context");
+const logger = require("./logger");
 
 // Import tools
 const { saveMessage } = require("./tools/saveMessage");
-const { generateEmbedding, saveEmbedding } = require("./services/embeddingService");
 const searchMessages = require("./tools/searchMessages");
 const semanticSearchMessages = require("./tools/semanticSearchMessages");
 const searchSessionsBySummary = require("./tools/searchSessionsBySummary");
@@ -37,7 +36,7 @@ function withScope(params) {
 }
 
 function registerMcpTools(server) {
-  console.time("⏱️ Registering MCP tools");
+  const registrationStartedAt = Date.now();
   // 1. saveMessage
   server.tool(
   "saveMessage",           // nombre de la tool
@@ -358,35 +357,7 @@ ACCESO MULTI-AGENTE: si NO pasás agentId, la última sesión puede ser de cualq
     }
   );
 
-  // 11. generateAndSaveEmbedding
-  server.tool(
-    "generateAndSaveEmbedding",
-    "Genera y guarda un embedding para un mensaje dado",
-    {
-      messageId: z.string().describe("ID del mensaje al que se asociará el embedding"),
-      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
-      text: z.string().describe("El texto del cual generar el embedding"),
-      role: z.string().describe("Rol del emisor (user/assistant)"),
-    },
-    async ({ messageId, project, text, role }) => {
-      const scoped = withScope({ messageId, project, text, role });
-      try {
-        const message = await db.getAsync(
-          `SELECT id FROM conversations WHERE id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)`,
-          [scoped.messageId, scoped.project, scoped.owner ?? null]
-        );
-        if (!message) throw new Error("Mensaje no encontrado en el proyecto especificado");
-        const generatedEmbedding = await generateEmbedding({ role, content: text });
-        await saveEmbedding(messageId, generatedEmbedding);
-        return { content: [{ type: "text", text: `Embedding generado y guardado para el mensaje ${messageId}.` }] };
-      } catch (error) {
-        console.error("Error al generar y guardar embedding:", error);
-        return { content: [{ type: "text", text: `Error al generar y guardar embedding para el mensaje ${messageId}: ${error.message}` }] };
-      }
-    }
-  );
-  
-  console.timeEnd("⏱️ Registering MCP tools");
+  logger.log(`⏱️ Registering MCP tools: ${Date.now() - registrationStartedAt}ms`);
 }
 
 module.exports = { registerMcpTools, withScope };

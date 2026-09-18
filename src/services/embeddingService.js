@@ -1,6 +1,7 @@
 // src/services/embeddingService.js
 
 const { db } = require("../database");
+const logger = require("../logger");
 
 // Specify the model and ensure it's quantized for efficiency
 const model = "Xenova/all-MiniLM-L6-v2";
@@ -24,9 +25,9 @@ async function initializeEmbeddingPipeline() {
   if (!initializationPromise) {
     initializationPromise = (async () => {
       const { pipeline } = await loadTransformers();
-      console.log(`Loading embedding model: ${model}`);
+      logger.log(`Loading embedding model: ${model}`);
       extractor = await pipeline("feature-extraction", model, { dtype: "q8" });
-      console.log("Embedding model loaded.");
+      logger.log("Embedding model loaded.");
     })();
   }
   return initializationPromise;
@@ -88,9 +89,9 @@ async function saveEmbedding(messageId, embedding) {
        ON CONFLICT(message_id) DO UPDATE SET embedding = EXCLUDED.embedding`,
       [messageId, embeddingValue]
     );
-    console.log(`Embedding for message ${messageId} saved to message_embeddings.`);
+    logger.log(`Embedding for message ${messageId} saved to message_embeddings.`);
   } catch (err) {
-    console.error("Error saving embedding to message_embeddings:", err.message);
+    logger.error("Error saving embedding to message_embeddings:", err.message);
     throw err;
   }
 }

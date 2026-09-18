@@ -52,14 +52,18 @@ Editá `.env` y completá tu connection string:
 
 ```bash
 DATABASE_URL=postgresql://neondb_owner:tu_clave@ep-tu-proyecto-region.aws.neon.tech/neondb?sslmode=require
+MCP_DEFAULT_OWNER=tu-nombre-o-equipo
 ```
 
 **No compartas este archivo ni lo subas a git.** Contiene las credenciales de tu base.
 
-Además de `DATABASE_URL`, el `.env` admite variables **opcionales** (explicadas en `.env.example`):
+Además de `DATABASE_URL`, podés definir `MCP_DEFAULT_OWNER` para identificar el dueño local de los datos que escribe este proceso. Si no lo definís, se usa el valor seguro `local-user`. En una instalación personal puede ser tu usuario, tu nombre o el identificador del equipo.
+
+También admite variables **opcionales** (explicadas en `.env.example`):
 
 | Variable | Uso | Default |
 |---|---|---|
+| `MCP_DEFAULT_OWNER` | Dueño local de los datos escritos en modo stdio o admin. | `local-user` |
 | `OPENROUTER_API_KEY` | Proveedor LLM usado por defecto cuando está configurado. Se utiliza para resúmenes de sesión y tareas de memoria que requieren LLM. | — |
 | `AI_MODEL` | Permite elegir el modelo. Con OpenRouter, si se omite, se usa Nemotron 120B gratuito. | `nvidia/nemotron-3-super-120b-a12b:free` |
 | `AI_PROVIDER` | Forzar proveedor: `openrouter` o `gemini` (sin él se autodetecta por las keys presentes). | autodetección |
@@ -97,8 +101,23 @@ El LLM se utiliza para tareas que necesitan generación o análisis, principalme
 ### 3. Ejecutar
 
 ```bash
+git clone <url-del-repositorio>
+cd conversation-memory-mcp
 npm install
-npm start
+cp .env.example .env
+```
+
+Editá `.env` y definí al menos `DATABASE_URL`. `MCP_DEFAULT_OWNER` es opcional y usa `local-user` por defecto:
+
+```env
+DATABASE_URL=postgresql://USER:PASSWORD@HOST/DB?sslmode=require
+MCP_DEFAULT_OWNER=local-user
+```
+
+Después iniciá el servidor:
+
+```bash
+node src/stdio.js
 ```
 
 El servidor inicia en modo stdio y queda listo para que tu agente lo utilice.
@@ -540,7 +559,7 @@ Si el LLM no está disponible, `finalizeSession` no genera un resumen artificial
 
 # Embeddings
 
-`generateAndSaveEmbedding` genera y almacena el embedding de un mensaje.
+Los embeddings se generan desde los mensajes persistidos mediante el worker interno.
 
 Los embeddings permiten realizar búsquedas semánticas mediante **pgvector**.
 

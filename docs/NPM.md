@@ -53,12 +53,13 @@ Ejecutar:
 npx conversation-memory-mcp
 ```
 
-El proceso necesita `DATABASE_URL`.
+El proceso necesita `DATABASE_URL`. `MCP_DEFAULT_OWNER` es opcional y usa `local-user` por defecto.
 
 ### Windows PowerShell
 
 ```powershell
 $env:DATABASE_URL="postgresql://USER:PASSWORD@HOST/DB?sslmode=require"
+$env:MCP_DEFAULT_OWNER="local-user"
 npx conversation-memory-mcp
 ```
 
@@ -66,6 +67,7 @@ npx conversation-memory-mcp
 
 ```bash
 export DATABASE_URL="postgresql://USER:PASSWORD@HOST/DB?sslmode=require"
+export MCP_DEFAULT_OWNER="local-user"
 npx conversation-memory-mcp
 ```
 

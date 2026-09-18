@@ -1,4 +1,13 @@
+#!/usr/bin/env node
+
 const dotenv = require("dotenv");
+const logger = require("./logger");
+
+// stdout queda reservado exclusivamente para los mensajes JSON-RPC de MCP.
+console.log = logger.log;
+console.info = logger.log;
+console.warn = logger.error;
+
 const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
 const { createMcpServer } = require("./createMcpServer");
 const { runMigrations } = require("../scripts/migrate");

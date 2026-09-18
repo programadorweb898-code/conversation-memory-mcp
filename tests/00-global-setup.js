@@ -3,6 +3,7 @@
 // Garantiza que el esquema esté actualizado antes de correr queries contra Postgres.
 const { runMigrations } = require('../scripts/migrate');
 process.env.MCP_BEARER_TOKEN = 'test-token';
+process.env.MCP_DEFAULT_OWNER = 'test-owner';
 // Fuerza el proveedor Gemini para los tests: los tests que usan LLM lo stubean
 // (GoogleGenerativeAI.prototype.getGenerativeModel) y así quedan deterministas.
 // En runtime el proveedor se autodetecta desde las keys del .env (OpenRouter).

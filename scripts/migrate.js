@@ -8,10 +8,11 @@ dotenv.config();
 const MIGRATIONS_DIR = path.join(__dirname, "..", "migrations");
 const MIGRATION_LOCK_KEY = 19082026;
 
-// Dueño por defecto para el aislamiento por usuario. Las migraciones usan el
-// placeholder ${MCP_DEFAULT_OWNER}; debe resolverse mediante configuración
-// explícita del entorno, nunca mediante un owner personal embebido.
-const MCP_DEFAULT_OWNER = process.env.MCP_DEFAULT_OWNER;
+// Dueño por defecto para instalaciones locales. Puede sobrescribirse mediante
+// MCP_DEFAULT_OWNER sin impedir que el servidor arranque sin un .env completo.
+function getDefaultOwner() {
+  return process.env.MCP_DEFAULT_OWNER || "local-user";
+}
 
 /**
  * Sustituye los placeholders de entorno dentro del SQL de una migración.
@@ -20,13 +21,9 @@ const MCP_DEFAULT_OWNER = process.env.MCP_DEFAULT_OWNER;
  * @returns {string}
  */
 function resolveEnvPlaceholders(sql) {
-  if (sql.includes("${MCP_DEFAULT_OWNER}") && !MCP_DEFAULT_OWNER) {
-    throw new Error(
-      "MCP_DEFAULT_OWNER environment variable is required to run migrations that use owner isolation."
-    );
-  }
+  const defaultOwner = getDefaultOwner();
 
-  return sql.replaceAll("${MCP_DEFAULT_OWNER}", MCP_DEFAULT_OWNER || "");
+  return sql.replaceAll("${MCP_DEFAULT_OWNER}", defaultOwner);
 }
 
 function getPool() {
@@ -117,4 +114,4 @@ if (require.main === module) {
   runMigrations().catch(() => process.exit(1));
 }
 
-module.exports = { loadMigrations, runMigrations, resolveEnvPlaceholders, MCP_DEFAULT_OWNER };
+module.exports = { loadMigrations, runMigrations, resolveEnvPlaceholders, getDefaultOwner };

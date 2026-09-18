@@ -22,11 +22,9 @@ describe('Authentication context', function () {
     expect(resolveWriteOwner()).to.equal('default-owner');
   });
 
-  it('throws instead of using a hardcoded personal owner', () => {
+  it('uses the safe local owner when no owner is configured', () => {
     delete process.env.MCP_DEFAULT_OWNER;
 
-    expect(() => resolveWriteOwner()).to.throw(
-      'MCP_DEFAULT_OWNER environment variable is required when no authenticated owner is available.'
-    );
+    expect(resolveWriteOwner()).to.equal('local-user');
   });
 });
