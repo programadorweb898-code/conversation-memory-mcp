@@ -195,6 +195,57 @@ Contiene el nombre del servidor de Neon, el nombre de usuario y la contraseña. 
 
 ---
 
+# Troubleshooting / Problemas comunes
+
+### Node.js anterior a 20
+
+**Síntoma:** al ejecutar `npm install` con un Node incompatible, npm puede mostrar una advertencia de engine como:
+
+```text
+npm WARN EBADENGINE Unsupported engine {
+npm WARN EBADENGINE   required: { node: '>=20' },
+npm WARN EBADENGINE   current: { node: '...' }
+npm WARN EBADENGINE }
+```
+
+El repositorio declara `"engines": { "node": ">=20" }`. Con la configuración normal de npm, esto es una advertencia y no necesariamente impide la instalación; si tenés `engine-strict=true`, npm puede rechazarla. El propio Node.js no emite un error específico por el campo `engines`; el problema aparece cuando npm valida esa restricción o cuando el código utiliza una API/sintaxis no disponible en una versión vieja.
+
+**Solución:** instalá Node.js 20 o superior y verificá con `node --version` antes de continuar.
+
+### `DATABASE_URL` incorrecta o Neon inaccesible
+
+**Síntoma:** `scripts/migrate.js` mantiene el error técnico original del driver `pg`. No existe un único mensaje porque depende de la falla: por ejemplo, puede aparecer `ENOTFOUND` si no se resuelve el host, `ECONNREFUSED` si la conexión es rechazada o `password authentication failed for user ...` si las credenciales no son válidas. El servidor ahora imprime antes:
+
+```text
+No se pudo conectar a la base de datos. Revisá que DATABASE_URL en tu .env sea correcta y que el proyecto de Neon esté activo.
+```
+
+Debajo se conserva el error técnico completo de `pg`, incluido su stack cuando el runtime lo proporciona.
+
+**Solución:** revisá que `DATABASE_URL` sea exactamente la connection string de Neon, que no tenga caracteres modificados o truncados y que el proyecto de Neon esté activo/accesible. Si querés aislar el problema, también podés ejecutar `npm run migrate` directamente.
+
+Si falta completamente `DATABASE_URL`, el comportamiento es distinto y deliberado: `scripts/migrate.js` falla con `DATABASE_URL environment variable is required.`.
+
+### Primera conexión lenta después de inactividad en Neon Free
+
+**Síntoma:** la primera conexión o el primer arranque después de un período de inactividad puede tardar bastante más de lo habitual mientras la instancia de Neon vuelve a estar disponible. Esto no significa por sí mismo que la configuración esté rota.
+
+**Solución:** esperá a que termine el primer intento y volvé a probar si es necesario. Si después de esperar la conexión falla, aplicá el diagnóstico del caso anterior y revisá el error técnico de `pg`.
+
+### No hay proveedor LLM configurado
+
+**Síntoma:** si no hay `OPENROUTER_API_KEY` ni `GEMINI_API_KEY` disponibles, el almacenamiento y la recuperación normal del historial siguen funcionando: no necesitan un LLM.
+
+Lo que se degrada es la funcionalidad que requiere generación/análisis. En `finalizeSession`, si el LLM no está disponible o falla, no se crea un resumen artificial y se devuelve:
+
+```text
+No se generó resumen: LLM no disponible.
+```
+
+con `summaryGenerated: false`, `auditRequired: false` y `summaryPending: true`. En `extractMemories`, un fallo del LLM se registra y la extracción devuelve una lista de candidatos vacía. Como la auditoría de Engram se activa a partir de una finalización con `auditRequired: true`, sin resumen generado la auditoría automática no se ejecuta en ese momento.
+
+**Solución:** configurá al menos uno de los proveedores, por ejemplo `OPENROUTER_API_KEY` o `GEMINI_API_KEY`, y opcionalmente `AI_PROVIDER`/`AI_MODEL` según el proveedor que quieras usar. No necesitás un LLM para guardar ni recuperar el historial conversacional normal.
+
 # Configuración obligatoria para agentes
 
 Para garantizar la integridad y separación de datos entre diferentes proyectos:
