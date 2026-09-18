@@ -246,6 +246,13 @@ con `summaryGenerated: false`, `auditRequired: false` y `summaryPending: true`. 
 
 **Solución:** configurá al menos uno de los proveedores, por ejemplo `OPENROUTER_API_KEY` o `GEMINI_API_KEY`, y opcionalmente `AI_PROVIDER`/`AI_MODEL` según el proveedor que quieras usar. No necesitás un LLM para guardar ni recuperar el historial conversacional normal.
 
+### Primera carga del modelo de embeddings
+
+**Síntoma:** la primera vez que se guarda un mensaje, o la primera búsqueda semántica que necesita generar embeddings, puede tardar bastante más de lo esperado. En modo stdio, el worker de embeddings se inicia automáticamente salvo que definas `ENABLE_EMBEDDING_WORKER=false`, por lo que esta carga puede ocurrir al guardar el primer mensaje sin que hagas una acción explícita. Durante la carga el servidor ya registra `Loading embedding model: Xenova/all-MiniLM-L6-v2` y, cuando termina, `Embedding model loaded.`.
+
+**Explicación:** la primera ejecución del pipeline de embeddings descarga desde Hugging Face Hub los archivos del modelo si todavía no están en caché local. No es un error y las cargas posteriores reutilizan el modelo cacheado, por lo que normalmente son mucho más rápidas. Transformers.js usa por defecto el directorio `.cache` para su caché de archivos en Node.js, relativo al directorio de trabajo del proceso; este proyecto no configura un directorio de caché diferente.
+
+**Solución:** si es la primera ejecución, esperá a que termine la descarga y asegurate de que el entorno tenga salida a internet. Si el entorno no puede acceder a Hugging Face Hub, la descarga del modelo no podrá completarse. En ese caso podés desactivar el worker con `ENABLE_EMBEDDING_WORKER=false` para seguir usando el almacenamiento y la recuperación del historial sin generar embeddings semánticos.
 # Configuración obligatoria para agentes
 
 Para garantizar la integridad y separación de datos entre diferentes proyectos:
