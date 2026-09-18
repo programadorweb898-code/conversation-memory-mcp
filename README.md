@@ -32,7 +32,9 @@ La idea central es separar:
 
 # Inicio rápido (clonado + Neon personal)
 
-Cada usuario crea su propia base de datos en **Neon** (plan gratuito) y ejecuta el MCP localmente con `npx`. **Los chats de cada persona nunca se mezclan porque están en bases de datos distintas.**
+**Requisitos:** Node.js 20+, git. Verificá tu versión con `node --version` antes de continuar.
+
+Cada usuario crea su propia base de datos en **Neon** (plan gratuito) y ejecuta el MCP localmente con `node src/stdio.js`. **Los chats de cada persona nunca se mezclan porque están en bases de datos distintas.**
 
 ### 1. Crear una base en Neon
 
