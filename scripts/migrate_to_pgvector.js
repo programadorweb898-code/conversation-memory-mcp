@@ -1,3 +1,14 @@
+/*
+ * LEGACY: migración histórica de embeddings a pgvector.
+ *
+ * Qué hace: habilita la extensión vector y convierte message_embeddings.embedding
+ * de TEXT a vector.
+ *
+ * ADVERTENCIA: esta migración ya fue aplicada sobre la base de producción y no
+ * debe volver a ejecutarse sobre una base que ya tenga el esquema actualizado.
+ * La migración numerada 001_initial_schema.sql ya cubre actualmente estos cambios
+ * de forma idempotente.
+ */
 const { db } = require("../src/database");
 
 async function migrate() {
