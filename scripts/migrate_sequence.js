@@ -1,3 +1,16 @@
+/*
+ * LEGACY: migración histórica de secuencias de conversaciones.
+ *
+ * Qué hace: agrega/backfillea conversations.sequence_id, crea y sincroniza
+ * conversations_seq, configura DEFAULT/NOT NULL, renombra y convierte
+ * session_summaries.last_processed_message_id a last_processed_seq_id y crea
+ * el índice correspondiente.
+ *
+ * ADVERTENCIA: esta migración ya fue aplicada sobre la base de producción y no
+ * debe volver a ejecutarse sobre una base que ya tenga el esquema actualizado.
+ * La migración numerada 001_initial_schema.sql ya cubre actualmente estos cambios
+ * de forma idempotente.
+ */
 const { db } = require("../src/database");
 
 async function runMigration() {
