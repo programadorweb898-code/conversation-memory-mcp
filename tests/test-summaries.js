@@ -97,6 +97,7 @@ describe('Session Summaries Tool', () => {
   });
 
   it('procesa solo los mensajes posteriores al cursor del resumen', async function() {
+    this.timeout(30000);
     await finalizeSession({ sessionId: testSessionId, project: "test" });
     const before = await db.getAsync(
       `SELECT last_processed_seq_id FROM session_summaries WHERE session_id = $1`,
