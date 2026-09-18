@@ -30,7 +30,7 @@ La idea central es separar:
 
 ---
 
-# Inicio rápido (npx + Neon personal)
+# Inicio rápido (clonado + Neon personal)
 
 Cada usuario crea su propia base de datos en **Neon** (plan gratuito) y ejecuta el MCP localmente con `npx`. **Los chats de cada persona nunca se mezclan porque están en bases de datos distintas.**
 
