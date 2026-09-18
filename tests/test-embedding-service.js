@@ -2,6 +2,7 @@ const { expect } = require("chai");
 const {
   initializeEmbeddingPipeline,
   generateEmbedding,
+  generateEmbeddings,
   saveEmbedding,
   getEmbedding,
 } = require("../src/services/embeddingService");
@@ -31,6 +32,21 @@ describe("Embedding Service", function () {
     expect(embeddingJson).to.be.a("string");
     expect(embedding).to.be.an("array").with.lengthOf(384);
     expect(embedding.every((value) => typeof value === "number" && Number.isFinite(value))).to.equal(true);
+  });
+
+  it("genera embeddings por lote manteniendo 384 dimensiones por mensaje", async () => {
+    const embeddings = await generateEmbeddings([
+      sampleMessage,
+      { role: "assistant", content: "Respuesta de prueba para validar el procesamiento por lote." },
+    ]);
+
+    expect(embeddings).to.be.an("array").with.lengthOf(2);
+
+    embeddings.forEach((embeddingJson) => {
+      const embedding = JSON.parse(embeddingJson);
+      expect(embedding).to.be.an("array").with.lengthOf(384);
+      expect(embedding.every((value) => typeof value === "number" && Number.isFinite(value))).to.equal(true);
+    });
   });
 
   it("guarda y recupera el embedding sin perder sus valores", async () => {
