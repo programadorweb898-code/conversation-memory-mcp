@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - hardening-transformers-migration
       - feature/automatic-engram-session-audit
       - feature/memory-audit-e2e
       - feature/memory-audit-resilience-tests
@@ -16,9 +15,6 @@ on:
     branches:
       - main
   workflow_dispatch:
-
-permissions:
-  contents: write
 
 jobs:
   test:
@@ -50,15 +46,6 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - name: Regenerate lockfile on branch push
-        if: github.event_name == 'push' && github.ref == 'refs/heads/hardening-transformers-migration'
-        run: |
-          npm install --package-lock-only --ignore-scripts
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json
-          git diff --cached --quiet || git commit -m "chore: regenerate lockfile for dependency updates"
-          git push origin HEAD:${{ github.ref_name }}
       - name: Install dependencies
         run: npm ci
       - name: Run tests
