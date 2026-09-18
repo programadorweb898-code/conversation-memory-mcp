@@ -1,4 +1,19 @@
 /*
+ * LEGACY: backfill histórico de la columna project.
+ *
+ * Qué hace: asigna project a conversaciones y resúmenes que todavía lo tienen
+ * en NULL, usando primero un proyecto existente de la sesión, luego el mapa
+ * explícito, después una inferencia por session_id y finalmente "default".
+ * Soporta dry-run y aplicación explícita con --apply.
+ *
+ * ADVERTENCIA: este script corresponde al backfill histórico ya aplicado sobre
+ * la base de producción y no debe volver a ejecutarse sobre una base que ya tenga
+ * los datos de proyecto correctamente completados. La migración numerada
+ * 001_initial_schema.sql garantiza la columna project, pero no reemplaza este
+ * backfill de datos históricos; por eso el script se conserva documentado como
+ * legacy y no se elimina.
+ */
+/*
  * Migración: backfill de la columna `project` en registros históricos.
  *
  * Asigna un proyecto a los mensajes/resúmenes que tienen `project IS NULL`.
