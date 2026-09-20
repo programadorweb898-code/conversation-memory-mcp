@@ -288,7 +288,6 @@ describe('EngramLocalAdapter promote (CLI engram save)', () => {
     expect(result).to.deep.equal({ success: true, memoryId: '9', topicKey: null, metadata: {} });
     expect(execStub.calledOnce).to.equal(true);
   });
-});
   it('P-A10 — permite seleccionar otro binario de Engram sin cambiar el contrato del adapter', async () => {
     const execStub = stubSave('Memory saved: #88 "elegi postgres en neon" (decision)');
     const adapter = makeAdapter('/opt/engram-v2/engram');
@@ -297,3 +296,4 @@ describe('EngramLocalAdapter promote (CLI engram save)', () => {
     expect(result.success).to.equal(true);
     expect(execStub.getCall(0).args[0]).to.equal('/opt/engram-v2/engram');
   });
+});
