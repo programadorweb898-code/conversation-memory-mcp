@@ -63,4 +63,5 @@ describe('Delete Session Tool', () => {
       [nonExistentSessionId]
     );
     expect(conversations).to.have.lengthOf(0);
-  });});
+  });
+});
