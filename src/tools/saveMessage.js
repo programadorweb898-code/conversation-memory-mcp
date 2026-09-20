@@ -14,14 +14,12 @@ const SaveMessageSchema = z.object({
   owner: z.string().optional(),
 });
 
-async function saveMessage(params) {
-  const validatedParams = SaveMessageSchema.parse(params);
-  const { sessionId, project, role, content, agentId, relatedMessageId, owner } = validatedParams;
+function isMcpProtocolNoise(content) {
+  if (!content || typeof content !== "string") return false;
 
-  // Filtrado de mensajes de infraestructura MCP
   try {
     const parsed = JSON.parse(content);
-    if (parsed.jsonrpc === "2.0") {
+    if (parsed && parsed.jsonrpc === "2.0") {
       const ignoredMethods = [
         "initialize",
         "notifications/initialized",
@@ -29,13 +27,23 @@ async function saveMessage(params) {
         "tools/call",
         "$/cancelRequest"
       ];
-      if (parsed.method && ignoredMethods.includes(parsed.method)) {
-        console.log(`Skipping MCP protocol message: ${parsed.method}`);
-        return { success: true, messageId: null };
-      }
+      return Boolean(parsed.method && ignoredMethods.includes(parsed.method));
     }
   } catch {
-    // No es JSON, asumimos que es texto plano de conversación
+    // No es JSON; asumimos texto libre de conversación real.
+  }
+
+  return false;
+}
+
+async function saveMessage(params) {
+  const validatedParams = SaveMessageSchema.parse(params);
+  const { sessionId, project, role, content, agentId, relatedMessageId, owner } = validatedParams;
+
+  // Los mensajes de infraestructura MCP no forman parte del historial de conversación real.
+  if (isMcpProtocolNoise(content)) {
+    console.log(`Skipping MCP protocol message: ${content}`);
+    return { success: true, messageId: null };
   }
 
   const messageId = randomUUID();

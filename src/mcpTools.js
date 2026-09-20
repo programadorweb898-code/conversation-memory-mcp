@@ -40,11 +40,12 @@ function registerMcpTools(server) {
   // 1. saveMessage
   server.tool(
   "saveMessage",           // nombre de la tool
-  `Guarda un mensaje en el historial persistente de conversaciones.
-Cuando seas un agente usando este MCP, guardá cada turno de conversación que tenga contenido sustancioso: primero el mensaje del usuario (role: "user") anotando el messageId que devuelve esta tool en la respuesta; después guardá tu respuesta (role: "assistant") pasando ese mismo ID como relatedMessageId.
+  `Guarda un mensaje de conversación real en Neon.
+Esta tool NO debe usarse para mensajes de protocolo MCP ni para eventos de infraestructura. Solo persiste turnos reales de usuario o asistente, con contenido útil para el historial del proyecto.
+Cuando seas un agente usando este MCP, guardá primero el mensaje del usuario (role: "user") anotando el messageId que devuelve esta tool; después guardá tu respuesta (role: "assistant") pasando ese mismo ID como relatedMessageId.
 Usá el mismo sessionId durante toda la sesión activa e identificá tu agente con agentId (por ejemplo 'claude-desktop', 'copilot', 'gemini-cli'), para que la memoria pueda filtrarse por agente más adelante. El parámetro project es obligatorio y aísla los datos.
-Podés omitir contenido trivial: saludos, confirmaciones cortas ("ok", "entendido") y mensajes sin valor de recuperación futuro.
-En clientes que ya integran guardado automático, esta tool puede duplicar mensajes; en ese caso usala solo para backfill.`,              // descripción (esto es lo que ve el agente)
+En clientes que ya integran guardado automático, esta tool puede duplicar mensajes; en ese caso usala solo para backfill.
+La memoria durable / Engram sigue siendo selectiva y no debe guardar ruido ni protocolo.`,              // descripción (esto es lo que ve el agente)
   {
     sessionId: z.string().describe("ID de la sesión"),
     project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
@@ -68,11 +69,12 @@ En clientes que ya integran guardado automático, esta tool puede duplicar mensa
     `Busca mensajes en el historial.
 Búsqueda híbrida: usa similitud semántica (pgvector) cuando hay embeddings y cae a coincidencia léxica (ILIKE) si no los hay, así el conocimiento siempre es recuperable.
 ACCESO MULTI-AGENTE: el conocimiento es compartido y remoto (Neon). Si NO pasás agentId, buscás en TODO lo que guardaron todos los agentes; pasándolo, acotás a un agente.
+REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícitamente filtrar por agente (p. ej. "la última charla con copilot"). Un agentId no pedido puede devolver vacío aunque existan mensajes de otros agentes.
 Cada resultado incluye agent_id: identifica quién escribió ese mensaje (turno, plan o acción).`,
     {
       searchTerm: z.string().describe("Término de búsqueda (palabra clave o consulta semántica)"),
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
-      agentId: z.string().optional().describe("Filtrar por ID de agente"),
+      agentId: z.string().optional().describe("Filtrar por ID de agente (SOLO si el usuario lo pidió explícitamente; no lo uses en lecturas base)"),
     },
 async ({ searchTerm, project, agentId }) => {
     const results = await searchMessages(withScope({ searchTerm, project, agentId }));
@@ -85,12 +87,13 @@ async ({ searchTerm, project, agentId }) => {
     "semanticSearchMessages",
     `Busca mensajes semánticamente similares a una consulta.
 ACCESO MULTI-AGENTE: el conocimiento es compartido y remoto (Neon). Si NO pasás agentId, buscás en TODO lo que guardaron todos los agentes; pasándolo, acotás a un agente.
+REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícitamente filtrar por agente (p. ej. "la última charla con copilot"). Un agentId no pedido puede devolver vacío aunque existan mensajes de otros agentes.
 Cada resultado incluye agent_id: identifica quién escribió ese mensaje (turno, plan o acción).
 Si no hay embeddings indexados, responde con coincidencia léxica (ILIKE).`,
     {
       query: z.string().describe("La consulta de búsqueda"),
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
-      agentId: z.string().optional().describe("Filtrar por ID de agente"),
+      agentId: z.string().optional().describe("Filtrar por ID de agente (SOLO si el usuario lo pidió explícitamente; no lo uses en lecturas base)"),
       limit: z.number().optional().describe("Número máximo de resultados (por defecto: 5)"),
     },
 async ({ query, project, agentId, limit }) => {
@@ -116,10 +119,11 @@ async ({ query, project, agentId, limit }) => {
   // 3. lastSession
   server.tool(
     "lastSession",
-    "Recupera el ID de la última sesión",
+    `Recupera el ID de la última sesión del proyecto.
+REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícitamente la última sesión de un agente. Sin agentId devuelve la última sesión de cualquier agente.`,
     {
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
-      agentId: z.string().optional().describe("Filtrar por ID de agente"),
+      agentId: z.string().optional().describe("Filtrar por ID de agente (SOLO si el usuario lo pidió explícitamente; no lo uses en lecturas base)"),
     },
     async ({ project, agentId }) => {
       const sessionId = await lastSession(withScope({ project, agentId }));
@@ -132,11 +136,12 @@ async ({ query, project, agentId, limit }) => {
     "recoverSession",
     `Recupera todos los mensajes de una sesión, ordenados cronológicamente.
 Cada mensaje incluye agent_id para saber qué agente lo escribió (turno, plan o acción).
-Si NO pasás agentId, devuelve los mensajes de todos los agentes de la sesión.`,
+Sin agentId devuelve los mensajes de todos los agentes de la sesión.
+REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícitamente filtrar por agente (p. ej. "la última charla con copilot"). Un agentId no pedido puede devolver vacío aunque la sesión tenga mensajes de otros agentes.`,
     {
       sessionId: z.string().describe("ID de la sesión a recuperar"),
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
-      agentId: z.string().optional().describe("Filtrar por ID de agente"),
+      agentId: z.string().optional().describe("Filtrar por ID de agente (SOLO si el usuario lo pidió explícitamente; no lo uses en lecturas base)"),
     },
     async ({ sessionId, project, agentId }) => {
       const messages = await recoverSession(withScope({ sessionId, project, agentId }));
@@ -160,7 +165,7 @@ Categorías de memoria:
     {
       sessionId: z.string().describe("ID de la sesión a recuperar"),
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
-      agentId: z.string().optional().describe("Filtrar por ID de agente"),
+      agentId: z.string().optional().describe("Filtrar por ID de agente (SOLO si el usuario lo pidió explícitamente; no lo uses en lecturas base)"),
     },
     async ({ sessionId, project, agentId }) => {
       const result = await extractMemories(withScope({ sessionId, project, agentId }));
@@ -184,7 +189,7 @@ NO promueve memorias a Engram: esa etapa es memoryPromote. NO escribe en Engram.
     {
       sessionId: z.string().describe("ID de la sesión a recuperar y auditar"),
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
-      agentId: z.string().optional().describe("Filtrar por ID de agente"),
+      agentId: z.string().optional().describe("Filtrar por ID de agente (SOLO si el usuario lo pidió explícitamente; no lo uses en lecturas base)"),
     },
     async ({ sessionId, project, agentId }) => {
       const result = await memoryAudit(withScope({ sessionId, project, agentId }));
@@ -220,10 +225,11 @@ Si candidateIds se omite, promueve todos los promocionables de la sesión/proyec
   server.tool(
     "listSessions",
     `Lista todas las sesiones disponibles del proyecto.
-ACCESO MULTI-AGENTE: si NO pasás agentId, listás sesiones de todos los agentes; pasándolo, solo las de ese agente.`,
+ACCESO MULTI-AGENTE: si NO pasás agentId, listás sesiones de todos los agentes; pasándolo, solo las de ese agente.
+REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícitamente filtrar por agente. Un agentId no pedido puede devolver vacío aunque existan sesiones de otros agentes.`,
     {
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
-      agentId: z.string().optional().describe("Filtrar por ID de agente"),
+      agentId: z.string().optional().describe("Filtrar por ID de agente (SOLO si el usuario lo pidió explícitamente; no lo uses en lecturas base)"),
     },
     async ({ project, agentId }) => {
       const sessions = await listSessions(withScope({ project, agentId }));
@@ -254,10 +260,11 @@ Para recuperar información del historial sin intención de guardarla, usá sear
     "getLastSessionContext",
     `Recupera el historial completo de la última sesión.
 Cada mensaje incluye agent_id para saber qué agente lo escribió.
-ACCESO MULTI-AGENTE: si NO pasás agentId, la última sesión puede ser de cualquier agente; pasándolo, la última de ese agente.`,
+Sin agentId, la última sesión puede ser de cualquier agente; pasándolo, la última de ese agente.
+REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícitamente filtrar por agente. Un agentId no pedido puede devolver vacío aunque exista historia de otros agentes.`,
     {
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
-      agentId: z.string().optional().describe("Filtrar por ID de agente"),
+      agentId: z.string().optional().describe("Filtrar por ID de agente (SOLO si el usuario lo pidió explícitamente; no lo uses en lecturas base)"),
     },
     async ({ project, agentId }) => {
       const context = await getLastSessionContext(withScope({ project, agentId }));

@@ -6,6 +6,15 @@ Cuando uses `conversation-memory-mcp`, mantené el aislamiento por proyecto y ut
 
 Los turnos sustanciosos deben persistirse mediante `saveMessage` siguiendo las reglas documentadas en el README.
 
+### No usar `agentId` en lecturas base (regla anti falsos vacíos)
+
+`agentId` es **metadata de trazabilidad** que se guarda en cada turno, NO un filtro obligatorio de lectura.
+
+- Al leer historial o sesiones, nunca pases `agentId` salvo que el usuario lo pida explícitamente ("la última charla con copilot", "con opencode", etc.).
+- La lectura base se hace con `project` y/o `sessionId` (o la última sesión del proyecto).
+- Pasar `agentId` sin que se pida puede devolver vacío aunque existan mensajes/sesiones reales de otros agentes (falsos vacíos).
+- Si el usuario pide filtrar por agente, aplicá el filtro sobre los turnos ya guardados (project + agentId).
+
 ## Recuperación de conversaciones anteriores
 
 Cuando el usuario pregunte por una sesión o período anterior:

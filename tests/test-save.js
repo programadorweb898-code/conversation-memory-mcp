@@ -76,6 +76,27 @@ describe('saveMessage', () => {
     expect(queueStub.calledOnce).to.be.true;
   });
 
+  it('should skip MCP protocol messages and not persist them in Neon', async () => {
+    const sessionId = uuidv4();
+    testSessionIds.push(sessionId);
+
+    const params = {
+      sessionId,
+      project: 'protocol-project',
+      role: 'user',
+      content: JSON.stringify({ jsonrpc: '2.0', method: 'tools/list', params: {} }),
+    };
+
+    const result = await saveMessage(params);
+
+    expect(result.success).to.equal(true);
+    expect(result.messageId).to.equal(null);
+
+    const retrievedMessage = await db.getAsync(`SELECT * FROM conversations WHERE session_id = $1`, [sessionId]);
+    expect(retrievedMessage).to.not.exist;
+    expect(queueStub.called).to.be.false;
+  });
+
   it('should reject if Zod validation fails for missing required fields', async () => {
     const params = {
       project: 'test-project',

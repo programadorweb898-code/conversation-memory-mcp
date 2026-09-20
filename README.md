@@ -371,6 +371,14 @@ Este es el patrón de **guardado por instrucción al agente**.
 
 Los clientes que dispongan de plugins, hooks o mecanismos propios de captura pueden automatizar este proceso.
 
+## Lectura de historial: no usar `agentId` como filtro obligatorio
+
+Al consultar el historial (`recoverSession`, `searchMessages`, `semanticSearchMessages`, `lastSession`, `listSessions`, `getLastSessionContext`), **no pases `agentId`** salvo que el usuario lo pida explícitamente por agente (p. ej. "la última charla con copilot").
+
+- `agentId` es metadata de trazabilidad que se guarda en cada turno, no un filtro obligatorio de lectura.
+- La lectura base se hace con `project` y/o `sessionId` (o la última sesión del proyecto); así se recupera todo el historial, de todos los agentes.
+- Pasar `agentId` sin que se pida puede devolver vacío aunque existan mensajes/sesiones reales de otros agentes (falsos vacíos).
+
 ---
 
 # Guardado automático con plugin (opencode y agentes con plugins)
