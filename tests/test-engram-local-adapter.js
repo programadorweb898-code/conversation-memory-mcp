@@ -141,8 +141,8 @@ describe('EngramLocalAdapter promote (CLI engram save)', () => {
     });
   }
 
-  function makeAdapter() {
-    return new EngramLocalAdapter({ baseUrl: 'http://engram.test', fetchFn: sinon.stub() });
+  function makeAdapter(engramBin) {
+    return new EngramLocalAdapter({ baseUrl: 'http://engram.test', fetchFn: sinon.stub(), ...(engramBin ? { engramBin } : {}) });
   }
 
   const baseCandidate = {
@@ -289,3 +289,11 @@ describe('EngramLocalAdapter promote (CLI engram save)', () => {
     expect(execStub.calledOnce).to.equal(true);
   });
 });
+  it('P-A10 — permite seleccionar otro binario de Engram sin cambiar el contrato del adapter', async () => {
+    const execStub = stubSave('Memory saved: #88 "elegi postgres en neon" (decision)');
+    const adapter = makeAdapter('/opt/engram-v2/engram');
+    const result = await adapter.promote(baseCandidate);
+
+    expect(result.success).to.equal(true);
+    expect(execStub.getCall(0).args[0]).to.equal('/opt/engram-v2/engram');
+  });
