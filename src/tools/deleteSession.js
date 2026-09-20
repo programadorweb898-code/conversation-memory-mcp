@@ -1,15 +1,14 @@
 const { db } = require("../database");
 
 /**
- * Elimina todos los mensajes, embeddings, summaries y candidatos de memoria
+ * Elimina todos los mensajes, embeddings y el resumen
  * asociados para una sesión específica.
  * @param {string} sessionId - El ID único de la sesión a eliminar.
  * @param {string} project - Proyecto de la sesión.
  * @param {string} [owner] - Propietario autenticado; si se omite, aplica al proyecto completo.
  * @returns {Promise<void>}
  */
-// Orden obligatorio: message_embeddings depende de conversations; conversations
-// y memory_candidates son recursos de la sesión y deben limpiarse explícitamente.
+// Orden obligatorio: message_embeddings depende de conversations.
 async function deleteSession({ sessionId, project, owner }) {
   if (!project) throw new Error("El parámetro 'project' es obligatorio.");
   try {
@@ -30,15 +29,11 @@ async function deleteSession({ sessionId, project, owner }) {
       [sessionId, project, owner ?? null]
     );
 
-    const candidateResult = await db.runAsync(
-      "DELETE FROM memory_candidates WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)",
-      [sessionId, project, owner ?? null]
-    );
 
-    if (messageResult.changes > 0 || summaryResult.changes > 0 || candidateResult.changes > 0) {
+    if (messageResult.changes > 0 || summaryResult.changes > 0) {
       console.log(
         `Session ${sessionId} and its associated data deleted successfully. ` +
-        `Rows affected: messages=${messageResult.changes}, summaries=${summaryResult.changes}, candidates=${candidateResult.changes}`
+        `Rows affected: messages=${messageResult.changes}, summaries=${summaryResult.changes}`
       );
     } else {
       console.log(`Session ${sessionId} not found or had no associated data.`);
