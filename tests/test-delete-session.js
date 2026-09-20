@@ -37,7 +37,6 @@ describe('Delete Session Tool', () => {
 
   afterEach(async () => {
     try {
-      await db.runAsync(`DELETE FROM memory_candidates WHERE session_id = $1`, [testSessionId]);
       await db.runAsync(`DELETE FROM message_embeddings WHERE message_id IN (SELECT id FROM conversations WHERE session_id = $1)`, [testSessionId]);
       await db.runAsync(`DELETE FROM conversations WHERE session_id = $1`, [testSessionId]);
     } catch (err) {
