@@ -4,13 +4,6 @@ on:
   push:
     branches:
       - main
-      - feature/automatic-engram-session-audit
-      - feature/memory-audit-e2e
-      - feature/memory-audit-resilience-tests
-      - feature/memory-audit-engram-integration
-      - feature/memory-audit-decision-states
-      - feature/memory-promote-idempotency
-      - feature/memory-promote-concurrency
   pull_request:
     branches:
       - main
