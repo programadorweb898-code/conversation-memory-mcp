@@ -37,7 +37,6 @@ async function finalizeSession({ sessionId, project, owner }) {
     return {
       summary: existingSummary.summary,
       summaryGenerated: true,
-      auditRequired: false,
       summaryPending: false,
     };
   }
@@ -57,7 +56,6 @@ async function finalizeSession({ sessionId, project, owner }) {
     return {
       summary: existingSummary?.summary ?? null,
       summaryGenerated: false,
-      auditRequired: false,
       summaryPending: true,
       reason: "llm_unavailable",
     };
@@ -77,7 +75,6 @@ async function finalizeSession({ sessionId, project, owner }) {
   return {
     summary,
     summaryGenerated: true,
-    auditRequired: true,
     summaryPending: false,
   };
 }
