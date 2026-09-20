@@ -242,7 +242,7 @@ Lo que se degrada es la funcionalidad que requiere generación/análisis. En `fi
 No se generó resumen: LLM no disponible.
 ```
 
-con `summaryGenerated: false`, `auditRequired: false` y `summaryPending: true`. En `extractMemories`, un fallo del LLM se registra y la extracción devuelve una lista de candidatos vacía. Como la auditoría de Engram se activa a partir de una finalización con `auditRequired: true`, sin resumen generado la auditoría automática no se ejecuta en ese momento.
+con `summaryGenerated: false`, `auditRequired: false` y `summaryPending: true`. En , un fallo del LLM se registra y la extracción devuelve una lista de candidatos vacía. Como la auditoría de memoria técnica externa se activa a partir de una finalización con `auditRequired: true`, sin resumen generado la auditoría automática no se ejecuta en ese momento.
 
 **Solución:** configurá al menos uno de los proveedores, por ejemplo `OPENROUTER_API_KEY` o `GEMINI_API_KEY`, y opcionalmente `AI_PROVIDER`/`AI_MODEL` según el proveedor que quieras usar. No necesitás un LLM para guardar ni recuperar el historial conversacional normal.
 
@@ -318,7 +318,7 @@ Cuando la pregunta requiere precisión sobre algo concreto, el agente puede busc
 
 Por ejemplo:
 
-> "¿Qué error encontramos ayer con `memoryAudit`?"
+> "¿Qué error encontramos ayer con ?"
 
 En ese caso, puede utilizar `searchMessages` o `semanticSearchMessages` para recuperar el contexto específico.
 
@@ -435,34 +435,34 @@ Reiniciá opencode. El plugin usa el MCP local `conversation-memory-local`, que 
 
 ### Guardado automático y finalización a pedido
 
-El plugin solo guarda el **historial crudo** automáticamente: cuando la sesión queda idle y hubo mensajes nuevos, persiste el par usuario/assistant en Neon (y sus embeddings). No genera resúmenes por su cuenta ni escribe en Engram.
+El plugin solo guarda el **historial crudo** automáticamente: cuando la sesión queda idle y hubo mensajes nuevos, persiste el par usuario/assistant en Neon (y sus embeddings). No genera resúmenes por su cuenta ni escribe en memoria técnica externa.
 
 La **finalización de sesión es a pedido explícito del usuario** ("finalizá la sesión", "seguimos mañana", "después nos vemos", etc.):
 
 1. El agente obtiene el `sessionId` (si no lo tiene, con `lastSession`) y llama `finalizeSession`.
 2. `finalizeSession` genera un resumen **incremental**: solo resume los mensajes posteriores al último resumido (usa `last_processed_seq_id`). Por eso, cuando ya existe un resumen, no vuelve a procesar toda la sesión.
-3. Si el LLM está disponible, se guarda el nuevo resumen y `auditRequired` queda en `true` para que el agente pueda ejecutar la auditoría de Engram si Engram está disponible.
-4. Si el LLM **no está disponible o falla**, la sesión y sus mensajes igualmente quedan guardados, pero no se genera un resumen artificial, no se ejecuta la auditoría automática de Engram y los mensajes quedan pendientes para poder resumirse más adelante cuando vuelva a estar disponible un LLM.
+3. Si el LLM está disponible, se guarda el nuevo resumen y  queda en `true` para que el agente pueda ejecutar la auditoría de memoria técnica externa si memoria técnica externa está disponible.
+4. Si el LLM **no está disponible o falla**, la sesión y sus mensajes igualmente quedan guardados, pero no se genera un resumen artificial, no se ejecuta la auditoría automática de memoria técnica externa y los mensajes quedan pendientes para poder resumirse más adelante cuando vuelva a estar disponible un LLM.
 
 El resumen usa el LLM configurado. En OpenRouter, el modelo predeterminado es **Nemotron 120B gratuito** (`nvidia/nemotron-3-super-120b-a12b:free`), sujeto a la cuota y disponibilidad del proveedor. Podés cambiarlo con `AI_MODEL` o cambiar de proveedor con `AI_PROVIDER`.
 
-### Auditoría automática de Engram al finalizar
+### Auditoría automática de memoria técnica externa al finalizar
 
-Si Engram está instalado, configurado y disponible para el agente, y `finalizeSession` devuelve `auditRequired: true`, el agente debe llamar a `memoryAudit` para la sesión actual.
+La sesión puede finalizarse para generar o actualizar su resumen; si el LLM no está disponible, el historial igualmente permanece guardado.
 
-`memoryAudit` no modifica Engram por sí mismo. El agente interpreta el resultado y utiliza las tools reales de Engram cuando corresponda:
+ no modifica memoria técnica externa por sí mismo. El agente interpreta el resultado y utiliza las tools reales de memoria técnica externa cuando corresponda:
 
 - `missing` → `mem_save` si representa conocimiento durable importante.
 - `already_exists` → no crear duplicados.
 - `related` → `mem_save` solo si aporta conocimiento durable nuevo y relevante.
-- `possible_duplicate` → resolver con las capacidades disponibles de Engram, sin guardar duplicados a ciegas.
+- `possible_duplicate` → resolver con las capacidades disponibles de memoria técnica externa, sin guardar duplicados a ciegas.
 - `conflict` → utilizar `mem_judge` antes de modificar la memoria.
 - Si una decisión o configuración durable existente cambió de forma relevante → utilizar la tool de actualización disponible, por ejemplo `mem_update`.
 
-No es necesario llamar primero a `extractMemories`: `memoryAudit` realiza esa extracción internamente.
+No es necesario llamar primero a :  realiza esa extracción internamente.
 
 > [!NOTE]
-> La auditoría automática depende de que exista un LLM disponible para finalizar la sesión. Si `finalizeSession` no puede generar el resumen por falta de LLM, `auditRequired` es `false` y la auditoría automática no se aplica en ese momento.
+> La auditoría automática depende de que exista un LLM disponible para finalizar la sesión. Si `finalizeSession` no puede generar el resumen por falta de LLM,  es `false` y la auditoría automática no se aplica en ese momento.
 
 > [!NOTE]
 > El monitor de sesiones inactivas (solo modo HTTP) está desactivado por defecto; para reactivarlo, `ENABLE_SESSION_MONITOR=true`.
@@ -552,7 +552,7 @@ Lista las sesiones disponibles de un proyecto.
 
 # Memoria durable
 
-## `extractMemories`
+## 
 
 Recupera información de una sesión y prepara candidatos de memoria semántica durable.
 
@@ -564,13 +564,13 @@ Los candidatos pueden representar:
 * `configuration`
 * `lesson`
 
-Esta herramienta **no guarda directamente la memoria en Engram**.
+Esta herramienta **no guarda directamente la memoria en memoria técnica externa**.
 
 Su objetivo es identificar qué conocimiento de una conversación podría ser útil más allá de esa conversación.
 
 ---
 
-## `memoryAudit`
+## 
 
 Audita los candidatos de memoria antes de promoverlos.
 
@@ -586,21 +586,21 @@ Permite determinar si una memoria:
 
 El auditado se persiste en PostgreSQL.
 
-`memoryAudit` **no escribe directamente en Engram**.
+ **no escribe directamente en memoria técnica externa**.
 
-En el flujo automático de finalización, se ejecuta cuando el resumen se pudo generar, Engram está disponible y el agente recibe `auditRequired: true`.
+En el flujo automático de finalización, se ejecuta cuando el resumen se pudo generar, memoria técnica externa está disponible y el agente recibe `auditRequired: true`.
 
 ---
 
-## `memoryPromote`
+## 
 
 Promueve candidatos auditados hacia el proveedor de memoria durable configurado.
 
-Cuando Engram está habilitado, puede utilizarse como proveedor de memoria durable.
+Cuando memoria técnica externa está habilitado, puede utilizarse como proveedor de memoria durable.
 
 La operación es idempotente y permite evitar promociones duplicadas.
 
-Si Engram no está disponible, `conversation-memory-mcp` puede continuar funcionando como sistema de memoria conversacional.
+Si memoria técnica externa no está disponible, `conversation-memory-mcp` puede continuar funcionando como sistema de memoria conversacional.
 
 ---
 
@@ -641,23 +641,10 @@ Cuando un embedding no está disponible, determinadas búsquedas pueden utilizar
 
 Esto es diferente de una memoria técnica o semántica durable.
 
-Por eso el proyecto puede trabajar junto con **Engram**, creado por Alan Buscaglia, en lugar de intentar reemplazarlo.
+Por eso el proyecto puede trabajar junto con **memoria técnica externa**, creado por Alan Buscaglia, en lugar de intentar reemplazarlo.
 
-## Engram
 
-[Engram — repositorio original de Alan Buscaglia](https://github.com/Gentleman-Programming/engram?utm_source=chatgpt.com)
-
-**Engram** es un sistema de memoria persistente para agentes de IA. Su objetivo es evitar que el agente pierda entre sesiones conocimientos importantes como decisiones de arquitectura, bugs solucionados, descubrimientos, patrones y convenciones del proyecto.
-
-Engram está diseñado para ser **agnóstico del agente** y utiliza MCP para que distintos agentes compatibles puedan acceder a esa memoria persistente. El proyecto nació precisamente para resolver el problema de que un agente vuelva a comenzar prácticamente desde cero en una nueva sesión.
-
-Para conocer su arquitectura, instalación y configuración actual, consultar directamente el repositorio original de Engram:
-
-[GitHub — Gentleman-Programming/engram](https://github.com/Gentleman-Programming/engram?utm_source=chatgpt.com)
-
----
-
-## ¿Por qué utilizar Engram y conversation-memory-mcp juntos?
+## ¿Por qué utilizar memoria técnica externa y conversation-memory-mcp juntos?
 
 Los dos sistemas resuelven problemas relacionados con la memoria de los agentes, pero desde **niveles diferentes**.
 
@@ -678,7 +665,7 @@ En otras palabras:
 
 > **¿Qué se dijo o qué ocurrió durante una conversación anterior?**
 
-### Engram
+### memoria técnica externa
 
 Se ocupa principalmente de convertir determinados conocimientos importantes en **memoria durable**:
 
@@ -709,7 +696,7 @@ finalizeSession
      └── resumen generado
               │
               ▼
-     Engram disponible?
+     memoria técnica externa disponible?
               │
               ▼
         memoryAudit
@@ -724,10 +711,10 @@ finalizeSession
        └──────┴─────────┘
               │
               ▼
-        Engram durable
+        memoria técnica externa durable
 ```
 
-La auditoría no convierte automáticamente cada conversación en memoria durable. El agente interpreta los resultados y utiliza las herramientas propias de Engram (`mem_save`, `mem_update`, `mem_judge`, cuando estén disponibles) para decidir qué conocimiento debe persistir.
+La auditoría no convierte automáticamente cada conversación en memoria durable. El agente interpreta los resultados y utiliza las herramientas propias de memoria técnica externa (`mem_save`, `mem_update`, `mem_judge`, cuando estén disponibles) para decidir qué conocimiento debe persistir.
 
 Esto permite mantener una separación clara:
 
@@ -738,7 +725,7 @@ conversation-memory-mcp
 
 Conocimiento técnico durable
         ↓
-Engram
+memoria técnica externa
 ```
 
 La ventaja de combinarlos es evitar dos problemas opuestos:
@@ -746,9 +733,9 @@ La ventaja de combinarlos es evitar dos problemas opuestos:
 1. **Guardar absolutamente todo como memoria durable**, generando ruido y dificultando la recuperación de conocimiento importante.
 2. **Guardar solamente memorias resumidas**, perdiendo el historial conversacional necesario para reconstruir qué se dijo, cuándo se dijo y en qué contexto ocurrió.
 
-De esta forma, `conversation-memory-mcp` puede funcionar como la **fuente de historial conversacional**, mientras que Engram funciona como una **capa de conocimiento técnico durable**.
+De esta forma, `conversation-memory-mcp` puede funcionar como la **fuente de historial conversacional**, mientras que memoria técnica externa funciona como una **capa de conocimiento técnico durable**.
 
-La integración está diseñada para que Engram sea opcional. `conversation-memory-mcp` puede funcionar sin Engram y mantener su capacidad de almacenar y recuperar conversaciones.
+La integración está diseñada para que memoria técnica externa sea opcional. `conversation-memory-mcp` puede funcionar sin memoria técnica externa y mantener su capacidad de almacenar y recuperar conversaciones.
 
 ---
 
@@ -788,7 +775,7 @@ finalizeSession()
    │      ↓
    │   memoryAudit()
    │      ↓
-   │   Agente + tools de Engram
+   │   Agente + tools de memoria técnica externa
    │
    └── LLM no disponible
           ↓
@@ -825,7 +812,7 @@ Mensajes relevantes
 Agente
 ```
 
-Así, el historial completo permanece disponible en `conversation-memory-mcp`, mientras que los resúmenes evitan reprocesar innecesariamente sesiones completas y el conocimiento técnico seleccionado puede convertirse en memoria durable mediante Engram.
+Así, el historial completo permanece disponible en `conversation-memory-mcp`, mientras que los resúmenes evitan reprocesar innecesariamente sesiones completas y el conocimiento técnico seleccionado puede convertirse en memoria durable mediante memoria técnica externa.
 
 ---
 
@@ -916,7 +903,7 @@ Su objetivo principal es mantener una **fuente persistente y recuperable del his
 
 La capa de memoria durable es una responsabilidad diferente.
 
-Por eso el proyecto puede funcionar de forma independiente o combinarse con sistemas como Engram:
+Por eso el proyecto puede funcionar de forma independiente o combinarse con sistemas como memoria técnica externa:
 
 ```text
                     AGENTE
@@ -924,7 +911,7 @@ Por eso el proyecto puede funcionar de forma independiente o combinarse con sist
           ┌────────────┴────────────┐
           │                         │
           ▼                         ▼
-conversation-memory-mcp          Engram
+conversation-memory-mcp          memoria técnica externa
           │                         │
           ▼                         ▼
 Historial conversacional     Conocimiento durable
