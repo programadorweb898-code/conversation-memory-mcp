@@ -6,6 +6,7 @@
 
 const childProcess = require("child_process");
 const DEFAULT_BASE_URL = "http://127.0.0.1:7437";
+const DEFAULT_ENGRAM_BIN = "engram";
 
 /**
  * Resuelve la URL base de Engram local sin depender de ningún secret:
@@ -26,6 +27,7 @@ class EngramLocalAdapter {
    */
   constructor(options = {}) {
     this.baseUrl = options.baseUrl || defaultBaseUrl();
+    this.engramBin = options.engramBin || process.env.ENGRAM_BIN || DEFAULT_ENGRAM_BIN;
     this.fetchFn = options.fetchFn || globalThis.fetch;
   }
 
@@ -146,7 +148,7 @@ class EngramLocalAdapter {
 
     let output;
     try {
-      output = await runEngram(args);
+      output = await runEngram(args, { bin: this.engramBin });
     } catch (err) {
       return {
         success: false,
@@ -247,10 +249,10 @@ function isRetryableProviderError(message) {
  * @param {Object} [options]
  * @returns {Promise<string>} stdout del proceso.
  */
-function runEngram(args, { timeout = 15000 } = {}) {
+function runEngram(args, { timeout = 15000, bin = process.env.ENGRAM_BIN || DEFAULT_ENGRAM_BIN } = {}) {
   return new Promise((resolve, reject) => {
     childProcess.execFile(
-      "engram",
+      bin,
       args,
       { maxBuffer: 1024 * 1024, timeout, windowsHide: true, encoding: "utf8" },
       (error, stdout, stderr) => {
@@ -286,4 +288,4 @@ function normalizeObservation(row) {
   };
 }
 
-module.exports = { EngramLocalAdapter, defaultBaseUrl };
+module.exports = { EngramLocalAdapter, defaultBaseUrl, DEFAULT_ENGRAM_BIN };
