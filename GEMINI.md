@@ -1,134 +1,120 @@
 # Conversation Memory MCP Project
 
-You are helping build a production-ready MCP server called "conversation-memory-mcp".
+Estás ayudando a desarrollar un MCP llamado `conversation-memory-mcp`.
 
-Goal:
-Create a persistent conversation memory system that complements Engram.
+## Objetivo
 
-Engram stores semantic knowledge and important facts.
+El proyecto tiene una responsabilidad única:
 
-This MCP stores complete conversation history:
+> Mantener y recuperar el historial persistente de conversaciones.
 
-- user messages
-- assistant responses
-- sessions
-- timestamps
-- project context
+Debe almacenar y recuperar:
 
-The system must allow future agents to answer questions such as:
+- mensajes de usuario;
+- respuestas del asistente;
+- sesiones;
+- timestamps;
+- proyecto;
+- agente;
+- resúmenes;
+- embeddings para búsqueda semántica.
 
-- "What did we discuss last week about JWT?"
-- "What was your exact answer when I asked about UserCard?"
-- "Recover the previous session."
-- "Find conversations related to Stripe."
+El proyecto es agnóstico del agente y **no depende de ningún sistema externo de memoria técnica**.
 
-## Technical Requirements
+## Arquitectura
 
-Stack:
+```text
+Agente
+  │
+  ▼
+conversation-memory-mcp
+  │
+  ├── PostgreSQL / Neon
+  ├── pgvector
+  ├── historial
+  └── resúmenes
+```
 
-- Node.js
-- PostgreSQL (Neon)
-- MCP SDK
-- UUID
-- Zod
-- Optional vector search support
+Si un agente utiliza otro MCP para memoria técnica, ese MCP debe configurarse y utilizarse por separado. `conversation-memory-mcp` no debe importarlo, invocarlo, detectarlo ni utilizarlo como fallback.
 
-Architecture:
-
-conversation-memory-mcp/
-├── src/
-│   ├── database.js
-│   ├── server.js
-│   ├── tools/
-│   │   ├── saveMessage.js
-│   │   ├── searchMessages.js
-│   │   ├── lastSession.js
-│   │   ├── recoverSession.js
-│   │   ├── pushToEngram.js
-│   │   ├── getLastSessionContext.js
-│   │   ├── deleteMessage.js
-│   │   └── deleteSession.js
-│   └── services/
-├── tests/
-└── package.json
-
-## Development Rules
+## Reglas de comportamiento
 
 Responde siempre en español.
 
-No instales librerías, no ejecutes archivos ni ejecutes tests automáticamente, solo dame los comandos para ejecutarlos manualmente.
+No instales librerías, no ejecutes archivos ni ejecutes tests automáticamente. Cuando corresponda, proporciona los comandos para que el usuario los ejecute manualmente.
 
-### Regla de Orientación al Inicio (Obligatorio)
+### Consultas históricas
 
-Al iniciar cualquier sesión o ante cualquier consulta sobre eventos pasados, seguiré este protocolo:
+1. Para preguntas generales, consultar primero resúmenes existentes mediante `searchSessionsBySummary`.
+2. Para preguntas específicas, utilizar `searchMessages`, `semanticSearchMessages` o `recoverSession`.
+3. Si no existe resumen, recuperar los mensajes originales necesarios.
+4. No inventar información histórica que no esté en el historial recuperado.
 
-1. **Uso del MCP:** Para consultar el pasado, utilizaré las herramientas de `conversation-memory-mcp`.
-2. **Preguntas generales:** Para consultas como "¿qué hicimos ayer?", buscaré primero sesiones y resúmenes relevantes con `searchSessionsBySummary`. Si existe un resumen adecuado, lo utilizaré como contexto principal y no volveré a resumir todos los turnos.
-3. **Preguntas específicas:** Si la consulta requiere precisión sobre un hecho concreto, utilizaré `searchMessages` o `semanticSearchMessages` para recuperar los mensajes originales relevantes, aunque exista un resumen.
-4. **Sin resumen:** Si no existe un resumen adecuado, recuperaré los mensajes originales necesarios y generaré la respuesta en el momento.
-5. **Fallback estratégico:** Si el historial persistente es inaccesible o no contiene la información necesaria y Engram está disponible, consultaré Engram (`mem_context`, `mem_search`) como fuente secundaria.
+### Guardado
 
-`conversation-memory-mcp` proporciona el contexto persistente; la respuesta final la genera el agente. No crearé un nuevo resumen persistente únicamente por responder una pregunta histórica.
+Cuando no exista automatización externa:
 
-### Reglas de Interacción y Búsqueda
+1. guardar cada turno sustancioso con `saveMessage`;
+2. conservar el `messageId`;
+3. relacionar la respuesta mediante `relatedMessageId`;
+4. mantener el mismo `sessionId`;
+5. incluir siempre `project`;
+6. utilizar `agentId` para trazabilidad.
 
-- Seguir el escalonamiento Resumen → Historial → Engram cuando corresponda.
-- Si el usuario consulta sobre algo del pasado y, tras realizar la búsqueda escalonada, la información no se encuentra, responder explícitamente: "Eso no lo hablamos", seguido de la respuesta basada en conocimiento general o razonamiento actual.
-- El usuario no debe tener que recordar guardar el historial o el conocimiento; es responsabilidad del agente.
+Si ya existe un plugin/hook que guarda los turnos, no duplicar las llamadas.
 
-## Guardado de conversación
+## Capacidades
 
-El servidor solo persiste información recibida mediante `saveMessage`.
+- Persistencia del historial conversacional.
+- Recuperación de sesiones.
+- Búsqueda textual.
+- Búsqueda semántica.
+- Resúmenes incrementales.
+- Aislamiento por proyecto.
+- Aislamiento por owner en HTTP.
+- Trazabilidad por agente.
 
-Cuando no exista un plugin o hook que capture automáticamente los turnos:
+## LLM
 
-1. Guardar cada turno sustancioso del usuario con `saveMessage`.
-2. Conservar el `messageId` devuelto.
-3. Guardar la respuesta del asistente utilizando `relatedMessageId`.
-4. Mantener el mismo `sessionId` durante la sesión.
-5. Incluir siempre `project`.
-6. Identificar el agente mediante `agentId`.
-7. Omitir saludos, confirmaciones cortas y mensajes sin valor de recuperación.
+El LLM se utiliza para generar resúmenes cuando está configurado.
 
-Si existe un plugin/hook que ya automatiza el guardado, no duplicar las llamadas manualmente.
+La ausencia del LLM no debe impedir:
 
-## Capacidades del Proyecto
+- guardar mensajes;
+- recuperar mensajes;
+- buscar historial;
+- administrar sesiones.
 
-El sistema cuenta con:
+## Desarrollo
 
-- **Persistencia de Historial Crudo:** almacenamiento de mensajes y sesiones en PostgreSQL (Neon).
-- **Gestión de Sesiones:** recuperación de sesiones completas y contexto de la última sesión.
-- **Resúmenes incrementales:** `finalizeSession` resume solo los mensajes posteriores al último `last_processed_seq_id`.
-- **Recuperación eficiente:** para preguntas generales sobre sesiones anteriores se priorizan resúmenes existentes; para preguntas específicas se recuperan mensajes originales relevantes.
-- **Búsqueda:** búsqueda por palabras clave y búsqueda semántica.
-- **Memoria durable opcional:** integración con Engram mediante un adapter y herramientas de auditoría/promoción.
-- **Persistencia Proactiva:** mecanismos para guardar historial de conversación.
-- **Aislamiento por proyecto:** las llamadas al MCP deben incluir siempre `project`.
-- **LLM configurable:** OpenRouter usa Nemotron 120B gratuito como modelo predeterminado; el usuario puede cambiar `AI_MODEL` o `AI_PROVIDER`.
+Trabajar incrementalmente.
 
-## Reglas de desarrollo
+Para cada cambio:
 
-Work incrementally.
+1. explicar el objetivo;
+2. modificar solo lo necesario;
+3. agregar o actualizar pruebas;
+4. proporcionar los pasos de verificación.
 
-Never generate the entire project at once.
+Mantener:
 
-For every feature:
+- arquitectura simple;
+- archivos pequeños;
+- lógica reutilizable;
+- acceso a base de datos centralizado;
+- validación de entradas;
+- aislamiento por proyecto y owner;
+- ausencia de dependencias innecesarias.
 
-1. Explain the objective.
-2. Create the file.
-3. Explain why the code is needed.
-4. Add tests or verification steps.
-5. Wait for confirmation before moving forward.
+## Regla de independencia
 
-Always:
+No agregar al proyecto:
 
-- use clean architecture principles
-- keep files small
-- avoid duplicated logic
-- use dependency injection when appropriate
-- keep database access centralized
-- prefer maintainability over clever code
+- adapters para otros sistemas de memoria;
+- llamadas a CLIs externas de memoria;
+- fallbacks hacia otros sistemas de memoria;
+- variables de entorno específicas de otros sistemas de memoria;
+- herramientas MCP cuyo propósito sea exportar o promover memoria hacia otro sistema;
+- tablas o columnas cuyo único propósito sea almacenar referencias a otra memoria técnica.
 
-## Regla de Verificación de Estado (Obligatorio)
-
-Antes de declarar que una funcionalidad falta o debe ser implementada, el agente DEBE consultar el historial de conversaciones y los resúmenes de sesión previos cuando estén disponibles. Nunca asumas que algo falta solo porque no aparece en una inspección de archivos superficial.
+La responsabilidad del proyecto termina en el historial conversacional persistente y sus mecanismos propios de recuperación.
