@@ -58,63 +58,6 @@ CREATE TABLE IF NOT EXISTS embedding_failures (
   FOREIGN KEY(message_id) REFERENCES conversations(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS memory_candidates (
-  id TEXT PRIMARY KEY,
-  project TEXT NOT NULL,
-  session_id TEXT NOT NULL,
-  agent_id TEXT,
-  type TEXT NOT NULL,
-  title TEXT NOT NULL,
-  content TEXT,
-  topic_key TEXT,
-  what TEXT,
-  why TEXT,
-  where_context TEXT,
-  learned TEXT,
-  importance TEXT,
-  status TEXT NOT NULL,
-  source_message_ids JSONB NOT NULL DEFAULT '[]',
-  engram_id TEXT,
-  engram_topic_key TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  audited_at TIMESTAMP,
-  promoted_at TIMESTAMP,
-  CONSTRAINT chk_memory_candidates_status CHECK (
-    status IN ('missing', 'already_exists', 'related', 'possible_duplicate', 'conflict', 'pending', 'discard')
-  ),
-  CONSTRAINT chk_memory_candidates_type CHECK (
-    type IN ('decision', 'discovery', 'constraint', 'configuration', 'lesson')
-  )
-);
-
-DO $memory_constraints$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conrelid = 'memory_candidates'::regclass
-      AND conname = 'chk_memory_candidates_status'
-  ) THEN
-    ALTER TABLE memory_candidates ADD CONSTRAINT chk_memory_candidates_status CHECK (
-      status IN ('missing', 'already_exists', 'related', 'possible_duplicate', 'conflict', 'pending', 'discard')
-    );
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conrelid = 'memory_candidates'::regclass
-      AND conname = 'chk_memory_candidates_type'
-  ) THEN
-    ALTER TABLE memory_candidates ADD CONSTRAINT chk_memory_candidates_type CHECK (
-      type IN ('decision', 'discovery', 'constraint', 'configuration', 'lesson')
-    );
-  END IF;
-END
-$memory_constraints$;
-
-CREATE INDEX IF NOT EXISTS idx_memory_candidates_project ON memory_candidates(project);
-CREATE INDEX IF NOT EXISTS idx_memory_candidates_session_id ON memory_candidates(session_id);
-CREATE INDEX IF NOT EXISTS idx_memory_candidates_status ON memory_candidates(status);
-
 CREATE TABLE IF NOT EXISTS session_summaries (
   session_id TEXT PRIMARY KEY,
   project TEXT,

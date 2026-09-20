@@ -9,11 +9,7 @@ const semanticSearchMessages = require("./tools/semanticSearchMessages");
 const searchSessionsBySummary = require("./tools/searchSessionsBySummary");
 const lastSession = require("./tools/lastSession");
 const recoverSession = require("./tools/recoverSession");
-const extractMemories = require("./tools/extractMemories");
-const memoryAudit = require("./tools/memoryAudit");
-const memoryPromote = require("./tools/memoryPromote");
 const listSessions = require("./tools/listSessions");
-const pushToEngram = require("./tools/pushToEngram");
 const getLastSessionContext = require("./tools/getLastSessionContext");
 const saveSessionSummary = require("./tools/saveSessionSummary"); 
 const getSessionSummary = require("./tools/getSessionSummary"); 
@@ -45,7 +41,7 @@ Esta tool NO debe usarse para mensajes de protocolo MCP ni para eventos de infra
 Cuando seas un agente usando este MCP, guardá primero el mensaje del usuario (role: "user") anotando el messageId que devuelve esta tool; después guardá tu respuesta (role: "assistant") pasando ese mismo ID como relatedMessageId.
 Usá el mismo sessionId durante toda la sesión activa e identificá tu agente con agentId (por ejemplo 'claude-desktop', 'copilot', 'gemini-cli'), para que la memoria pueda filtrarse por agente más adelante. El parámetro project es obligatorio y aísla los datos.
 En clientes que ya integran guardado automático, esta tool puede duplicar mensajes; en ese caso usala solo para backfill.
-La memoria durable / Engram sigue siendo selectiva y no debe guardar ruido ni protocolo.`,              // descripción (esto es lo que ve el agente)
+Esta tool debe usarse únicamente para conservar el historial real de conversaciones; no persiste eventos de protocolo MCP ni infraestructura.`,              // descripción (esto es lo que ve el agente)
   {
     sessionId: z.string().describe("ID de la sesión"),
     project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
@@ -149,78 +145,6 @@ REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícit
     }
   );
 
-  // 4.5. extractMemories
-  server.tool(
-    "extractMemories",
-    `Recupera una sesión completa y prepara los candidatos de memoria semántica durable para que el agente los analice.
-Sirve para identificar memorias potenciales de una sesión (decisiones, descubrimientos, restricciones, configuraciones, lecciones) a partir de su contexto.
-NO guarda nada en Engram: solamente extrae y estructura la información.
-No debe utilizarse para guardar cada conversación ni como mecanismo de persistencia automática.
-Categorías de memoria:
-- decision: una elección que se tomó y su motivo.
-- discovery: un hallazgo o aprendizaje técnico.
-- constraint: una limitación o regla impuesta.
-- configuration: un cambio de configuración o setup.
-- lesson: una lección aprendida de una situación concreta.`,
-    {
-      sessionId: z.string().describe("ID de la sesión a recuperar"),
-      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
-      agentId: z.string().optional().describe("Filtrar por ID de agente (SOLO si el usuario lo pidió explícitamente; no lo uses en lecturas base)"),
-    },
-    async ({ sessionId, project, agentId }) => {
-      const result = await extractMemories(withScope({ sessionId, project, agentId }));
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], structuredContent: { data: result } };
-    }
-  );
-
-  // 4.6. memoryAudit
-  server.tool(
-    "memoryAudit",
-    `Audita candidatos de memoria semántica extraídos de una sesión (extractMemories) contra el proveedor de memoria dura (Engram local), decide su estado y persiste el resultado en Neon.
-Estados posibles:
-- missing: candidato nuevo, listo para promoción.
-- already_exists: el conocimiento ya está cubierto por una memoria existente.
-- related: existe una memoria relacionada pero distinta.
-- possible_duplicate: probable duplicado de una memoria existente, requiere revisión.
-- conflict: contradice una memoria existente.
-- pending: no se pudo contrastar (proveedor no disponible).
-- discard: el candidato no tiene origen trazable en la conversación.
-NO promueve memorias a Engram: esa etapa es memoryPromote. NO escribe en Engram.`,
-    {
-      sessionId: z.string().describe("ID de la sesión a recuperar y auditar"),
-      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
-      agentId: z.string().optional().describe("Filtrar por ID de agente (SOLO si el usuario lo pidió explícitamente; no lo uses en lecturas base)"),
-    },
-    async ({ sessionId, project, agentId }) => {
-      const result = await memoryAudit(withScope({ sessionId, project, agentId }));
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], structuredContent: { data: result } };
-    }
-  );
-
-  // 4.7. memoryPromote
-  server.tool(
-    "memoryPromote",
-    `Promueve candidatos de memoria previamente auditados (memoryAudit) hacia el proveedor de memoria dura a través de MemoryAdapter.
-Solo promueve candidatos con status "missing" y no promovidos aún. No reemplaza la decisión de la auditoría ni modifica el campo status.
-Resultados por candidato:
-- promoted: memoria creada en el proveedor (memoryId).
-- already_promoted: el candidato ya estaba promovido; no se vuelve a crear (idempotente).
-- failed: no se pudo crear la memoria; el candidato queda disponible para reintentar.
-- skipped: candidato pedido pero no promocionable según la auditoría.
-- not_found: el candidateId no existe para esa sesión/proyecto.
-Si candidateIds se omite, promueve todos los promocionables de la sesión/proyecto.`,
-    {
-      sessionId: z.string().describe("ID de la sesión de conversación de origen"),
-      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
-      agentId: z.string().optional().describe("Agente que originó la conversación"),
-      candidateIds: z.array(z.string()).optional().describe("Candidatos específicos a promocionar (si se omite: todos los promocionables de la sesión)"),
-    },
-    async ({ sessionId, project, agentId, candidateIds }) => {
-      const result = await memoryPromote(withScope({ sessionId, project, agentId, candidateIds }));
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], structuredContent: { data: result } };
-    }
-  );
-
   // 5. listSessions
   server.tool(
     "listSessions",
@@ -234,24 +158,6 @@ REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícit
     async ({ project, agentId }) => {
       const sessions = await listSessions(withScope({ project, agentId }));
       return { content: [{ type: "text", text: JSON.stringify({ data: sessions }, null, 2) }] };
-    }
-  );
-
-  // 6. pushToEngram
-  server.tool(
-    "pushToEngram",
-    `Prepara un mensaje existente del historial para un backfill manual hacia Engram.
-Recupera el mensaje y genera una sugerencia estructurada para posible incorporación a Engram.
-NO guarda, envía ni modifica nada en Engram.
-Usá esta herramienta únicamente cuando el usuario solicite preparar una conversación o memoria histórica para posible incorporación a Engram.
-Para recuperar información del historial sin intención de guardarla, usá searchMessages, semanticSearchMessages, searchSessionsBySummary o recoverSession.`,
-    {
-      messageId: z.string().describe("ID del mensaje a recuperar"),
-      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
-    },
-    async ({ messageId, project }) => {
-      const message = await pushToEngram(withScope({ messageId, project }));
-      return { content: [{ type: "text", text: JSON.stringify(message, null, 2) }] };
     }
   );
 

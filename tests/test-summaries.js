@@ -92,7 +92,6 @@ describe('Session Summaries Tool', () => {
 
     expect(llmClient.generateText.callCount).to.equal(callsAfterFirstFinalize);
     expect(result.summaryGenerated).to.equal(true);
-    expect(result.auditRequired).to.equal(false);
     expect(result.summaryPending).to.equal(false);
   });
 
