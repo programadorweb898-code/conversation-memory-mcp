@@ -87,6 +87,50 @@ Ejemplo para un cliente que soporte stdio:
 
 El agente debe utilizar siempre `project` para mantener separado el historial de distintos proyectos.
 
+## Despliegue remoto (modo HTTP multi-tenant)
+
+Además del modo local (`npx` / stdio), el servidor puede desplegarse como HTTP
+para que varios usuarios/dispositivos compartan una misma instancia (por
+ejemplo en Render).
+
+**Diferencia clave con el modo local:** acá el aislamiento entre usuarios NO
+depende de bases de datos separadas — todos comparten el mismo `DATABASE_URL`,
+y el aislamiento lo da el token de cada usuario (`owner`), nunca un dato que
+mande el cliente.
+
+### Variables de entorno requeridas
+
+- `DATABASE_URL`: la base compartida por todos los usuarios del servidor.
+- `MCP_BEARER_TOKEN`: token maestro de administración. El proceso no arranca
+  sin esta variable.
+- `PORT` (opcional): puerto HTTP. Render la inyecta automáticamente.
+
+### Pasos
+
+1. Desplegar el servicio con `node src/server.js` como comando de inicio
+   (en Render: Web Service, Node, start command `node src/server.js`).
+2. Definir `DATABASE_URL` y `MCP_BEARER_TOKEN` en las variables de entorno del
+   servicio.
+3. Generar una API key por usuario/dispositivo:
+
+```bash
+   node scripts/create-api-key.js new --name "maxi-portatil" --owner maxi --project mi-proyecto
+```
+
+   El token se imprime una sola vez — guardarlo, ya que solo se persiste su
+   hash.
+4. Cada usuario configura su cliente MCP apuntando a la URL del servidor
+   desplegado, enviando ese token como Bearer.
+5. Administración de keys existentes:
+
+```bash
+   node scripts/create-api-key.js list
+   node scripts/create-api-key.js revoke <id>
+```
+
+El token maestro (`MCP_BEARER_TOKEN`) tiene acceso total sin restricción de
+owner — pensado para administración, no para uso normal de un agente.
+
 ## Herramientas principales
 
 ### Historial
