@@ -1,8 +1,8 @@
 // src/services/llmClient.js
 //
 // Cliente único de LLM para las funciones que necesitan un modelo de texto:
-// resúmenes de sesión (generateSessionSummary) y el pipeline de memoria
-// (extractMemories / memoryAudit). Evita acoplar cada tool a un proveedor.
+// resúmenes de sesión (generateSessionSummary). Evita acoplar cada tool a un
+// proveedor.
 //
 // Proveedores soportados (se resuelven en cada llamada):
 //   - "openrouter": API compatible con OpenAI. Modelo por defecto:
