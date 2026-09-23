@@ -6,7 +6,7 @@ El proyecto es agnóstico del agente y tiene una responsabilidad deliberadamente
 
 > **Guardar y recuperar lo que ocurrió en las conversaciones.**
 
-No contiene integración, adapter, CLI, fallback ni conocimiento específico de sistemas externos de memoria técnica.
+No contiene integración, adapter, fallback ni conocimiento específico de sistemas externos de memoria técnica.
 
 ## Qué resuelve
 
@@ -45,29 +45,69 @@ Requisitos:
 
 - Node.js 20+
 - Git
-- una base PostgreSQL con pgvector; Neon es una opción compatible.
+- PostgreSQL con pgvector; Neon es una opción compatible.
 
-Crear configuración:
+En un proyecto existente, la instalación recomendada es:
 
 ```bash
-cp .env.example .env
+npx conversation-memory-mcp install
 ```
 
-Definir al menos:
+El instalador realiza en este orden:
+
+1. busca `DATABASE_URL` en el entorno o en `.env`;
+2. si no existe, permite introducir una conexión PostgreSQL existente o crear una base temporal mediante Neon Claimable;
+3. valida la conexión;
+4. ejecuta las migraciones necesarias;
+5. agrega `.env` a `.gitignore` si todavía no está ignorado;
+6. detecta/configura el agente y agrega la política de prioridad de memoria.
+
+La opción Neon Claimable permite empezar sin una cuenta Neon. El proyecto sin reclamar es temporal y expira después de 72 horas; el usuario puede reclamarlo posteriormente desde el flujo de Neon. Para una base permanente, se recomienda reclamarla o utilizar una conexión PostgreSQL existente.
+
+Si ya tenés una `DATABASE_URL`, no se crea ninguna base nueva:
 
 ```env
 DATABASE_URL=postgresql://USER:PASSWORD@HOST/DB?sslmode=require
 MCP_DEFAULT_OWNER=local-user
 ```
 
-Instalar y ejecutar:
+Las migraciones también se ejecutan cuando el servidor se inicia normalmente.
+
+## Instalación de la política del agente
+
+Configurar el MCP no garantiza que el agente lo consulte primero cuando una pregunta requiere historial anterior. El instalador configura ambas piezas para el agente seleccionado:
+
+1. el servidor MCP en la configuración de proyecto compatible;
+2. la política de prioridad de memoria en las instrucciones del proyecto.
+
+Ejemplo:
 
 ```bash
-npm install
-node src/stdio.js
+npx conversation-memory-mcp install --agent opencode
 ```
 
-Las migraciones se ejecutan al iniciar.
+El instalador es idempotente y conserva otros servidores MCP existentes. La configuración se limita al proyecto actual; no modifica silenciosamente la configuración global del usuario.
+
+Agentes reconocidos:
+
+- OpenCode
+- Codex
+- Claude Code
+- VS Code / Copilot
+- Cursor
+- Kimi Code
+- Kilo Code
+- Kiro IDE
+- Gemini CLI
+- Qwen Code
+- Windsurf
+- Antigravity
+- OpenClaw
+- Trae
+- Pi
+- Hermes
+
+Para los agentes cuyo formato de configuración MCP todavía no tiene un adaptador específico, el instalador instala la política y deja indicado que la configuración MCP debe realizarse manualmente.
 
 ## Configuración MCP
 
@@ -93,11 +133,11 @@ Configurar este MCP no significa que el agente vaya a consultarlo automáticamen
 
 La instrucción recomendada es:
 
-> Para preguntas sobre trabajo anterior, sesiones anteriores, historial del proyecto, qué se habló, qué se hizo, qué se probó o qué ocurrió en una conversación, consulta primero `conversation-memory-mcp`. Para preguntas sobre arquitectura, decisiones técnicas, descubrimientos, bugs, convenciones o conocimiento técnico persistente, consulta primero el sistema de memoria técnica correspondiente (por ejemplo, Engram). No utilices el historial de la sesión actual o del IDE como fuente de verdad si la memoria externa está disponible. Si la pregunta requiere ambas clases de información, consulta ambos sistemas cuando sea necesario.
+> Para preguntas sobre trabajo anterior, sesiones anteriores, historial del proyecto, qué se habló, qué se hizo, qué se probó o qué ocurrió en una conversación, consulta primero `conversation-memory-mcp`. No utilices el historial de la sesión actual o del IDE como fuente de verdad cuando este MCP esté disponible para recuperar la información solicitada.
 
 **Importante:** esta política debe configurarse en el agente correspondiente (por ejemplo, mediante las instrucciones del repositorio, `AGENTS.md`, instrucciones personalizadas o la configuración equivalente del cliente). El MCP no debe asumir ni implementar conocimiento específico de un agente o IDE.
 
-Cuando el cliente disponga de un instalador o mecanismo de configuración automática de MCP, se recomienda que ese flujo agregue también esta instrucción a la configuración del agente, siempre que el cliente permita hacerlo de forma segura. La configuración automática es responsabilidad del instalador/integración del cliente; la configuración manual sigue siendo necesaria para clientes que no expongan una API para modificar sus instrucciones.
+El paquete incluye un instalador para agregar esta política al archivo de instrucciones del proyecto. La instalación de la política forma parte de la configuración del agente, no del servidor MCP. El servidor permanece agnóstico respecto del agente o IDE que lo utilice.
 
 ## Despliegue remoto (modo HTTP multi-tenant)
 
