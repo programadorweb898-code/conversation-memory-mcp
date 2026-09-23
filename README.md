@@ -45,30 +45,33 @@ Requisitos:
 
 - Node.js 20+
 - Git
-- una base PostgreSQL con pgvector; Neon es una opción compatible.
+- PostgreSQL con pgvector; Neon es una opción compatible.
 
-Crear configuración:
+En un proyecto existente, la instalación recomendada es:
 
 ```bash
-cp .env.example .env
+npx conversation-memory-mcp install
 ```
 
-Definir al menos:
+El instalador realiza en este orden:
+
+1. busca `DATABASE_URL` en el entorno o en `.env`;
+2. si no existe, permite introducir una conexión PostgreSQL existente o crear una base temporal mediante Neon Claimable;
+3. valida la conexión;
+4. ejecuta las migraciones necesarias;
+5. agrega `.env` a `.gitignore` si todavía no está ignorado;
+6. detecta/configura el agente y agrega la política de prioridad de memoria.
+
+La opción Neon Claimable permite empezar sin una cuenta Neon. El proyecto sin reclamar es temporal y expira después de 72 horas; el usuario puede reclamarlo posteriormente desde el flujo de Neon. Para una base permanente, se recomienda reclamarla o utilizar una conexión PostgreSQL existente.
+
+Si ya tenés una `DATABASE_URL`, no se crea ninguna base nueva:
 
 ```env
 DATABASE_URL=postgresql://USER:PASSWORD@HOST/DB?sslmode=require
 MCP_DEFAULT_OWNER=local-user
 ```
 
-Instalar y ejecutar:
-
-```bash
-npm install
-node src/stdio.js
-```
-
-Las migraciones se ejecutan al iniciar.
-
+Las migraciones también se ejecutan cuando el servidor se inicia normalmente.
 
 ## Instalación de la política del agente
 
