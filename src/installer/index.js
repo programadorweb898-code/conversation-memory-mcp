@@ -5,6 +5,7 @@ const { AGENTS, normalizeAgent, installMcpConfig } = require("./mcpConfig");
 
 function detectAgent(cwd) {
   const candidates = [
+    ["opencode", join(cwd, ".opencode", "opencode.json")],
     ["opencode", join(cwd, "opencode.json")],
     ["codex", join(cwd, ".codex")],
     ["claude", join(cwd, "CLAUDE.md")],
@@ -53,7 +54,7 @@ function installPolicy({ cwd = process.cwd(), agent } = {}) {
 
 function install({ cwd = process.cwd(), agent } = {}) {
   const projectRoot = resolve(cwd);
-  const selectedAgent = normalizeAgent(agent);
+  const selectedAgent = agent ? normalizeAgent(agent) : detectAgent(projectRoot);
   const policy = installPolicy({ cwd: projectRoot, agent: selectedAgent });
   const mcp = installMcpConfig({ cwd: projectRoot, agent: selectedAgent });
   return { ...policy, mcp };
