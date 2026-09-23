@@ -1,13 +1,13 @@
 const assert = require("node:assert/strict");
-const { execFileSync } = require("node:child_process");
+const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 
 describe("cli", () => {
-  it("documents the interactive agent fallback", () => {
-    const output = execFileSync(process.execPath, [join(__dirname, "..", "src", "cli.js"), "--help"], {
-      encoding: "utf8",
-    });
+  it("contains the interactive agent fallback", () => {
+    const source = readFileSync(join(__dirname, "..", "src", "cli.js"), "utf8");
 
-    assert.match(output, /Si no puede detectar el agente, muestra un menú para seleccionarlo/);
+    assert.match(source, /No pude detectar automáticamente qué agente utilizás/);
+    assert.match(source, /Seleccioná el agente para configurar su MCP y su política/);
+    assert.match(source, /promptForAgent/);
   });
 });
