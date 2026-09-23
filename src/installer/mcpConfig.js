@@ -80,7 +80,7 @@ function installCodex(cwd) {
   mkdirSync(dirname(file), { recursive: true });
   const current = existsSync(file) ? readFileSync(file, "utf8") : "";
   const header = `[mcp_servers.conversation-memory]\ncommand = "npx"\nargs = ["-y", "conversation-memory-mcp"]\n`;
-  const section = /^\\[mcp_servers\\.conversation-memory\\][\\s\\S]*?(?=^\\[|$)/m;
+  const section = /^\[mcp_servers\.conversation-memory\][\s\S]*?(?=^\[|$)/m;
   const match = current.match(section);
   const updated = match
     ? current.replace(match[0], header)
