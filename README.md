@@ -6,7 +6,7 @@ El proyecto es agnóstico del agente y tiene una responsabilidad deliberadamente
 
 > **Guardar y recuperar lo que ocurrió en las conversaciones.**
 
-No contiene integración, adapter, CLI, fallback ni conocimiento específico de sistemas externos de memoria técnica.
+No contiene integración, adapter, fallback ni conocimiento específico de sistemas externos de memoria técnica.
 
 ## Qué resuelve
 
@@ -69,6 +69,28 @@ node src/stdio.js
 
 Las migraciones se ejecutan al iniciar.
 
+
+## Instalación de la política del agente
+
+Configurar el MCP no garantiza que el agente lo consulte primero cuando una pregunta requiere historial anterior. El paquete incluye un instalador explícito para agregar una política de prioridad al archivo de instrucciones del proyecto:
+
+```bash
+npx conversation-memory-mcp install
+```
+
+Por defecto, el instalador crea o actualiza `AGENTS.md`. También permite seleccionar el archivo de instrucciones:
+
+```bash
+npx conversation-memory-mcp install --agent opencode
+npx conversation-memory-mcp install --agent codex
+npx conversation-memory-mcp install --agent claude
+npx conversation-memory-mcp install --agent copilot
+```
+
+La política se escribe dentro de un bloque administrado y el instalador es idempotente: ejecutarlo nuevamente no duplica la instrucción.
+
+El instalador modifica únicamente el archivo de instrucciones seleccionado dentro del proyecto actual. No cambia silenciosamente la configuración global del cliente.
+
 ## Configuración MCP
 
 Ejemplo para un cliente que soporte stdio:
@@ -97,7 +119,7 @@ La instrucción recomendada es:
 
 **Importante:** esta política debe configurarse en el agente correspondiente (por ejemplo, mediante las instrucciones del repositorio, `AGENTS.md`, instrucciones personalizadas o la configuración equivalente del cliente). El MCP no debe asumir ni implementar conocimiento específico de un agente o IDE.
 
-Cuando el cliente disponga de un instalador o mecanismo de configuración automática de MCP, se recomienda que ese flujo agregue también esta instrucción a la configuración del agente, siempre que el cliente permita hacerlo de forma segura. La configuración automática es responsabilidad del instalador/integración del cliente; la configuración manual sigue siendo necesaria para clientes que no expongan una API para modificar sus instrucciones.
+El paquete incluye un instalador para agregar esta política al archivo de instrucciones del proyecto. La instalación de la política forma parte de la configuración del agente, no del servidor MCP. El servidor permanece agnóstico respecto del agente o IDE que lo utilice.
 
 ## Despliegue remoto (modo HTTP multi-tenant)
 
