@@ -1,29 +1,16 @@
 const { existsSync, mkdirSync, readFileSync, writeFileSync } = require("node:fs");
 const { dirname, join, resolve } = require("node:path");
 const { MEMORY_POLICY, POLICY_MARKER, POLICY_END_MARKER } = require("./policy");
-
-const TARGETS = {
-  generic: "AGENTS.md",
-  opencode: "AGENTS.md",
-  codex: "AGENTS.md",
-  claude: "CLAUDE.md",
-  copilot: join(".github", "copilot-instructions.md"),
-};
-
-function normalizeAgent(value) {
-  if (!value) return null;
-  const agent = value.toLowerCase();
-  if (!Object.hasOwn(TARGETS, agent)) {
-    throw new Error(`Agente no soportado: ${value}. Opciones: ${Object.keys(TARGETS).join(", ")}`);
-  }
-  return agent;
-}
+const { AGENTS, normalizeAgent, installMcpConfig } = require("./mcpConfig");
 
 function detectAgent(cwd) {
   const candidates = [
-    ["opencode", join(cwd, "AGENTS.md")],
-    ["codex", join(cwd, "AGENTS.md")],
+    ["opencode", join(cwd, "opencode.json")],
+    ["codex", join(cwd, ".codex")],
     ["claude", join(cwd, "CLAUDE.md")],
+    ["cursor", join(cwd, ".cursor")],
+    ["kimi", join(cwd, ".kimi-code")],
+    ["kiro-ide", join(cwd, ".kiro")],
     ["copilot", join(cwd, ".github", "copilot-instructions.md")],
   ];
   const found = candidates.find(([, file]) => existsSync(file));
@@ -31,14 +18,13 @@ function detectAgent(cwd) {
 }
 
 function targetFile(cwd, agent) {
-  return resolve(cwd, TARGETS[agent]);
+  return resolve(cwd, AGENTS[agent].policy);
 }
 
 function applyPolicy(file) {
   const existed = existsSync(file);
   const current = existed ? readFileSync(file, "utf8") : "";
   const block = `${POLICY_MARKER}\n${MEMORY_POLICY}\n${POLICY_END_MARKER}`;
-
   const start = current.indexOf(POLICY_MARKER);
   const end = current.indexOf(POLICY_END_MARKER);
 
@@ -58,17 +44,19 @@ function applyPolicy(file) {
 
 function installPolicy({ cwd = process.cwd(), agent } = {}) {
   const projectRoot = resolve(cwd);
-  const selectedAgent = normalizeAgent(agent) || detectAgent(projectRoot);
+  const selectedAgent = normalizeAgent(agent);
   const file = targetFile(projectRoot, selectedAgent);
   mkdirSync(dirname(file), { recursive: true });
   const result = applyPolicy(file);
-
-  return {
-    agent: selectedAgent,
-    file,
-    created: !result.existed,
-    changed: result.changed,
-  };
+  return { agent: selectedAgent, file, created: !result.existed, changed: result.changed };
 }
 
-module.exports = { TARGETS, detectAgent, installPolicy };
+function install({ cwd = process.cwd(), agent } = {}) {
+  const projectRoot = resolve(cwd);
+  const selectedAgent = normalizeAgent(agent);
+  const policy = installPolicy({ cwd: projectRoot, agent: selectedAgent });
+  const mcp = installMcpConfig({ cwd: projectRoot, agent: selectedAgent });
+  return { ...policy, mcp };
+}
+
+module.exports = { AGENTS, detectAgent, installPolicy, install };
