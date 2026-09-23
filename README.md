@@ -93,7 +93,7 @@ Configurar este MCP no significa que el agente vaya a consultarlo automáticamen
 
 La instrucción recomendada es:
 
-> Para preguntas sobre trabajo anterior, sesiones anteriores, historial del proyecto, qué se habló, qué se hizo, qué se probó o qué ocurrió en una conversación, consulta primero `conversation-memory-mcp`. Para preguntas sobre arquitectura, decisiones técnicas, descubrimientos, bugs, convenciones o conocimiento técnico persistente, consulta primero el sistema de memoria técnica correspondiente (por ejemplo, Engram). No utilices el historial de la sesión actual o del IDE como fuente de verdad si la memoria externa está disponible. Si la pregunta requiere ambas clases de información, consulta ambos sistemas cuando sea necesario.
+> Para preguntas sobre trabajo anterior, sesiones anteriores, historial del proyecto, qué se habló, qué se hizo, qué se probó o qué ocurrió en una conversación, consulta primero `conversation-memory-mcp`. No utilices el historial de la sesión actual o del IDE como fuente de verdad cuando este MCP esté disponible para recuperar la información solicitada.
 
 **Importante:** esta política debe configurarse en el agente correspondiente (por ejemplo, mediante las instrucciones del repositorio, `AGENTS.md`, instrucciones personalizadas o la configuración equivalente del cliente). El MCP no debe asumir ni implementar conocimiento específico de un agente o IDE.
 
