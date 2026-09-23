@@ -1,50 +1,72 @@
 const assert = require("node:assert/strict");
-const { mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
+const { mkdtempSync, readFileSync, writeFileSync, existsSync, mkdirSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
-const { installPolicy, detectAgent } = require("../src/installer");
+const { install, detectAgent } = require("../src/installer");
 
-describe("memory policy installer", () => {
-  it("creates AGENTS.md with the policy by default", () => {
+describe("installer", () => {
+  it("installs policy and MCP for OpenCode", () => {
     const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
-    const result = installPolicy({ cwd });
-    assert.equal(result.agent, "generic");
-    assert.equal(result.created, true);
-    assert.match(readFileSync(join(cwd, "AGENTS.md"), "utf8"), /conversation-memory-mcp/);
+    const result = install({ cwd, agent: "opencode" });
+    assert.equal(result.agent, "opencode");
+    const config = JSON.parse(readFileSync(join(cwd, ".opencode", "opencode.json"), "utf8"));
+    assert.equal(config.mcp.servers["conversation-memory"].type, "local");
   });
 
-  it("does not duplicate an existing policy", () => {
+  it("installs project MCP config for Claude and Cursor", () => {
     const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
-    installPolicy({ cwd });
-    const second = installPolicy({ cwd });
+    install({ cwd, agent: "claude" });
+    install({ cwd, agent: "cursor" });
+    assert.ok(existsSync(join(cwd, ".mcp.json")));
+    assert.ok(existsSync(join(cwd, ".cursor", "mcp.json")));
+  });
+
+  it("installs Kimi and Kiro MCP configs", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    install({ cwd, agent: "kimi" });
+    install({ cwd, agent: "kiro-ide" });
+    assert.ok(existsSync(join(cwd, ".kimi-code", "mcp.json")));
+    assert.ok(existsSync(join(cwd, ".kiro", "settings", "mcp.json")));
+  });
+
+  it("installs Codex project config", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    install({ cwd, agent: "codex" });
+    assert.match(readFileSync(join(cwd, ".codex", "config.toml"), "utf8"), /mcp_servers\.conversation-memory/);
+  });
+
+  it("is idempotent", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    const first = install({ cwd, agent: "cursor" });
+    const second = install({ cwd, agent: "cursor" });
+    assert.equal(first.mcp.changed, true);
+    assert.equal(second.mcp.changed, false);
     assert.equal(second.changed, false);
-    const content = readFileSync(join(cwd, "AGENTS.md"), "utf8");
-    assert.equal((content.match(/conversation-memory-mcp:memory-priority-policy/g) || []).length, 1);
   });
 
-  it("updates the managed block instead of duplicating it", () => {
+  it("supports extended agents with policy-only fallback", () => {
     const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
-    installPolicy({ cwd });
-    const file = join(cwd, "AGENTS.md");
-    const before = readFileSync(file, "utf8");
-    installPolicy({ cwd, agent: "codex" });
-    const after = readFileSync(file, "utf8");
-    assert.equal((after.match(/conversation-memory-mcp:memory-priority-policy/g) || []).length, 1);
-    assert.ok(after.includes("## Prioridad de memoria conversacional"));
-    assert.ok(after.length >= before.length);
+    const result = install({ cwd, agent: "gemini-cli" });
+    assert.equal(result.agent, "gemini-cli");
+    assert.equal(result.mcp.supported, false);
+    assert.ok(existsSync(join(cwd, "GEMINI.md")));
   });
 
-  it("supports agent-specific instruction files", () => {
-    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
-    const claude = installPolicy({ cwd, agent: "claude" });
-    const copilot = installPolicy({ cwd, agent: "copilot" });
-    assert.equal(claude.file, join(cwd, "CLAUDE.md"));
-    assert.equal(copilot.file, join(cwd, ".github", "copilot-instructions.md"));
-  });
-
-  it("detects an existing instruction file", () => {
+  it("detects existing agent files", () => {
     const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
     writeFileSync(join(cwd, "CLAUDE.md"), "# Project\n");
     assert.equal(detectAgent(cwd), "claude");
+  });
+
+  it("keeps existing Cursor MCP servers", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    mkdirSync(join(cwd, ".cursor"), { recursive: true });
+    writeFileSync(join(cwd, ".cursor", "mcp.json"), JSON.stringify({
+      mcpServers: { other: { command: "other" } }
+    }));
+    install({ cwd, agent: "cursor" });
+    const config = JSON.parse(readFileSync(join(cwd, ".cursor", "mcp.json"), "utf8"));
+    assert.equal(config.mcpServers.other.command, "other");
+    assert.equal(config.mcpServers["conversation-memory"].command, "npx");
   });
 });
