@@ -72,24 +72,39 @@ Las migraciones se ejecutan al iniciar.
 
 ## Instalación de la política del agente
 
-Configurar el MCP no garantiza que el agente lo consulte primero cuando una pregunta requiere historial anterior. El paquete incluye un instalador explícito para agregar una política de prioridad al archivo de instrucciones del proyecto:
+Configurar el MCP no garantiza que el agente lo consulte primero cuando una pregunta requiere historial anterior. El instalador configura ambas piezas para el agente seleccionado:
 
-```bash
-npx conversation-memory-mcp install
-```
+1. el servidor MCP en la configuración de proyecto compatible;
+2. la política de prioridad de memoria en las instrucciones del proyecto.
 
-Por defecto, el instalador crea o actualiza `AGENTS.md`. También permite seleccionar el archivo de instrucciones:
+Ejemplo:
 
 ```bash
 npx conversation-memory-mcp install --agent opencode
-npx conversation-memory-mcp install --agent codex
-npx conversation-memory-mcp install --agent claude
-npx conversation-memory-mcp install --agent copilot
 ```
 
-La política se escribe dentro de un bloque administrado y el instalador es idempotente: ejecutarlo nuevamente no duplica la instrucción.
+El instalador es idempotente y conserva otros servidores MCP existentes. La configuración se limita al proyecto actual; no modifica silenciosamente la configuración global del usuario.
 
-El instalador modifica únicamente el archivo de instrucciones seleccionado dentro del proyecto actual. No cambia silenciosamente la configuración global del cliente.
+Agentes reconocidos:
+
+- OpenCode
+- Codex
+- Claude Code
+- VS Code / Copilot
+- Cursor
+- Kimi Code
+- Kilo Code
+- Kiro IDE
+- Gemini CLI
+- Qwen Code
+- Windsurf
+- Antigravity
+- OpenClaw
+- Trae
+- Pi
+- Hermes
+
+Para los agentes cuyo formato de configuración MCP todavía no tiene un adaptador específico, el instalador instala la política y deja indicado que la configuración MCP debe realizarse manualmente.
 
 ## Configuración MCP
 
