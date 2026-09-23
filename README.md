@@ -87,6 +87,18 @@ Ejemplo para un cliente que soporte stdio:
 
 El agente debe utilizar siempre `project` para mantener separado el historial de distintos proyectos.
 
+### Política de prioridad de memoria
+
+Configurar este MCP no significa que el agente vaya a consultarlo automáticamente para preguntas sobre el historial del proyecto. El agente puede tener otras fuentes de contexto, como el historial de su propia sesión, el historial del IDE o sesiones anteriores. Para evitar que esas fuentes se conviertan en la fuente de verdad, el agente debe recibir una instrucción de prioridad de memoria.
+
+La instrucción recomendada es:
+
+> Para preguntas sobre trabajo anterior, sesiones anteriores, historial del proyecto, qué se habló, qué se hizo, qué se probó o qué ocurrió en una conversación, consulta primero `conversation-memory-mcp`. Para preguntas sobre arquitectura, decisiones técnicas, descubrimientos, bugs, convenciones o conocimiento técnico persistente, consulta primero el sistema de memoria técnica correspondiente (por ejemplo, Engram). No utilices el historial de la sesión actual o del IDE como fuente de verdad si la memoria externa está disponible. Si la pregunta requiere ambas clases de información, consulta ambos sistemas cuando sea necesario.
+
+**Importante:** esta política debe configurarse en el agente correspondiente (por ejemplo, mediante las instrucciones del repositorio, `AGENTS.md`, instrucciones personalizadas o la configuración equivalente del cliente). El MCP no debe asumir ni implementar conocimiento específico de un agente o IDE.
+
+Cuando el cliente disponga de un instalador o mecanismo de configuración automática de MCP, se recomienda que ese flujo agregue también esta instrucción a la configuración del agente, siempre que el cliente permita hacerlo de forma segura. La configuración automática es responsabilidad del instalador/integración del cliente; la configuración manual sigue siendo necesaria para clientes que no expongan una API para modificar sus instrucciones.
+
 ## Despliegue remoto (modo HTTP multi-tenant)
 
 Además del modo local (`npx` / stdio), el servidor puede desplegarse como HTTP
