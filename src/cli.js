@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const { startStdioServer } = require("./stdio");
-const { installPolicy } = require("./installer");
+const { install } = require("./installer");
 
 function printHelp() {
   console.log([
@@ -9,17 +9,18 @@ function printHelp() {
     "",
     "Uso:",
     "  conversation-memory-mcp             Inicia el servidor MCP por stdio",
-    "  conversation-memory-mcp install     Instala la política de prioridad de memoria",
+    "  conversation-memory-mcp install     Configura MCP + política del agente",
     "  conversation-memory-mcp install --agent <agente>",
     "",
-    "Agentes soportados: generic, opencode, codex, claude, copilot",
+    "Agentes: opencode, codex, claude, copilot, cursor, kimi, gemini-cli,",
+    "         qwen-code, kilocode, kiro-ide, windsurf, antigravity,",
+    "         openclaw, trae, pi, hermes",
   ].join("\n"));
 }
 
 function parseArgs(argv) {
   const args = argv.slice(2);
   const command = args[0];
-
   if (command === "--help" || command === "-h") return { command: "help" };
   if (!command || command === "serve") return { command: "serve" };
   if (command !== "install") throw new Error(`Comando desconocido: ${command}`);
@@ -38,20 +39,17 @@ function parseArgs(argv) {
 
 async function main() {
   const parsed = parseArgs(process.argv);
-
-  if (parsed.command === "help") {
-    printHelp();
-    return;
-  }
-
+  if (parsed.command === "help") return printHelp();
   if (parsed.command === "install") {
-    const result = installPolicy({ agent: parsed.agent });
-    console.log(
-      `[conversation-memory-mcp] política ${result.changed ? "instalada/actualizada" : "sin cambios"} en ${result.file} (agente: ${result.agent})`
-    );
+    const result = install({ agent: parsed.agent });
+    console.log(`[conversation-memory-mcp] política: ${result.changed ? "instalada/actualizada" : "sin cambios"} -> ${result.file}`);
+    if (result.mcp.supported === false) {
+      console.log("[conversation-memory-mcp] MCP: este agente tiene soporte de política, pero su configuración MCP requiere un adaptador específico.");
+    } else {
+      console.log(`[conversation-memory-mcp] MCP: ${result.mcp.changed ? "configurado/actualizado" : "sin cambios"} -> ${result.mcp.file}`);
+    }
     return;
   }
-
   await startStdioServer();
 }
 
