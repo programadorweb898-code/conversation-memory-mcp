@@ -32,7 +32,7 @@ function applyPolicy(file) {
   if (start !== -1 && end !== -1 && end >= start) {
     const before = current.slice(0, start).replace(/\n+$/, "");
     const after = current.slice(end + POLICY_END_MARKER.length).replace(/^\n+/, "");
-    const updated = before + "\n\n" + block + (after ? "\n\n" + after : "\n");
+    const updated = `${before ? `${before}\n\n` : ""}${block}${after ? `\n\n${after}` : "\n"}`;
     if (updated === current) return { changed: false, existed };
     writeFileSync(file, updated, "utf8");
     return { changed: true, existed };
