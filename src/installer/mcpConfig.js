@@ -45,16 +45,6 @@ function writeJson(file, value) {
   writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-function setNested(root, path, value) {
-  const parts = path.split(".");
-  let cursor = root;
-  for (let i = 0; i < parts.length - 1; i++) {
-    cursor[parts[i]] = cursor[parts[i]] || {};
-    cursor = cursor[parts[i]];
-  }
-  cursor[parts.at(-1)] = value;
-}
-
 function mergeJsonServer(file, rootPath, server) {
   const config = readJson(file);
   const parts = rootPath.split(".");
