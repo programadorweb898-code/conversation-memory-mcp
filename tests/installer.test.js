@@ -58,6 +58,24 @@ describe("installer", () => {
     assert.equal(detectAgent(cwd), "claude");
   });
 
+  it("detects OpenCode from its installed project config", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    mkdirSync(join(cwd, ".opencode"), { recursive: true });
+    writeFileSync(join(cwd, ".opencode", "opencode.json"), "{}");
+    assert.equal(detectAgent(cwd), "opencode");
+  });
+
+  it("auto-detects an existing agent during install", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    mkdirSync(join(cwd, ".cursor"), { recursive: true });
+    writeFileSync(join(cwd, ".cursor", "mcp.json"), JSON.stringify({
+      mcpServers: { other: { command: "other" } }
+    }));
+    const result = install({ cwd });
+    assert.equal(result.agent, "cursor");
+    assert.equal(result.mcp.changed, true);
+  });
+
   it("keeps existing Cursor MCP servers", () => {
     const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
     mkdirSync(join(cwd, ".cursor"), { recursive: true });
