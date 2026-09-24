@@ -12,9 +12,28 @@ describe("Embedding Worker", function () {
 
   let messageIds = [];
 
-  beforeEach(() => {
+  beforeEach(async function () {
+    this.timeout(30000);
     messageIds = [];
     embeddingQueue.setProcessingStatus(false);
+    // El worker procesa pendientes de TODA la base, no solo de este suite: la
+    // cola en memoria es un singleton del proceso y la query de pending cubre
+    // todos los proyectos. Otras suites que corren antes en el mismo proceso
+    // dejan tareas encoladas y conversaciones sin embedding que ensucian las
+    // aserciones, así que vaciamos la cola y eliminamos todo mensaje pendiente
+    // de la base antes de cada test.
+    while (!embeddingQueue.isEmpty()) {
+      embeddingQueue.getNextTask();
+    }
+    const pending = await db.allAsync(
+      `SELECT c.id FROM conversations c
+       LEFT JOIN message_embeddings me ON me.message_id = c.id
+       WHERE me.message_id IS NULL`
+    );
+    for (const { id } of pending) {
+      await db.runAsync("DELETE FROM embedding_failures WHERE message_id = $1", [id]);
+      await db.runAsync("DELETE FROM conversations WHERE id = $1", [id]);
+    }
     sinon.restore();
   });
 

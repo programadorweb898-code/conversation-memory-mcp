@@ -25,8 +25,8 @@ describe('Semantic Search Messages Tool', () => {
     await saveMessage({ sessionId: `${testSessionId}-other`, project: "other-project", role: "user", content: "El precio de las acciones subió hoy." });
 
     const savedMessages = await db.allAsync(
-      `SELECT id, role, content FROM conversations WHERE session_id = $1`,
-      [testSessionId]
+      `SELECT id, role, content FROM conversations WHERE session_id IN ($1, $2)`,
+      [testSessionId, `${testSessionId}-other`]
     );
 
     for (const message of savedMessages) {
@@ -37,8 +37,8 @@ describe('Semantic Search Messages Tool', () => {
 
   after(async () => {
     try {
-      await db.runAsync(`DELETE FROM message_embeddings WHERE message_id IN (SELECT id FROM conversations WHERE session_id = $1)`, [testSessionId]);
-      await db.runAsync(`DELETE FROM conversations WHERE session_id = $1`, [testSessionId]);
+      await db.runAsync(`DELETE FROM message_embeddings WHERE message_id IN (SELECT id FROM conversations WHERE session_id IN ($1, $2))`, [testSessionId, `${testSessionId}-other`]);
+      await db.runAsync(`DELETE FROM conversations WHERE session_id IN ($1, $2)`, [testSessionId, `${testSessionId}-other`]);
     } catch (err) {
       console.error("Error cleaning up test data:", err.message);
     }
