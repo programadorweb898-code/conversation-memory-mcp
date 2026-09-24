@@ -62,7 +62,7 @@ El instalador realiza en este orden:
 5. agrega `.env` a `.gitignore` si todavía no está ignorado;
 6. detecta/configura el agente y agrega la política de prioridad de memoria.
 
-La opción Neon Claimable permite empezar sin una cuenta Neon. El proyecto sin reclamar es temporal y expira después de 72 horas; el usuario puede reclamarlo posteriormente desde el flujo de Neon. Para una base permanente, se recomienda reclamarla o utilizar una conexión PostgreSQL existente.
+La opción Neon Claimable permite empezar sin una cuenta Neon. El instalador ejecuta automáticamente el comando de Neon para crear la base temporal y el CLI de Neon muestra un enlace de reclamación durante ese paso. Guardá ese enlace y abrilo para transferir el proyecto a tu organización de Neon. El proyecto sin reclamar expira después de 72 horas. Para una base permanente, se recomienda reclamarla o utilizar una conexión PostgreSQL existente.
 
 Si ya tenés una `DATABASE_URL`, no se crea ninguna base nueva:
 
