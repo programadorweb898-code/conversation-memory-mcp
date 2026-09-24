@@ -63,7 +63,8 @@ function runCommand(command, args, cwd) {
 async function provisionClaimableNeon(cwd) {
   console.log("[conversation-memory-mcp] No se encontró DATABASE_URL.");
   console.log("[conversation-memory-mcp] Se abrirá el flujo de Neon Claimable para crear una base PostgreSQL temporal.");
-  console.log("[conversation-memory-mcp] La base sin reclamar expira después de 72 horas; Neon permite reclamarla posteriormente.");
+  console.log("[conversation-memory-mcp] La base sin reclamar expira después de 72 horas.");
+  console.log("[conversation-memory-mcp] Neon mostrará un enlace de reclamación durante este paso; guardalo y abrilo para transferir el proyecto a tu organización de Neon.");
   await runCommand("npx", ["-y", "neon@latest", "claim", "create", "--env-pull"], cwd);
   dotenv.config({ path: join(cwd, ENV_FILE), override: true });
   const connectionString = process.env.DATABASE_URL || "";
