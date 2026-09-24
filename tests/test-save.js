@@ -15,9 +15,8 @@ describe('saveMessage', () => {
   });
 
   afterEach(async () => {
-    sinon.restore(); // Restore all stubs
-    
-    // Limpieza segura: eliminar solo las sesiones generadas en los tests
+    sinon.restore();
+
     for (const sessionId of testSessionIds) {
       try {
         await db.runAsync(`DELETE FROM message_embeddings WHERE message_id IN (SELECT id FROM conversations WHERE session_id = $1)`, [sessionId]);
@@ -26,7 +25,7 @@ describe('saveMessage', () => {
         console.error("Error en limpieza de test-save:", err.message);
       }
     }
-    testSessionIds.length = 0; // Vaciar array
+    testSessionIds.length = 0;
   });
 
   it('should save a message successfully with required fields', async () => {
@@ -48,8 +47,8 @@ describe('saveMessage', () => {
     expect(retrievedMessage.project).to.equal(params.project);
     expect(retrievedMessage.role).to.equal(params.role);
     expect(retrievedMessage.content).to.equal(params.content);
-    expect(retrievedMessage.agent_id).to.be.null; 
-    expect(queueStub.calledOnce).to.be.true; 
+    expect(retrievedMessage.agent_id).to.be.null;
+    expect(queueStub.calledOnce).to.be.true;
   });
 
   it('should save a message successfully with all fields including agentId', async () => {
@@ -102,7 +101,7 @@ describe('saveMessage', () => {
       project: 'test-project',
       role: 'user',
       content: 'Invalid message',
-    }; // Missing sessionId
+    };
 
     let error;
     try {
@@ -113,7 +112,7 @@ describe('saveMessage', () => {
 
     expect(error).to.exist;
     expect(error.name).to.equal('ZodError');
-    expect(queueStub.called).to.be.false; 
+    expect(queueStub.called).to.be.false;
   });
 
   it('should reject saving a message if the session already belongs to another project', async () => {
@@ -134,11 +133,63 @@ describe('saveMessage', () => {
     expect(queueStub.calledOnce).to.be.true;
   });
 
+  it('should reject concurrent writes that try to assign one session to different projects', async () => {
+    const sessionId = uuidv4();
+    testSessionIds.push(sessionId);
+
+    const results = await Promise.allSettled([
+      saveMessage({ sessionId, project: 'proj-a', role: 'user', content: 'Mensaje A' }),
+      saveMessage({ sessionId, project: 'proj-b', role: 'user', content: 'Mensaje B' }),
+    ]);
+
+    const fulfilled = results.filter((result) => result.status === 'fulfilled');
+    const rejected = results.filter((result) => result.status === 'rejected');
+
+    expect(fulfilled).to.have.length(1);
+    expect(rejected).to.have.length(1);
+    expect(rejected[0].reason.code).to.equal('PROJECT_CONFLICT');
+
+    const messages = await db.allAsync(
+      `SELECT project FROM conversations WHERE session_id = $1`,
+      [sessionId]
+    );
+    expect(messages).to.have.length(1);
+    expect(['proj-a', 'proj-b']).to.include(messages[0].project);
+  });
+
+  it('should persist all concurrent messages for the same session and project', async () => {
+    const sessionId = uuidv4();
+    testSessionIds.push(sessionId);
+
+    const count = 20;
+    const results = await Promise.all(
+      Array.from({ length: count }, (_, index) => saveMessage({
+        sessionId,
+        project: 'concurrent-project',
+        role: index % 2 === 0 ? 'user' : 'assistant',
+        content: `Concurrent message ${index}`,
+        agentId: `agent-${index % 4}`,
+      }))
+    );
+
+    expect(results).to.have.length(count);
+    expect(new Set(results.map((result) => result.messageId)).size).to.equal(count);
+
+    const messages = await db.allAsync(
+      `SELECT id, sequence_id FROM conversations WHERE session_id = $1 ORDER BY sequence_id ASC`,
+      [sessionId]
+    );
+    expect(messages).to.have.length(count);
+    expect(new Set(messages.map((message) => message.id)).size).to.equal(count);
+    expect(new Set(messages.map((message) => message.sequence_id)).size).to.equal(count);
+    expect(queueStub.callCount).to.equal(count);
+  });
+
   it('should resolve true even if embedding generation fails, but message is saved', async () => {
     const sessionId = uuidv4();
     testSessionIds.push(sessionId);
 
-    sinon.restore(); 
+    sinon.restore();
     sinon.stub(require('../src/services/embeddingService'), 'generateEmbedding').rejects(new Error('Embedding generation failed'));
     sinon.replace(require('../src/services/embeddingService'), 'saveEmbedding', sinon.stub().resolves(true));
 
@@ -154,6 +205,6 @@ describe('saveMessage', () => {
     expect(result.messageId).to.exist;
 
     const retrievedMessage = await db.getAsync(`SELECT * FROM conversations WHERE session_id = $1`, [sessionId]);
-    expect(retrievedMessage).to.exist; 
+    expect(retrievedMessage).to.exist;
   });
 });
