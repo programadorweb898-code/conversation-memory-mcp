@@ -1,4 +1,4 @@
-const { db } = require("../database");
+const { db, withAdvisoryLock } = require("../database");
 const { randomUUID } = require("crypto");
 const { z } = require("zod");
 const embeddingQueue = require("../services/embeddingQueue");
@@ -40,52 +40,58 @@ async function saveMessage(params) {
   const validatedParams = SaveMessageSchema.parse(params);
   const { sessionId, project, role, content, agentId, relatedMessageId, owner } = validatedParams;
 
-  // Los mensajes de infraestructura MCP no forman parte del historial de conversación real.
   if (isMcpProtocolNoise(content)) {
     console.log(`Skipping MCP protocol message: ${content}`);
     return { success: true, messageId: null };
   }
 
   const messageId = randomUUID();
-
-  // El owner de CHECK es el autenticado crudo: si es admin (undefined/null) no
-  // se valida propiedad, solo el proyecto. El owner que se PERSISTE nunca es
-  // null (columna NOT NULL): cae al dueño por defecto si no hay auth.
   const authOwner = owner || null;
   const writeOwner = resolveWriteOwner(owner);
 
-  const existingSessionProject = await db.getAsync(
-    `SELECT project, owner FROM conversations WHERE session_id = $1 LIMIT 1`,
-    [sessionId]
-  );
-  if (existingSessionProject && existingSessionProject.project !== project) {
-    const error = new Error(
-      `La sesión ${sessionId} ya pertenece al proyecto "${existingSessionProject.project}". No se permite mezclar datos entre proyectos.`
+  // La validación de proyecto/owner y el INSERT deben ser atómicos respecto de
+  // otras escrituras sobre la misma sesión. El advisory lock se toma sobre la
+  // misma conexión/transacción que ejecuta estas consultas.
+  await withAdvisoryLock(`save-message-session:${sessionId}`, async (client) => {
+    const existingSessionProject = await client.query(
+      `SELECT project, owner FROM conversations WHERE session_id = $1 LIMIT 1`,
+      [sessionId]
     );
-    error.code = "PROJECT_CONFLICT";
-    throw error;
-  }
+    const existingSession = existingSessionProject.rows[0];
 
-  if (existingSessionProject && authOwner && existingSessionProject.owner !== authOwner) {
-    const error = new Error(`La sesión ${sessionId} ya existe y no pertenece a este usuario.`);
-    error.code = "OWNER_CONFLICT";
-    throw error;
-  }
+    if (existingSession && existingSession.project !== project) {
+      const error = new Error(
+        `La sesión ${sessionId} ya pertenece al proyecto "${existingSession.project}". No se permite mezclar datos entre proyectos.`
+      );
+      error.code = "PROJECT_CONFLICT";
+      throw error;
+    }
 
-  try {
-    const sql = `
-      INSERT INTO conversations
-      (id, session_id, timestamp, project, role, content, agent_id, related_message_id, owner)
-      VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6, $7, $8)
-    `;
+    if (existingSession && authOwner && existingSession.owner !== authOwner) {
+      const error = new Error(`La sesión ${sessionId} ya existe y no pertenece a este usuario.`);
+      error.code = "OWNER_CONFLICT";
+      throw error;
+    }
 
-    await db.runAsync(sql, [messageId, sessionId, project ?? null, role, content, agentId ?? null, relatedMessageId ?? null, writeOwner]);
-  } catch (err) {
-    console.error("Error saving message:", err.message);
-    throw err;
-  }
+    await client.query(
+      `
+        INSERT INTO conversations
+        (id, session_id, timestamp, project, role, content, agent_id, related_message_id, owner)
+        VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6, $7, $8)
+      `,
+      [
+        messageId,
+        sessionId,
+        project ?? null,
+        role,
+        content,
+        agentId ?? null,
+        relatedMessageId ?? null,
+        writeOwner
+      ]
+    );
+  });
 
-  // Add embedding generation to the queue
   embeddingQueue.addTask({ messageId, content, role });
   console.log(`Embedding task for message ${messageId} queued.`);
 
