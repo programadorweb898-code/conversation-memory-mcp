@@ -94,10 +94,13 @@ async function promptForAgent({ reason = "", input = process.stdin, output = pro
   const rl = readline.createInterface({ input, output });
 
   let interrupted = false;
-  rl.on("SIGINT", () => {
+  const handleInterrupt = () => {
     interrupted = true;
     rl.close();
-  });
+  };
+
+  rl.on("SIGINT", handleInterrupt);
+  input.on("SIGINT", handleInterrupt);
 
   try {
     let attempt = 0;
@@ -131,6 +134,8 @@ async function promptForAgent({ reason = "", input = process.stdin, output = pro
 
     throw new Error("No se recibió una selección de agente. La instalación se canceló.");
   } finally {
+    rl.removeListener("SIGINT", handleInterrupt);
+    input.removeListener("SIGINT", handleInterrupt);
     rl.close();
   }
 }
