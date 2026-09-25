@@ -9,7 +9,6 @@ async function saveSessionSummary({ sessionId, project, summary, lastProcessedSe
   if (!project) throw new Error("El parámetro 'project' es obligatorio.");
 
   try {
-    const authOwner = owner || null;
     const writeOwner = resolveWriteOwner(owner);
 
     const existingSession = await db.getAsync(
