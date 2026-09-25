@@ -2,7 +2,12 @@ const assert = require("node:assert/strict");
 const { PassThrough } = require("node:stream");
 const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
-const { promptForAgent, resolveAgent, MAX_AGENT_ATTEMPTS } = require("../src/cli");
+const {
+  AGENT_CHOICES,
+  promptForAgent,
+  resolveAgent,
+  MAX_AGENT_ATTEMPTS,
+} = require("../src/cli");
 
 function createInteractiveStreams(inputText) {
   const input = new PassThrough();
@@ -25,7 +30,7 @@ describe("cli", () => {
   });
 
   it("retries invalid agent menu choices up to three attempts", async () => {
-    const streams = createInteractiveStreams("9\n8\n1\n");
+    const streams = createInteractiveStreams("99\n98\n1\n");
     const agent = await promptForAgent({
       input: streams.input,
       output: streams.output,
@@ -33,12 +38,23 @@ describe("cli", () => {
     });
 
     assert.equal(agent, "opencode");
-    assert.match(streams.getOutput(), /Opción inválida\. Elegí un número del 1 al 7\. Intentos restantes: 2\./);
+    assert.match(streams.getOutput(), /Opción inválida\. Elegí un número del 1 al 17 o escribí el nombre del agente\. Intentos restantes: 2\./);
     assert.match(streams.getOutput(), /Intentos restantes: 1\./);
   });
 
+  it("accepts an agent name instead of a menu number", async () => {
+    const streams = createInteractiveStreams("codex\n");
+    const agent = await promptForAgent({
+      input: streams.input,
+      output: streams.output,
+      interactive: true,
+    });
+
+    assert.equal(agent, "codex");
+  });
+
   it("fails after three invalid agent menu choices", async () => {
-    const streams = createInteractiveStreams("9\n8\n0\n");
+    const streams = createInteractiveStreams("99\n98\n0\n");
 
     await assert.rejects(
       promptForAgent({
@@ -79,13 +95,53 @@ describe("cli", () => {
         interactive: true,
       });
 
-      assert.equal(result.agent, "cursor");
+      assert.equal(result.agent, "copilot");
       assert.equal(result.manual, true);
       assert.match(streams.getOutput(), /No pude detectar automáticamente qué agente utilizás\./);
-      assert.match(streams.getOutput(), /4\. Cursor/);
+      assert.match(streams.getOutput(), /4\. GitHub Copilot/);
     } finally {
       process.cwd = originalCwd;
     }
+  });
+
+  it("accepts Ctrl+C as a clean cancellation", async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    input.isTTY = true;
+    output.isTTY = true;
+
+    const promise = promptForAgent({
+      input,
+      output,
+      interactive: true,
+    });
+
+    input.emit("SIGINT");
+
+    await assert.rejects(promise, /Instalación cancelada por el usuario\./);
+  });
+
+  it("lists all canonical supported agents", () => {
+    const names = AGENT_CHOICES.map(([, name]) => name);
+    assert.deepEqual(names, [
+      "opencode",
+      "codex",
+      "claude",
+      "copilot",
+      "cursor",
+      "kimi",
+      "gemini-cli",
+      "qwen-code",
+      "kilocode",
+      "kiro-ide",
+      "windsurf",
+      "antigravity",
+      "openclaw",
+      "trae",
+      "pi",
+      "hermes",
+      "generic",
+    ]);
   });
 
   it("defines three agent selection attempts", () => {
