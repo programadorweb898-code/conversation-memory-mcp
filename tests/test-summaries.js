@@ -4,6 +4,7 @@
 */
 const { expect } = require('chai');
 const assert = require('node:assert/strict');
+const assert = require('node:assert/strict');
 const sinon = require('sinon');
 const llmClient = require('../src/services/llmClient');
 
@@ -123,6 +124,38 @@ describe('Session Summaries Tool', () => {
     expect(llmClient.generateText.secondCall.args[0]).to.not.include("Hola, ¿cómo estás?");
   });
 
+  it('no permite que un cursor viejo reemplace un resumen más reciente', async function() {
+    const saveSessionSummary = require("../src/tools/saveSessionSummary");
+    const sessionId = `summary-cursor-${Date.now()}`;
+
+    await saveSessionSummary({
+      sessionId,
+      project: "test",
+      owner: "cursor-owner",
+      summary: "Resumen nuevo",
+      lastProcessedSeqId: 20,
+    });
+
+    const staleWrite = await saveSessionSummary({
+      sessionId,
+      project: "test",
+      owner: "cursor-owner",
+      summary: "Resumen viejo",
+      lastProcessedSeqId: 10,
+    });
+
+    expect(staleWrite).to.equal(false);
+
+    const row = await db.getAsync(
+      `SELECT summary, last_processed_seq_id FROM session_summaries WHERE session_id = $1`,
+      [sessionId],
+    );
+    expect(row.summary).to.equal("Resumen nuevo");
+    expect(Number(row.last_processed_seq_id)).to.equal(20);
+
+    await db.runAsync(`DELETE FROM session_summaries WHERE session_id = $1`, [sessionId]);
+  });
+
   it('mantiene el resumen y el cursor cuando el LLM no está disponible', async function() {
     await finalizeSession({ sessionId: testSessionId, project: "test" });
     const before = await db.getAsync(
@@ -149,6 +182,28 @@ describe('Session Summaries Tool', () => {
     expect(result.reason).to.equal("llm_unavailable");
     expect(after.summary).to.equal(before.summary);
     expect(Number(after.last_processed_seq_id)).to.equal(Number(before.last_processed_seq_id));
+  });
+
+  it('rechaza finalizar una sesión que pertenece a otro owner', async function() {
+    const ownerA = "summary-session-owner-a";
+    const ownerB = "summary-session-owner-b";
+    const sessionId = `owner-finalize-${Date.now()}`;
+
+    await saveMessage({
+      sessionId,
+      project: "test",
+      owner: ownerA,
+      role: "user",
+      content: "Mensaje privado de A",
+    });
+
+    await assert.rejects(
+      finalizeSession({ sessionId, project: "test", owner: ownerB }),
+      (error) => error.code === "OWNER_CONFLICT",
+    );
+
+    await db.runAsync(`DELETE FROM conversations WHERE session_id = $1`, [sessionId]);
+    await db.runAsync(`DELETE FROM session_summaries WHERE session_id = $1`, [sessionId]);
   });
 
   it('no expone un resumen a otro owner', async function() {
