@@ -1,6 +1,6 @@
 const { expect } = require('chai');
 
-const { runMigrations } = require('../scripts/migrate');
+const { runMigrations, resolveEnvPlaceholders } = require('../scripts/migrate');
 
 describe('Migration connection errors', function () {
   this.timeout(10000);
@@ -33,6 +33,23 @@ describe('Migration connection errors', function () {
       } else {
         process.env.DATABASE_URL = previousUrl;
       }
+    }
+  });
+});
+
+describe("Migration placeholder escaping", () => {
+  it("escapes apostrophes in MCP_DEFAULT_OWNER", () => {
+    const previousOwner = process.env.MCP_DEFAULT_OWNER;
+    process.env.MCP_DEFAULT_OWNER = "Luis's machine";
+
+    try {
+      const sql = resolveEnvPlaceholders(
+        "UPDATE conversations SET owner = '${" + "MCP_DEFAULT_OWNER}'"
+      );
+      expect(sql).to.equal("UPDATE conversations SET owner = 'Luis''s machine'");
+    } finally {
+      if (previousOwner === undefined) delete process.env.MCP_DEFAULT_OWNER;
+      else process.env.MCP_DEFAULT_OWNER = previousOwner;
     }
   });
 });
