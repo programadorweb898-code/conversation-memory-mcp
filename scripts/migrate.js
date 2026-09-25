@@ -8,21 +8,16 @@ dotenv.config();
 const MIGRATIONS_DIR = path.join(__dirname, "..", "migrations");
 const MIGRATION_LOCK_KEY = 19082026;
 
-// Dueño por defecto para instalaciones locales. Puede sobrescribirse mediante
-// MCP_DEFAULT_OWNER sin impedir que el servidor arranque sin un .env completo.
 function getDefaultOwner() {
   return process.env.MCP_DEFAULT_OWNER || "local-user";
 }
 
-/**
- * Sustituye los placeholders de entorno dentro del SQL de una migración.
- * Soporta ${MCP_DEFAULT_OWNER}. Devuelve el SQL con los valores resueltos.
- * @param {string} sql - SQL original de la migración.
- * @returns {string}
- */
-function resolveEnvPlaceholders(sql) {
-  const defaultOwner = getDefaultOwner();
+function escapeSqlLiteral(value) {
+  return String(value).replaceAll("'", "''");
+}
 
+function resolveEnvPlaceholders(sql) {
+  const defaultOwner = escapeSqlLiteral(getDefaultOwner());
   return sql.replaceAll("${MCP_DEFAULT_OWNER}", defaultOwner);
 }
 
@@ -33,7 +28,6 @@ function getPool() {
 
   return new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
   });
 }
 
@@ -70,6 +64,7 @@ async function runMigrations({ logger = console } = {}) {
       logger.error(error);
       throw error;
     }
+
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock($1)", [MIGRATION_LOCK_KEY]);
 
@@ -98,9 +93,7 @@ async function runMigrations({ logger = console } = {}) {
     }
 
     for (const migration of migrations) {
-      if (applied.has(migration.version)) {
-        continue;
-      }
+      if (applied.has(migration.version)) continue;
 
       logger.log(`Applying migration ${migration.name}...`);
       await client.query(resolveEnvPlaceholders(migration.sql));
@@ -114,9 +107,7 @@ async function runMigrations({ logger = console } = {}) {
     await client.query("COMMIT");
     logger.log("Database migrations completed successfully.");
   } catch (error) {
-    if (client) {
-      await client.query("ROLLBACK");
-    }
+    if (client) await client.query("ROLLBACK");
     if (!connectionErrorLogged) {
       logger.error("Database migration failed:", error.message);
     }
@@ -131,4 +122,9 @@ if (require.main === module) {
   runMigrations().catch(() => process.exit(1));
 }
 
-module.exports = { loadMigrations, runMigrations, resolveEnvPlaceholders, getDefaultOwner };
+module.exports = {
+  loadMigrations,
+  runMigrations,
+  resolveEnvPlaceholders,
+  getDefaultOwner,
+};
