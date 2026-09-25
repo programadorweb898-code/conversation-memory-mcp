@@ -136,6 +136,33 @@ describe("Search Sessions By Summary", function () {
     expect(history).to.deep.equal([]);
   });
 
+  it("usa búsqueda textual cuando el resumen no tiene embedding", async () => {
+    const sessionId = "summary-search-lexical-fallback";
+    sessionIds.push(sessionId);
+
+    await saveMessage({
+      sessionId,
+      project,
+      owner: ownerA,
+      role: "user",
+      content: "Decidimos usar PostgreSQL",
+    });
+    await db.runAsync(
+      `INSERT INTO session_summaries (session_id, project, owner, summary)
+       VALUES ($1, $2, $3, $4)`,
+      [sessionId, project, ownerA, "PostgreSQL para persistencia"],
+    );
+
+    const history = await searchSessionsBySummary({
+      query: "PostgreSQL para persistencia",
+      project,
+      owner: ownerA,
+    });
+
+    expect(history).to.have.lengthOf(1);
+    expect(history[0].session_id).to.equal(sessionId);
+  });
+
   it("devuelve vacío cuando no existe ningún resumen elegible", async () => {
     const history = await searchSessionsBySummary({
       query: "consulta sin resultados",

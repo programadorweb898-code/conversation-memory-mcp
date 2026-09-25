@@ -75,6 +75,14 @@ function installStandardMcpJson(cwd, file, rootPath = "mcpServers") {
   });
 }
 
+function installVsCode(cwd) {
+  return mergeJsonServer(join(cwd, ".vscode", "mcp.json"), "servers", {
+    type: "stdio",
+    command: "npx",
+    args: ["-y", "conversation-memory-mcp"],
+  });
+}
+
 function installCodex(cwd) {
   const file = join(cwd, ".codex", "config.toml");
   mkdirSync(dirname(file), { recursive: true });
@@ -106,7 +114,7 @@ function installMcpConfig({ cwd = process.cwd(), agent } = {}) {
     case "kiro":
       return installStandardMcpJson(projectRoot, join(projectRoot, ".kiro", "settings", "mcp.json"));
     case "vscode":
-      return installStandardMcpJson(projectRoot, join(projectRoot, ".mcp.json"), "servers");
+      return installVsCode(projectRoot);
     default:
       return { changed: false, file: null, supported: false };
   }

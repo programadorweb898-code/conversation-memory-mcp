@@ -29,6 +29,19 @@ describe("cli", () => {
     assert.match(source, /promptForAgent/);
   });
 
+  it("uses real line breaks in interactive messages", async () => {
+    const streams = createInteractiveStreams("1\n");
+    await promptForAgent({
+      reason: "Motivo de prueba.",
+      input: streams.input,
+      output: streams.output,
+      interactive: true,
+    });
+
+    assert.match(streams.getOutput(), /\nMotivo de prueba\.\n/);
+    assert.doesNotMatch(streams.getOutput(), /\\nMotivo de prueba\.\\n/);
+  });
+
   it("retries invalid agent menu choices up to three attempts", async () => {
     const streams = createInteractiveStreams("99\n98\n1\n");
     const agent = await promptForAgent({
