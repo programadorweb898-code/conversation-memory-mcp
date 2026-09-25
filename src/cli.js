@@ -43,7 +43,7 @@ function printHelp() {
     "Si no puede detectar el agente, muestra un menú para seleccionarlo.",
     "",
     "Agentes soportados:",
-    \`  \${AGENT_CHOICES.map(([, name]) => name).join(", ")}\`,
+    `  ${AGENT_CHOICES.map(([, name]) => name).join(", ")}`,
   ].join("\n"));
 }
 
@@ -52,7 +52,7 @@ function parseArgs(argv) {
   const command = args[0];
   if (command === "--help" || command === "-h") return { command: "help" };
   if (!command || command === "serve") return { command: "serve" };
-  if (command !== "install") throw new Error(\`Comando desconocido: \${command}\`);
+  if (command !== "install") throw new Error(`Comando desconocido: ${command}`);
 
   let agent = null;
   for (let i = 1; i < args.length; i++) {
@@ -60,7 +60,7 @@ function parseArgs(argv) {
       agent = args[++i];
       if (!agent) throw new Error("--agent requiere un valor");
     } else {
-      throw new Error(\`Argumento desconocido: \${args[i]}\`);
+      throw new Error(`Argumento desconocido: ${args[i]}`);
     }
   }
   return { command, agent };
@@ -71,7 +71,7 @@ function printAgentChoices(output = process.stdout) {
     "",
     "Seleccioná el agente para configurar su MCP y su política:",
     "",
-    ...AGENT_CHOICES.map(([number, , label]) => \`  \${number}. \${label}\`),
+    ...AGENT_CHOICES.map(([number, , label]) => `  ${number}. ${label}`),
     "",
     "También podés escribir el nombre del agente (por ejemplo: codex).",
   ].join("\n") + "\n");
@@ -87,7 +87,7 @@ async function promptForAgent({ reason = "", input = process.stdin, output = pro
     throw new Error("No pude seleccionar el agente en un terminal interactivo. Ejecutá nuevamente con --agent <agente>.");
   }
 
-  if (reason) output.write(\`\\n\${reason}\\n\`);
+  if (reason) output.write(`\\n${reason}\\n`);
   printAgentChoices(output);
 
   const readline = require("node:readline");
@@ -113,8 +113,8 @@ async function promptForAgent({ reason = "", input = process.stdin, output = pro
 
       const remaining = MAX_AGENT_ATTEMPTS - attempt;
       output.write(
-        \`Opción inválida. Elegí un número del 1 al \${AGENT_CHOICES.length} o escribí el nombre del agente.\` +
-        (remaining > 0 ? \` Intentos restantes: \${remaining}.\` : "") +
+        `Opción inválida. Elegí un número del 1 al ${AGENT_CHOICES.length} o escribí el nombre del agente.` +
+        (remaining > 0 ? ` Intentos restantes: ${remaining}.` : "") +
         "\\n",
       );
 
@@ -142,7 +142,7 @@ async function resolveAgent(agent, { input = process.stdin, output = process.std
     } catch (error) {
       return {
         agent: await promptForAgent({
-          reason: \`Agente no soportado: \${agent}.\`,
+          reason: `Agente no soportado: ${agent}.`,
           input,
           output,
           interactive,
@@ -169,11 +169,11 @@ async function resolveAgent(agent, { input = process.stdin, output = process.std
 }
 
 function printStep(message) {
-  console.log(\`→ \${message}\`);
+  console.log(`→ ${message}`);
 }
 
 function printSuccess(message) {
-  console.log(\`✓ \${message}\`);
+  console.log(`✓ ${message}`);
 }
 
 async function main() {
@@ -183,7 +183,7 @@ async function main() {
   if (parsed.command === "install") {
     const resolved = await resolveAgent(parsed.agent);
 
-    printSuccess(\`Agente seleccionado: \${resolved.agent}\${resolved.manual ? " (seleccionado manualmente)" : " (detectado automáticamente)"}\`);
+    printSuccess(`Agente seleccionado: ${resolved.agent}${resolved.manual ? " (seleccionado manualmente)" : " (detectado automáticamente)"}`);
     printStep("Configurando base de datos...");
     const database = await setupDatabase();
 
@@ -191,14 +191,14 @@ async function main() {
     const result = install({ agent: resolved.agent });
 
     console.log("");
-    printSuccess(\`Base de datos: configurada (\${database.source})\`);
-    printSuccess(\`Agente: \${resolved.agent}\${resolved.manual ? " (seleccionado manualmente)" : " (detectado automáticamente)"}\`);
-    printSuccess(\`Política: \${result.changed ? "instalada/actualizada" : "sin cambios"} -> \${result.file}\`);
+    printSuccess(`Base de datos: configurada (${database.source})`);
+    printSuccess(`Agente: ${resolved.agent}${resolved.manual ? " (seleccionado manualmente)" : " (detectado automáticamente)"}`);
+    printSuccess(`Política: ${result.changed ? "instalada/actualizada" : "sin cambios"} -> ${result.file}`);
 
     if (result.mcp.supported === false) {
       console.log("[conversation-memory-mcp] MCP: este agente tiene soporte de política, pero su configuración MCP requiere un adaptador específico.");
     } else {
-      printSuccess(\`MCP: \${result.mcp.changed ? "configurado/actualizado" : "sin cambios"} -> \${result.mcp.file}\`);
+      printSuccess(`MCP: ${result.mcp.changed ? "configurado/actualizado" : "sin cambios"} -> ${result.mcp.file}`);
     }
 
     console.log("");
@@ -212,7 +212,7 @@ async function main() {
 
 if (require.main === module) {
   main().catch((error) => {
-    console.error(\`[conversation-memory-mcp] \${error.message}\`);
+    console.error(`[conversation-memory-mcp] ${error.message}`);
     process.exit(1);
   });
 }
