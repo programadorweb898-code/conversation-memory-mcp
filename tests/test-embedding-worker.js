@@ -95,6 +95,27 @@ describe("Embedding Worker", function () {
     expect(embeddingQueue.getProcessingStatus()).to.equal(false);
   });
 
+  it("deduplica el mismo mensaje cuando aparece dos veces en la cola", async () => {
+    const messageId = await insertMessage("Mensaje duplicado en cola");
+    const task = { messageId, role: "user", content: "Mensaje duplicado en cola" };
+
+    embeddingQueue.addTask(task);
+    embeddingQueue.addTask(task);
+
+    const generateEmbeddings = sinon.stub(embeddingService, "generateEmbeddings")
+      .resolves([JSON.stringify(fakeEmbedding(0.25))]);
+    const saveEmbedding = sinon.stub(embeddingService, "saveEmbedding").resolves();
+
+    await embeddingWorker.processNextEmbeddingTask();
+
+    expect(generateEmbeddings.calledOnce).to.equal(true);
+    expect(generateEmbeddings.firstCall.args[0]).to.deep.equal([
+      { role: "user", content: "Mensaje duplicado en cola" },
+    ]);
+    expect(saveEmbedding.calledOnce).to.equal(true);
+    expect(saveEmbedding.firstCall.args[0]).to.equal(messageId);
+  });
+
   it("elimina el registro de fallo cuando un mensaje se procesa correctamente", async () => {
     const messageId = await insertMessage("Mensaje que se recupera de un fallo");
     await db.runAsync(
