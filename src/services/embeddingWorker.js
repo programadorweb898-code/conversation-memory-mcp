@@ -87,6 +87,8 @@ async function processNextEmbeddingTask() {
       break;
     }
 
+    batchTasks = [...new Map(batchTasks.map((task) => [task.messageId, task])).values()];
+
     if (batchTasks.length === 0) {
       return;
     }
