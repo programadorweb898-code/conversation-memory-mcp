@@ -4,7 +4,6 @@
 */
 const { expect } = require('chai');
 const assert = require('node:assert/strict');
-const assert = require('node:assert/strict');
 const sinon = require('sinon');
 const llmClient = require('../src/services/llmClient');
 
