@@ -88,12 +88,13 @@ async function promptForAgent({ reason = "", input = process.stdin, output = pro
       if (choice) return choice[1];
 
       const remaining = MAX_AGENT_ATTEMPTS - attempt;
-      if (remaining > 0) {
-        output.write(`Opción inválida. Elegí un número del 1 al 7. Intentos restantes: ${remaining}.\n`);
-        output.write("Número del agente: ");
-      } else {
+      output.write(`Opción inválida. Elegí un número del 1 al 7.${remaining > 0 ? ` Intentos restantes: ${remaining}.` : ""}\n`);
+
+      if (remaining === 0) {
         throw new Error("Se agotaron los 3 intentos para seleccionar un agente. La instalación se canceló.");
       }
+
+      output.write("Número del agente: ");
     }
 
     throw new Error("No se recibió una selección de agente. La instalación se canceló.");
