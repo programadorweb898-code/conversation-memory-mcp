@@ -87,7 +87,7 @@ async function promptForAgent({ reason = "", input = process.stdin, output = pro
     throw new Error("No pude seleccionar el agente en un terminal interactivo. Ejecutá nuevamente con --agent <agente>.");
   }
 
-  if (reason) output.write(`\\n${reason}\\n`);
+  if (reason) output.write(`\n${reason}\n`);
   printAgentChoices(output);
 
   const readline = require("node:readline");
@@ -118,7 +118,7 @@ async function promptForAgent({ reason = "", input = process.stdin, output = pro
       output.write(
         `Opción inválida. Elegí un número del 1 al ${AGENT_CHOICES.length} o escribí el nombre del agente.` +
         (remaining > 0 ? ` Intentos restantes: ${remaining}.` : "") +
-        "\\n",
+        "\n",
       );
 
       if (remaining === 0) {
