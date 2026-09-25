@@ -6,6 +6,25 @@ async function finalizeSession({ sessionId, project, owner }) {
   if (!project) throw new Error("El parámetro 'project' es obligatorio.");
   console.log(`Finalizando sesión: ${sessionId}`);
 
+  const existingSession = await db.getAsync(
+    "SELECT project, owner FROM conversations WHERE session_id = $1 LIMIT 1",
+    [sessionId]
+  );
+
+  if (existingSession?.project && existingSession.project !== project) {
+    const error = new Error(
+      `La sesión ${sessionId} ya pertenece al proyecto "${existingSession.project}". No se permite mezclar datos entre proyectos.`
+    );
+    error.code = "PROJECT_CONFLICT";
+    throw error;
+  }
+
+  if (existingSession?.owner && existingSession.owner !== (owner ?? process.env.MCP_DEFAULT_OWNER ?? "local-user")) {
+    const error = new Error(`La sesión ${sessionId} ya existe y no pertenece a este usuario.`);
+    error.code = "OWNER_CONFLICT";
+    throw error;
+  }
+
   const existingSummary = await db.getAsync(
     "SELECT summary, last_processed_seq_id FROM session_summaries WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)",
     [sessionId, project, owner ?? null]
