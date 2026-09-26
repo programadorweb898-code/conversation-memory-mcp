@@ -2,17 +2,30 @@
 
 const { startStdioServer } = require("./stdio");
 const { install, detectAgent } = require("./installer");
+const { normalizeAgent } = require("./installer/mcpConfig");
 const { setupDatabase } = require("./installer/database");
 
 const AGENT_CHOICES = [
   ["1", "opencode", "OpenCode"],
   ["2", "codex", "Codex"],
   ["3", "claude", "Claude Code"],
-  ["4", "cursor", "Cursor"],
-  ["5", "kimi", "Kimi Code"],
-  ["6", "kiro-ide", "Kiro IDE"],
-  ["7", "generic", "Otro / configuración manual"],
+  ["4", "copilot", "GitHub Copilot"],
+  ["5", "cursor", "Cursor"],
+  ["6", "kimi", "Kimi Code"],
+  ["7", "gemini-cli", "Gemini CLI"],
+  ["8", "qwen-code", "Qwen Code"],
+  ["9", "kilocode", "Kilo Code"],
+  ["10", "kiro-ide", "Kiro IDE"],
+  ["11", "windsurf", "Windsurf"],
+  ["12", "antigravity", "Antigravity"],
+  ["13", "openclaw", "OpenClaw"],
+  ["14", "trae", "Trae"],
+  ["15", "pi", "Pi"],
+  ["16", "hermes", "Hermes"],
+  ["17", "generic", "Otro / configuración manual"],
 ];
+
+const MAX_AGENT_ATTEMPTS = 3;
 
 function printHelp() {
   console.log([
@@ -29,9 +42,8 @@ function printHelp() {
     "",
     "Si no puede detectar el agente, muestra un menú para seleccionarlo.",
     "",
-    "Agentes: opencode, codex, claude, copilot, cursor, kimi, gemini-cli,",
-    "         qwen-code, kilocode, kiro-ide, windsurf, antigravity,",
-    "         openclaw, trae, pi, hermes",
+    "Agentes soportados:",
+    `  ${AGENT_CHOICES.map(([, name]) => name).join(", ")}`,
   ].join("\n"));
 }
 
@@ -54,34 +66,119 @@ function parseArgs(argv) {
   return { command, agent };
 }
 
-function printAgentChoices() {
-  console.log([
+function printAgentChoices(output = process.stdout) {
+  output.write([
     "",
-    "No pude detectar automáticamente qué agente utilizás.",
     "Seleccioná el agente para configurar su MCP y su política:",
     "",
     ...AGENT_CHOICES.map(([number, , label]) => `  ${number}. ${label}`),
-  ].join("\n"));
+    "",
+    "También podés escribir el nombre del agente (por ejemplo: codex).",
+  ].join("\n") + "\n");
 }
 
-async function promptForAgent() {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    throw new Error("No pude detectar el agente automáticamente en un terminal interactivo. Ejecutá nuevamente con --agent <agente>.");
+function findAgentChoice(answer) {
+  const normalized = answer.trim().toLowerCase();
+  return AGENT_CHOICES.find(([number, name]) => number === normalized || name === normalized);
+}
+
+async function promptForAgent({ reason = "", input = process.stdin, output = process.stdout, interactive = true } = {}) {
+  if (interactive && (!input.isTTY || !output.isTTY)) {
+    throw new Error("No pude seleccionar el agente en un terminal interactivo. Ejecutá nuevamente con --agent <agente>.");
   }
 
-  printAgentChoices();
+  if (reason) output.write(`\n${reason}\n`);
+  printAgentChoices(output);
 
-  const readline = require("node:readline/promises");
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const readline = require("node:readline");
+  const rl = readline.createInterface({ input, output });
+
+  let interrupted = false;
+  const handleInterrupt = () => {
+    interrupted = true;
+    rl.close();
+  };
+
+  rl.on("SIGINT", handleInterrupt);
+  input.on("SIGINT", handleInterrupt);
 
   try {
-    const answer = (await rl.question("\nNúmero del agente: ")).trim();
-    const choice = AGENT_CHOICES.find(([number]) => number === answer);
-    if (!choice) throw new Error("Selección inválida. Usá un número del 1 al 7.");
-    return choice[1];
+    let attempt = 0;
+
+    for await (const line of rl) {
+      if (interrupted) break;
+
+      attempt += 1;
+      const answer = line.trim();
+      const choice = findAgentChoice(answer);
+
+      if (choice) return choice[1];
+
+      const remaining = MAX_AGENT_ATTEMPTS - attempt;
+      output.write(
+        `Opción inválida. Elegí un número del 1 al ${AGENT_CHOICES.length} o escribí el nombre del agente.` +
+        (remaining > 0 ? ` Intentos restantes: ${remaining}.` : "") +
+        "\n",
+      );
+
+      if (remaining === 0) {
+        throw new Error("Se agotaron los 3 intentos para seleccionar un agente. La instalación se canceló.");
+      }
+
+      output.write("Selección [1-" + AGENT_CHOICES.length + "]: ");
+    }
+
+    if (interrupted) {
+      throw new Error("Instalación cancelada por el usuario.");
+    }
+
+    throw new Error("No se recibió una selección de agente. La instalación se canceló.");
   } finally {
+    rl.removeListener("SIGINT", handleInterrupt);
+    input.removeListener("SIGINT", handleInterrupt);
     rl.close();
   }
+}
+
+async function resolveAgent(agent, { input = process.stdin, output = process.stdout, interactive = true } = {}) {
+  if (agent) {
+    try {
+      return { agent: normalizeAgent(agent), manual: false };
+    } catch (error) {
+      return {
+        agent: await promptForAgent({
+          reason: `Agente no soportado: ${agent}.`,
+          input,
+          output,
+          interactive,
+        }),
+        manual: true,
+      };
+    }
+  }
+
+  const detectedAgent = detectAgent(process.cwd());
+  if (detectedAgent !== "generic") {
+    return { agent: detectedAgent, manual: false };
+  }
+
+  return {
+    agent: await promptForAgent({
+      reason: "No pude detectar automáticamente qué agente utilizás.",
+      input,
+      output,
+      interactive,
+    }),
+    manual: true,
+  };
+}
+
+function printStep(message) {
+  console.log(`→ ${message}`);
+}
+
+function printSuccess(message) {
+  console.log(`✓ ${message}`);
 }
 
 async function main() {
@@ -89,29 +186,47 @@ async function main() {
   if (parsed.command === "help") return printHelp();
 
   if (parsed.command === "install") {
-    const database = await setupDatabase();
-    const detectedAgent = parsed.agent || detectAgent(process.cwd());
-    const selectedAgent = detectedAgent === "generic"
-      ? await promptForAgent()
-      : detectedAgent;
-    const result = install({ agent: selectedAgent });
+    const resolved = await resolveAgent(parsed.agent);
 
-    console.log(`[conversation-memory-mcp] base de datos: configurada (${database.source})`);
-    console.log(`[conversation-memory-mcp] agente: ${selectedAgent}${detectedAgent === "generic" ? " (seleccionado manualmente)" : " (detectado automáticamente)"}`);
-    console.log(`[conversation-memory-mcp] política: ${result.changed ? "instalada/actualizada" : "sin cambios"} -> ${result.file}`);
+    printSuccess(`Agente seleccionado: ${resolved.agent}${resolved.manual ? " (seleccionado manualmente)" : " (detectado automáticamente)"}`);
+    printStep("Configurando base de datos...");
+    const database = await setupDatabase();
+
+    printStep("Configurando MCP y política...");
+    const result = install({ agent: resolved.agent });
+
+    console.log("");
+    printSuccess(`Base de datos: configurada (${database.source})`);
+    printSuccess(`Agente: ${resolved.agent}${resolved.manual ? " (seleccionado manualmente)" : " (detectado automáticamente)"}`);
+    printSuccess(`Política: ${result.changed ? "instalada/actualizada" : "sin cambios"} -> ${result.file}`);
 
     if (result.mcp.supported === false) {
       console.log("[conversation-memory-mcp] MCP: este agente tiene soporte de política, pero su configuración MCP requiere un adaptador específico.");
     } else {
-      console.log(`[conversation-memory-mcp] MCP: ${result.mcp.changed ? "configurado/actualizado" : "sin cambios"} -> ${result.mcp.file}`);
+      printSuccess(`MCP: ${result.mcp.changed ? "configurado/actualizado" : "sin cambios"} -> ${result.mcp.file}`);
     }
+
+    console.log("");
+    printSuccess("Instalación completada.");
+    console.log("Reiniciá tu agente para aplicar la configuración.");
     return;
   }
 
   await startStdioServer();
 }
 
-main().catch((error) => {
-  console.error(`[conversation-memory-mcp] ${error.message}`);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(`[conversation-memory-mcp] ${error.message}`);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  AGENT_CHOICES,
+  MAX_AGENT_ATTEMPTS,
+  parseArgs,
+  printAgentChoices,
+  promptForAgent,
+  resolveAgent,
+};

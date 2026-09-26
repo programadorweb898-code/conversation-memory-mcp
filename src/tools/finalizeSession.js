@@ -6,16 +6,30 @@ async function finalizeSession({ sessionId, project, owner }) {
   if (!project) throw new Error("El parámetro 'project' es obligatorio.");
   console.log(`Finalizando sesión: ${sessionId}`);
 
-  // 1. Obtener resumen previo y el ID del último mensaje procesado. El resumen
-  // queda aislado por owner (token master no filtra, owner null).
+  const existingSession = await db.getAsync(
+    "SELECT project, owner FROM conversations WHERE session_id = $1 LIMIT 1",
+    [sessionId]
+  );
+
+  if (existingSession?.project && existingSession.project !== project) {
+    const error = new Error(
+      `La sesión ${sessionId} ya pertenece al proyecto "${existingSession.project}". No se permite mezclar datos entre proyectos.`
+    );
+    error.code = "PROJECT_CONFLICT";
+    throw error;
+  }
+
+  if (existingSession?.owner && existingSession.owner !== (owner ?? process.env.MCP_DEFAULT_OWNER ?? "local-user")) {
+    const error = new Error(`La sesión ${sessionId} ya existe y no pertenece a este usuario.`);
+    error.code = "OWNER_CONFLICT";
+    throw error;
+  }
+
   const existingSummary = await db.getAsync(
     "SELECT summary, last_processed_seq_id FROM session_summaries WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)",
     [sessionId, project, owner ?? null]
   );
 
-  // 2. Obtener mensajes nuevos (delta). El orden por sequence_id garantiza que
-  // el último mensaje procesado sea realmente el de mayor secuencia, sin
-  // depender de timestamp ni de ctid.
   let query = `
     SELECT id, sequence_id, role, content, timestamp
     FROM conversations
@@ -41,16 +55,12 @@ async function finalizeSession({ sessionId, project, owner }) {
     };
   }
 
-  // 3. Generar resumen incremental.
   const summary = await generateSessionSummary({
     sessionId,
     previousSummary: existingSummary ? existingSummary.summary : null,
     newMessages,
   });
 
-  // Sin LLM (o ante un error del proveedor), no se crea un resumen artificial
-  // ni se marca el delta como procesado. El historial sigue persistido y podrá
-  // resumirse cuando vuelva a estar disponible un LLM.
   if (!summary) {
     console.log("No se generó resumen: LLM no disponible.");
     return {
@@ -61,16 +71,29 @@ async function finalizeSession({ sessionId, project, owner }) {
     };
   }
 
-  // 4. Guardar nuevo resumen y actualizar el ID del último mensaje.
   const lastMessageSeqId = newMessages[newMessages.length - 1].sequence_id;
 
-  await saveSessionSummary({
+  const saved = await saveSessionSummary({
     sessionId,
     project,
     owner,
     summary,
     lastProcessedSeqId: lastMessageSeqId,
   });
+
+  if (!saved) {
+    const latest = await db.getAsync(
+      "SELECT summary FROM session_summaries WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)",
+      [sessionId, project, owner ?? null]
+    );
+
+    return {
+      summary: latest?.summary ?? summary,
+      summaryGenerated: true,
+      summaryPending: false,
+      staleWriteSkipped: true,
+    };
+  }
 
   return {
     summary,

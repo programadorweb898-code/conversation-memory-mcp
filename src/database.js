@@ -2,20 +2,20 @@ const { Pool } = require("pg");
 const dotenv = require("dotenv");
 dotenv.config();
 
-const pool = new Pool({
+const poolOptions = {
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
+};
+
+if (process.env.PGSSL_REJECT_UNAUTHORIZED === "false") {
+  poolOptions.ssl = { rejectUnauthorized: false };
+}
+
+const pool = new Pool(poolOptions);
 
 pool.on("error", (err) => {
   console.error("Error inesperado en el pool de Postgres (conexión idle):", err.message);
 });
 
-/**
- * Ejecuta work bajo un advisory lock de transacción.
- * work recibe la misma conexión que posee el lock, garantizando que la
- * sección crítica queda protegida también entre procesos/instancias.
- */
 async function withAdvisoryLock(key, work) {
   const client = await pool.connect();
   const lockValue = hashtext(`advisory:${key}`);

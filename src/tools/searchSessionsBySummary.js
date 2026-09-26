@@ -31,11 +31,33 @@ async function searchSessionsBySummary({ query, project, owner }) {
   const results = await db.allAsync(sql, [queryEmbeddingJson, project, owner ?? null]);
 
   if (results.length === 0) {
-    return [];
+    const lexicalResults = await db.allAsync(
+      `
+        SELECT session_id
+        FROM session_summaries
+        WHERE project = $1
+          AND ($2::text IS NULL OR owner = $2)
+          AND summary ILIKE $3
+        ORDER BY timestamp DESC
+        LIMIT 1
+      `,
+      [project, owner ?? null, `%${query}%`],
+    );
+
+    if (lexicalResults.length === 0) {
+      return [];
+    }
+
+    results.push({ session_id: lexicalResults[0].session_id, similarity: null });
   }
 
   const bestSessionId = results[0].session_id;
-  console.log(`Sesión encontrada mediante resumen: ${bestSessionId} (Similitud: ${results[0].similarity})`);
+  console.log(
+    `Sesión encontrada mediante resumen: ${bestSessionId}` +
+      (results[0].similarity === null
+        ? " (coincidencia textual)"
+        : ` (Similitud: ${results[0].similarity})`),
+  );
 
   // 3. Recuperar todo el historial de la sesión identificada
   const historySql = `
