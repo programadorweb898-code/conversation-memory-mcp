@@ -1,0 +1,45 @@
+name: Cross-platform
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  installer:
+    name: Installer tests - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Run installer tests
+        run: npx mocha --timeout 30000 tests/cli.test.js tests/database-installer.test.js tests/installer.test.js
+
+      - name: Smoke test published CLI
+        run: npx -y conversation-memory-mcp@latest --help
