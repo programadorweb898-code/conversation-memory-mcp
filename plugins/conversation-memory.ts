@@ -62,7 +62,7 @@ function stripJsoncComments(src: string): string {
     out += ch
     i++
   }
-  return out.replace(/,\s*([}\]])/g, "$1")
+  return out.replace(/,\s*([}\\]])/g, "$1")
 }
 
 function readJsonc(file: string): any {
@@ -198,12 +198,26 @@ async function getMcpClient(mcpConfig: McpResolved): Promise<any> {
 async function callSaveMessage(
   mcpConfig: McpResolved,
   args: Record<string, unknown>
-): Promise<string | undefined> {
+): Promise<string> {
   const client = await getMcpClient(mcpConfig)
   const result = await client.callTool({ name: "saveMessage", arguments: args })
+
+  if (result?.isError) {
+    const errorText = (result?.content ?? [])
+      .map((c: any) => c?.text ?? "")
+      .join("")
+      .trim()
+    throw new Error(errorText || "saveMessage devolvió un error")
+  }
+
   const text = (result?.content ?? []).map((c: any) => c?.text ?? "").join("")
   const match = text.match(/ID:\s*(\S+)/)
-  return match?.[1]
+
+  if (!match?.[1]) {
+    throw new Error("saveMessage no devolvió un ID de mensaje")
+  }
+
+  return match[1]
 }
 
 async function log(client: any, level: string, message: string, extra?: unknown): Promise<void> {
@@ -271,12 +285,12 @@ export const ConversationMemory: Plugin = async ({ client, project, directory })
             agentId: currentAgent,
           })
           markSaved(sessionID, info.id)
-          mcpIdByOpenCodeId.set(info.id, mcpId ?? "")
-          if (mcpId) savedCount++
+          mcpIdByOpenCodeId.set(info.id, mcpId)
+          savedCount++
         } else if (info.role === "assistant") {
           if (!text || isSaved(sessionID, info.id)) continue
           const related = info.parentID ? mcpIdByOpenCodeId.get(info.parentID) : undefined
-          await callSaveMessage(mcpConfig!, {
+          const mcpId = await callSaveMessage(mcpConfig!, {
             sessionId: sessionID,
             project: projectName,
             role: "assistant",
@@ -285,6 +299,7 @@ export const ConversationMemory: Plugin = async ({ client, project, directory })
             ...(related ? { relatedMessageId: related } : {}),
           })
           markSaved(sessionID, info.id)
+          mcpIdByOpenCodeId.set(info.id, mcpId)
           savedCount++
         }
       }
