@@ -4,6 +4,7 @@ import { writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { createMcpClientManager } from "./mcp-client.js"
+import { extractConfirmedMessageId } from "./save-confirmation.js"
 
 const MCP_PREFIXES = ["conversation-memory-local_", "conversation-memory_"]
 
@@ -202,22 +203,7 @@ async function callSaveMessage(
   const client = await getMcpClient(mcpConfig)
   const result = await client.callTool({ name: "saveMessage", arguments: args })
 
-  if (result?.isError) {
-    const errorText = (result?.content ?? [])
-      .map((c: any) => c?.text ?? "")
-      .join("")
-      .trim()
-    throw new Error(errorText || "saveMessage devolvió un error")
-  }
-
-  const text = (result?.content ?? []).map((c: any) => c?.text ?? "").join("")
-  const match = text.match(/ID:\s*(\S+)/)
-
-  if (!match?.[1]) {
-    throw new Error("saveMessage no devolvió un ID de mensaje")
-  }
-
-  return match[1]
+  return extractConfirmedMessageId(result)
 }
 
 async function log(client: any, level: string, message: string, extra?: unknown): Promise<void> {
