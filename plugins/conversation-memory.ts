@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
+import { createMcpClientManager } from "./mcp-client.js"
 
 const MCP_PREFIXES = ["conversation-memory-local_", "conversation-memory_"]
 
@@ -161,78 +162,39 @@ function extractText(parts: any[]): string {
     .trim()
 }
 
-let mcpClient: any = null
-let mcpConnectPromise: Promise<any> | null = null
+const mcpClientManager = createMcpClientManager(async (mcpConfig: McpResolved) => {
+  const { Client } = await import("@modelcontextprotocol/sdk/client/index.js")
+  let transport: any
 
-function invalidateMcpClient(client: any, reason: unknown): void {
-  if (mcpClient !== client) return
-  mcpClient = null
-  console.error(
-    "[conversation-memory] conexión MCP perdida; se creará un cliente nuevo en la próxima operación:",
-    reason instanceof Error ? reason.message : String(reason)
-  )
-}
+  if (mcpConfig.kind === "local") {
+    const { StdioClientTransport } = await import(
+      "@modelcontextprotocol/sdk/client/stdio.js"
+    )
+    transport = new StdioClientTransport({
+      command: mcpConfig.command,
+      args: mcpConfig.args,
+      env: mcpConfig.env,
+      ...(mcpConfig.cwd ? { cwd: mcpConfig.cwd } : {}),
+    })
+  } else {
+    const { StreamableHTTPClientTransport } = await import(
+      "@modelcontextprotocol/sdk/client/streamableHttp.js"
+    )
+    transport = new StreamableHTTPClientTransport(new URL(mcpConfig.url), {
+      requestInit: {
+        headers: mcpConfig.token ? { Authorization: "Bearer " + mcpConfig.token } : {},
+      },
+    })
+  }
+
+  const client = new Client({ name: "opencode-conversation-memory", version: "1.0.0" })
+  return { client, transport }
+})
 
 async function getMcpClient(mcpConfig: McpResolved): Promise<any> {
-  if (mcpConnectPromise) return mcpConnectPromise
-  if (mcpClient) return mcpClient
-
-  mcpConnectPromise = (async () => {
-    const { Client } = await import("@modelcontextprotocol/sdk/client/index.js")
-    let transport: any
-
-    if (mcpConfig.kind === "local") {
-      const { StdioClientTransport } = await import(
-        "@modelcontextprotocol/sdk/client/stdio.js"
-      )
-      transport = new StdioClientTransport({
-        command: mcpConfig.command,
-        args: mcpConfig.args,
-        env: mcpConfig.env,
-        ...(mcpConfig.cwd ? { cwd: mcpConfig.cwd } : {}),
-      })
-    } else {
-      const { StreamableHTTPClientTransport } = await import(
-        "@modelcontextprotocol/sdk/client/streamableHttp.js"
-      )
-      transport = new StreamableHTTPClientTransport(new URL(mcpConfig.url), {
-        requestInit: {
-          headers: mcpConfig.token ? { Authorization: `Bearer ${mcpConfig.token}` } : {},
-        },
-      })
-    }
-
-    const client = new Client({ name: "opencode-conversation-memory", version: "1.0.0" })
-
-    transport.onclose = () => {
-      invalidateMcpClient(client, "transport closed")
-    }
-    transport.onerror = (error: Error) => {
-      invalidateMcpClient(client, error)
-    }
-
-    mcpClient = client
-
-    try {
-      await client.connect(transport)
-      return client
-    } catch (error) {
-      invalidateMcpClient(client, error)
-      try {
-        await client.close()
-      } catch {
-        // ignore cleanup failures after a failed connection
-      }
-      throw error
-    }
-  })()
-
-  try {
-    return await mcpConnectPromise
-  } finally {
-    mcpConnectPromise = null
-  }
+  return mcpClientManager.getClient(mcpConfig)
 }
+
 async function callSaveMessage(
   mcpConfig: McpResolved,
   args: Record<string, unknown>
