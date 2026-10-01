@@ -162,50 +162,77 @@ function extractText(parts: any[]): string {
 }
 
 let mcpClient: any = null
+let mcpConnectPromise: Promise<any> | null = null
+
+function invalidateMcpClient(client: any, reason: unknown): void {
+  if (mcpClient !== client) return
+  mcpClient = null
+  console.error(
+    "[conversation-memory] conexión MCP perdida; se creará un cliente nuevo en la próxima operación:",
+    reason instanceof Error ? reason.message : String(reason)
+  )
+}
 
 async function getMcpClient(mcpConfig: McpResolved): Promise<any> {
+  if (mcpConnectPromise) return mcpConnectPromise
   if (mcpClient) return mcpClient
-  const { Client } = await import("@modelcontextprotocol/sdk/client/index.js")
-  let transport: any
 
-  if (mcpConfig.kind === "local") {
-    const { StdioClientTransport } = await import(
-      "@modelcontextprotocol/sdk/client/stdio.js"
-    )
-    transport = new StdioClientTransport({
-      command: mcpConfig.command,
-      args: mcpConfig.args,
-      env: mcpConfig.env,
-      ...(mcpConfig.cwd ? { cwd: mcpConfig.cwd } : {}),
-    })
-  } else {
-    const { StreamableHTTPClientTransport } = await import(
-      "@modelcontextprotocol/sdk/client/streamableHttp.js"
-    )
-    transport = new StreamableHTTPClientTransport(new URL(mcpConfig.url), {
-      requestInit: {
-        headers: mcpConfig.token ? { Authorization: `Bearer ${mcpConfig.token}` } : {},
-      },
-    })
+  mcpConnectPromise = (async () => {
+    const { Client } = await import("@modelcontextprotocol/sdk/client/index.js")
+    let transport: any
+
+    if (mcpConfig.kind === "local") {
+      const { StdioClientTransport } = await import(
+        "@modelcontextprotocol/sdk/client/stdio.js"
+      )
+      transport = new StdioClientTransport({
+        command: mcpConfig.command,
+        args: mcpConfig.args,
+        env: mcpConfig.env,
+        ...(mcpConfig.cwd ? { cwd: mcpConfig.cwd } : {}),
+      })
+    } else {
+      const { StreamableHTTPClientTransport } = await import(
+        "@modelcontextprotocol/sdk/client/streamableHttp.js"
+      )
+      transport = new StreamableHTTPClientTransport(new URL(mcpConfig.url), {
+        requestInit: {
+          headers: mcpConfig.token ? { Authorization: `Bearer ${mcpConfig.token}` } : {},
+        },
+      })
+    }
+
+    const client = new Client({ name: "opencode-conversation-memory", version: "1.0.0" })
+
+    transport.onclose = () => {
+      invalidateMcpClient(client, "transport closed")
+    }
+    transport.onerror = (error: Error) => {
+      invalidateMcpClient(client, error)
+    }
+
+    mcpClient = client
+
+    try {
+      await client.connect(transport)
+      return client
+    } catch (error) {
+      invalidateMcpClient(client, error)
+      try {
+        await client.close()
+      } catch {
+        // ignore cleanup failures after a failed connection
+      }
+      throw error
+    }
+  })()
+
+  try {
+    return await mcpConnectPromise
+  } finally {
+    mcpConnectPromise = null
   }
-
-  const client = new Client({ name: "opencode-conversation-memory", version: "1.0.0" })
-  await client.connect(transport)
-  mcpClient = client
-  return client
 }
-
-async function callSaveMessage(
-  mcpConfig: McpResolved,
-  args: Record<string, unknown>
-): Promise<string | undefined> {
-  const client = await getMcpClient(mcpConfig)
-  const result = await client.callTool({ name: "saveMessage", arguments: args })
-  const text = (result?.content ?? []).map((c: any) => c?.text ?? "").join("")
-  const match = text.match(/ID:\s*(\S+)/)
-  return match?.[1]
-}
-
 async function log(client: any, level: string, message: string, extra?: unknown): Promise<void> {
   try {
     await client.app.log({
