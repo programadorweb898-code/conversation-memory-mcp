@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
+import { createMcpClientManager } from "./mcp-client.js"
 
 const MCP_PREFIXES = ["conversation-memory-local_", "conversation-memory_"]
 
@@ -161,10 +162,7 @@ function extractText(parts: any[]): string {
     .trim()
 }
 
-let mcpClient: any = null
-
-async function getMcpClient(mcpConfig: McpResolved): Promise<any> {
-  if (mcpClient) return mcpClient
+const mcpClientManager = createMcpClientManager(async (mcpConfig: McpResolved) => {
   const { Client } = await import("@modelcontextprotocol/sdk/client/index.js")
   let transport: any
 
@@ -184,15 +182,17 @@ async function getMcpClient(mcpConfig: McpResolved): Promise<any> {
     )
     transport = new StreamableHTTPClientTransport(new URL(mcpConfig.url), {
       requestInit: {
-        headers: mcpConfig.token ? { Authorization: `Bearer ${mcpConfig.token}` } : {},
+        headers: mcpConfig.token ? { Authorization: "Bearer " + mcpConfig.token } : {},
       },
     })
   }
 
   const client = new Client({ name: "opencode-conversation-memory", version: "1.0.0" })
-  await client.connect(transport)
-  mcpClient = client
-  return client
+  return { client, transport }
+})
+
+async function getMcpClient(mcpConfig: McpResolved): Promise<any> {
+  return mcpClientManager.getClient(mcpConfig)
 }
 
 async function callSaveMessage(
