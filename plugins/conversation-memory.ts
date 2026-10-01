@@ -233,6 +233,17 @@ async function getMcpClient(mcpConfig: McpResolved): Promise<any> {
     mcpConnectPromise = null
   }
 }
+async function callSaveMessage(
+  mcpConfig: McpResolved,
+  args: Record<string, unknown>
+): Promise<string | undefined> {
+  const client = await getMcpClient(mcpConfig)
+  const result = await client.callTool({ name: "saveMessage", arguments: args })
+  const text = (result?.content ?? []).map((c: any) => c?.text ?? "").join("")
+  const match = text.match(/ID:\s*(\S+)/)
+  return match?.[1]
+}
+
 async function log(client: any, level: string, message: string, extra?: unknown): Promise<void> {
   try {
     await client.app.log({
