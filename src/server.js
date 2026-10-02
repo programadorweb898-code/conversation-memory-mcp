@@ -59,4 +59,10 @@ if (require.main === module) {
   process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
+// Un rechazo suelto no debe derribar el servidor: se registra y se sigue
+// atendiendo requests.
+process.on("unhandledRejection", (reason) => {
+  console.error("Promesa rechazada sin manejar:", reason);
+});
+
 module.exports = { app, startServer };

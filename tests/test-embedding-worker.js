@@ -195,4 +195,92 @@ describe("Embedding Worker", function () {
     expect(generateEmbeddings.called).to.equal(false);
     expect(embeddingQueue.getProcessingStatus()).to.equal(true);
   });
+
+  describe("mensaje borrado antes de ser procesado", () => {
+    it("termina sin lanzar y sin registrar fallo si el mensaje ya no existe", async () => {
+      const messageId = await insertMessage("Mensaje que se borra antes de embeberlo");
+
+      // La tarea queda en la cola en memoria, pero el mensaje desaparece de la
+      // base: saveEmbedding falla por FK y recordEmbeddingFailure fallaría igual
+      // al insertar en embedding_failures, que también tiene FK.
+      embeddingQueue.addTask({
+        messageId,
+        role: "user",
+        content: "Mensaje que se borra antes de embeberlo",
+      });
+      await db.runAsync(`DELETE FROM conversations WHERE id = $1`, [messageId]);
+
+      sinon.stub(embeddingService, "generateEmbeddings").resolves([JSON.stringify(fakeEmbedding(0.5))]);
+
+      await embeddingWorker.processNextEmbeddingTask();
+
+      const failure = await db.getAsync(
+        "SELECT attempts FROM embedding_failures WHERE message_id = $1",
+        [messageId]
+      );
+      expect(failure).to.equal(undefined);
+      expect(embeddingQueue.getProcessingStatus()).to.equal(false);
+    });
+
+    it("recordEmbeddingFailure no lanza cuando el mensaje no existe", async () => {
+      const missingId = uuidv4();
+
+      await embeddingWorker.recordEmbeddingFailure(missingId, new Error("fk violation"));
+    });
+  });
+
+  describe("startWorker", () => {
+    it("no genera unhandledRejection cuando processNextEmbeddingTask rechaza", async () => {
+      // El intervalo de startWorker captura la referencia local de
+      // processNextEmbeddingTask, así que no alcanza con stubear el export:
+      // hay que provocar el rechazo por sus dependencias reales.
+      const missingId = uuidv4();
+      embeddingQueue.addTask({
+        messageId: missingId,
+        role: "user",
+        content: "Mensaje borrado mientras esperaba en la cola",
+      });
+
+      sinon.stub(embeddingService, "generateEmbeddings").resolves([JSON.stringify(fakeEmbedding(0.5))]);
+      const fkError = new Error('insert or update on table "message_embeddings" violates foreign key constraint');
+      fkError.code = "23503";
+      sinon.stub(embeddingService, "saveEmbedding").rejects(fkError);
+
+      const unhandled = [];
+      const onUnhandled = (reason) => unhandled.push(reason);
+      process.on("unhandledRejection", onUnhandled);
+
+      // Se captura el callback que registró startWorker en lugar de usar
+      // timers: el intervalo es de 5s y el test necesita esperar a que el
+      // trabajo termine de verdad, no a que arrancó.
+      let tick;
+      const setIntervalStub = sinon.stub(global, "setInterval").callsFake((fn) => {
+        tick = fn;
+        return { unref() {} };
+      });
+
+      try {
+        embeddingWorker.startWorker();
+        tick();
+
+        // El 23503 hace que recordEmbeddingFailure intente insertar en una
+        // tabla con la misma FK, así que el worker termina rechazando. Hay que
+        // esperar a que eso ocurra para poder observar si quedó sin manejar.
+        const deadline = Date.now() + 15000;
+        while (embeddingQueue.getProcessingStatus() && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        expect(embeddingQueue.getProcessingStatus()).to.equal(false);
+
+        // Los rechazos sin handler se reportan en los próximos ciclos del loop.
+        await new Promise((resolve) => setImmediate(resolve));
+        await new Promise((resolve) => setImmediate(resolve));
+      } finally {
+        setIntervalStub.restore();
+        process.off("unhandledRejection", onUnhandled);
+      }
+
+      expect(unhandled).to.deep.equal([]);
+    });
+  });
 });

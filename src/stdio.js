@@ -46,6 +46,12 @@ async function startStdioServer() {
 process.on("SIGINT", () => stopWorker());
 process.on("SIGTERM", () => stopWorker());
 
+// Un rechazo suelto no debe derribar el servidor: se registra en stderr, que es
+// el único stream permitido para esto, y se sigue sirviendo.
+process.on("unhandledRejection", (reason) => {
+  console.error("Promesa rechazada sin manejar:", reason);
+});
+
 if (require.main === module) {
   startStdioServer().catch((error) => {
     console.error("Failed to start MCP over stdio:", error);
