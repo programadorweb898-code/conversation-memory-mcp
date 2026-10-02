@@ -202,6 +202,44 @@ describe('Server HTTP layer', () => {
     const response = await request(app).get('/health');
     expect(response.status).to.equal(200);
   });
+
+  it('should report store metrics on /health without leaking project or owner names', async () => {
+    const { app } = require('../src/server');
+    const response = await request(app).get('/health');
+
+    expect(response.status).to.equal(200);
+    expect(response.body.status).to.equal('ok');
+    expect(response.body.messages).to.have.property('total');
+    expect(response.body.messages).to.have.property('coveragePct');
+    expect(response.body.sessions).to.have.property('withoutSummary');
+    expect(response.body).to.have.property('embeddingQueueSize');
+
+    const serialized = JSON.stringify(response.body);
+    expect(serialized).to.not.match(/local-user|test-owner|"project"/);
+  });
+
+  it('should not count messages too short to embed as pending work on /health', async () => {
+    const { getHealth } = require('../src/services/healthCheck');
+    const { db } = require('../src/database');
+    const { v4: uuidv4 } = require('uuid');
+
+    const sessionId = `health-skipped-${uuidv4()}`;
+    const id = uuidv4();
+    await db.runAsync(
+      `INSERT INTO conversations (id, session_id, project, role, content)
+       VALUES ($1, $2, 'health-test', 'user', 'ok')`,
+      [id, sessionId]
+    );
+
+    try {
+      const health = await getHealth();
+      expect(health.messages.pending).to.equal(0);
+      expect(health.messages.skipped).to.be.at.least(1);
+      expect(health.messages.total).to.be.at.least(1);
+    } finally {
+      await db.runAsync('DELETE FROM conversations WHERE id = $1', [id]);
+    }
+  });
 });
 
 describe('errorHandler', () => {

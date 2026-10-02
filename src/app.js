@@ -1,6 +1,7 @@
 const express = require("express");
 const { applyMiddleware } = require("./middleware");
 const { setupMcpRoutes } = require("./routes");
+const { getHealth } = require("./services/healthCheck");
 const errorHandler = require("./errorHandler");
 const { createMcpServer } = require("./createMcpServer");
 
@@ -15,9 +16,15 @@ app.set("trust proxy", 1);
 // Middleware para parsear JSON
 app.use(express.json());
 
-// Endpoint de health check
-app.get("/health", (req, res) => {
-  res.status(200).send("OK");
+// Endpoint de health check. Es público (ver requireBearerToken), por lo que
+// devuelve solo agregados: nunca nombres de proyecto ni de owner.
+app.get("/health", async (req, res) => {
+  try {
+    res.status(200).json(await getHealth());
+  } catch (error) {
+    console.error("Health check failed:", error.message);
+    res.status(200).json({ status: "degraded", database: "unreachable" });
+  }
 });
 
 // Create servers for the modern HTTP transport and the legacy SSE transport.

@@ -2,6 +2,7 @@
 
 const embeddingQueue = require("./embeddingQueue");
 const embeddingService = require("./embeddingService");
+const { prepareForEmbedding, MIN_EMBEDDING_CHARS } = require("./embeddingService");
 const { db } = require("../database");
 
 const workerIntervalMs = 5000; // Poll the database/queue every 5 seconds
@@ -71,19 +72,22 @@ async function processNextEmbeddingTask() {
         LEFT JOIN embedding_failures ef ON ef.message_id = c.id
         WHERE me.message_id IS NULL
           AND COALESCE(ef.attempts, 0) < $1
+          AND length(btrim(c.content)) >= $3
         ORDER BY c.id
         LIMIT $2
-      `, [maxEmbeddingAttempts, batchSize - batchTasks.length]);
+      `, [maxEmbeddingAttempts, batchSize - batchTasks.length, MIN_EMBEDDING_CHARS]);
 
       if (pendingMessages.length === 0) {
         break;
       }
 
-      batchTasks.push(...pendingMessages.map((row) => ({
-        messageId: row.message_id,
-        content: row.content,
-        role: row.role,
-      })));
+      batchTasks.push(...pendingMessages
+        .map((row) => ({
+          messageId: row.message_id,
+          content: prepareForEmbedding(row.content),
+          role: row.role,
+        }))
+        .filter((task) => task.content !== null));
       break;
     }
 

@@ -21,6 +21,17 @@ function resolveEnvPlaceholders(sql) {
   return sql.replaceAll("${MCP_DEFAULT_OWNER}", defaultOwner);
 }
 
+// Schema donde se aplican las migraciones. Mismo criterio que src/database.js.
+// El `SET` se hace al adquirir la conexión, no en el evento "connect": pg-pool
+// no espera al handler del evento y el `SET` competiría con el `BEGIN`.
+function getSearchPath() {
+  const searchPath = process.env.PG_SEARCH_PATH;
+  if (searchPath && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(searchPath)) {
+    throw new Error(`PG_SEARCH_PATH inválido: "${searchPath}"`);
+  }
+  return searchPath;
+}
+
 function getPool() {
   if (!process.env.DATABASE_URL) {
     throw new Error("DATABASE_URL environment variable is required.");
@@ -53,6 +64,7 @@ async function runMigrations({ logger = console } = {}) {
 
   try {
     pool = getPool();
+    const searchPath = getSearchPath();
 
     try {
       client = await pool.connect();
@@ -63,6 +75,10 @@ async function runMigrations({ logger = console } = {}) {
       );
       logger.error(error);
       throw error;
+    }
+
+    if (searchPath) {
+      await client.query(`SET search_path TO ${searchPath}, public`);
     }
 
     await client.query("BEGIN");

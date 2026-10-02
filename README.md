@@ -285,6 +285,30 @@ npm run check
 npm run migrate
 ```
 
+### Scripts de `scripts/`
+
+El campo `files` de `package.json` publica solo tres: `migrate.js`,
+`create-api-key.js` e `install-plugin.js`. Son los que hacen falta para
+instalar el MCP. El resto queda en el repo y **no viaja en el paquete**.
+
+**No ejecutar (LEGACY).** `migrate_sequence.js`, `migrate_to_pgvector.js` y
+`migrate_project_backfill.js` son migraciones de una sola vez, aplicadas sobre
+una base que ya tenía conversaciones. Cada una arregla algo que una base
+nueva no tiene: `sequence_id` porque ordenar por `timestamp` no distingue dos
+turnos del mismo milisegundo; `vector(384)` porque los embeddings se guardaban
+como texto y sin eso no hay búsqueda semántica; y el backfill de `project`
+porque la columna nació después que las filas que ya existían.
+
+Una instalación nueva no los necesita: `migrations/001_initial_schema.sql` ya
+incluye `CREATE EXTENSION vector`, `ADD COLUMN IF NOT EXISTS project`,
+`sequence_id`, la secuencia y el índice HNSW, todo con `IF NOT EXISTS` e
+idempotente. Para una base ya migrada, volver a correrlos no aporta nada.
+Quedan como registro histórico de cómo esa base pasó de un estado a otro.
+
+**Mantenimiento opcional.** `finalize_sessions.js` recorre los proyectos y
+finaliza sesiones viejas invocando al LLM. No pide confirmación y no filtra
+por antigüedad: usalo solo si querés cerrar todo, y sobre una copia primero.
+
 El proyecto utiliza:
 
 - Node.js

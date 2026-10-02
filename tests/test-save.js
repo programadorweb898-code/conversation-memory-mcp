@@ -185,6 +185,55 @@ describe('saveMessage', () => {
     expect(queueStub.callCount).to.equal(count);
   });
 
+  it('should reject a project that is a path or the filesystem root', async () => {
+    for (const invalidProject of ['/', '.', '..', 'C:\\repo\\api']) {
+      const sessionId = uuidv4();
+      testSessionIds.push(sessionId);
+
+      let error;
+      try {
+        await saveMessage({ sessionId, project: invalidProject, role: 'user', content: 'Contenido válido' });
+      } catch (e) {
+        error = e;
+      }
+
+      expect(error, `project ${invalidProject} debería rechazarse`).to.exist;
+      expect(error.code).to.equal('INVALID_PROJECT');
+    }
+
+    expect(queueStub.called).to.be.false;
+  });
+
+  it('should persist the message but skip the embedding for trivial content', async () => {
+    const sessionId = uuidv4();
+    testSessionIds.push(sessionId);
+
+    const result = await saveMessage({ sessionId, project: 'noise-project', role: 'user', content: 'ok' });
+
+    expect(result.success).to.be.true;
+    expect(result.messageId).to.exist;
+    expect(queueStub.called, 'un turno trivial no aporta recall: no debe embeeberse').to.be.false;
+
+    const stored = await db.getAsync(`SELECT content FROM conversations WHERE session_id = $1`, [sessionId]);
+    expect(stored.content).to.equal('ok');
+  });
+
+  it('should truncate the embedded text without truncating the stored message', async () => {
+    const sessionId = uuidv4();
+    testSessionIds.push(sessionId);
+
+    const longContent = 'a'.repeat(5000);
+    await saveMessage({ sessionId, project: 'long-project', role: 'assistant', content: longContent });
+
+    expect(queueStub.calledOnce).to.be.true;
+    const queued = queueStub.firstCall.args[0];
+    expect(queued.content).to.have.lengthOf.below(5000);
+    expect(queued.content).to.have.lengthOf(2000);
+
+    const stored = await db.getAsync(`SELECT content FROM conversations WHERE session_id = $1`, [sessionId]);
+    expect(stored.content).to.equal(longContent);
+  });
+
   it('should resolve true even if embedding generation fails, but message is saved', async () => {
     const sessionId = uuidv4();
     testSessionIds.push(sessionId);

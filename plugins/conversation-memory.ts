@@ -23,8 +23,19 @@ function baseName(path: string): string {
   return parts[parts.length - 1] ?? path
 }
 
+// Un proyecto se aisla por nombre. Si el worktree termina en separador (o es la
+// raíz), baseName devuelve "" o "/" y todos los repositorios terminarían bajo
+// la misma clave, mezclando memoria de proyectos distintos. Preferimos no
+// guardar antes que guardar bajo una clave que después no se puede recuperar.
+const INVALID_PROJECT = /[\\/]|^[.]{1,2}$/
+
 function resolveProjectName(raw: string): string {
-  return PROJECT_ALIASES[raw] ?? raw.toLowerCase()
+  const name = PROJECT_ALIASES[raw] ?? raw.trim().toLowerCase()
+  if (!name || INVALID_PROJECT.test(name)) {
+    console.error(`[conversation-memory] nombre de proyecto inválido: ${JSON.stringify(raw)}`)
+    return ""
+  }
+  return name
 }
 
 function stripJsoncComments(src: string): string {
@@ -82,6 +93,51 @@ function resolveEnvTemplate(value: string): string {
   return value.replace(/\{env:([A-Z0-9_]+)\}/g, (_m, name: string) => process.env[name] ?? "")
 }
 
+function mcpServerMaps(cfg: any): any[] {
+  const mcp = cfg?.mcp
+  if (!mcp || typeof mcp !== "object") return []
+  const maps = [mcp]
+  if (mcp.servers && typeof mcp.servers === "object") maps.push(mcp.servers)
+  return maps
+}
+
+function resolveLocalServer(entry: any): McpLocalConfig | null {
+  if (!entry || typeof entry !== "object" || entry.enabled === false) return null
+  if (entry.command === undefined || entry.command === null) return null
+  const commandArr = Array.isArray(entry.command)
+    ? entry.command
+    : [entry.command, ...(Array.isArray(entry.args) ? entry.args : [])]
+  if (typeof commandArr[0] !== "string" || commandArr[0].trim() === "") return null
+  const env: Record<string, string> = {}
+  for (const [key, raw] of Object.entries(entry.environment ?? {})) {
+    const resolved = resolveEnvTemplate(String(raw))
+    if (resolved) env[key] = resolved
+  }
+  return {
+    kind: "local",
+    command: commandArr[0],
+    args: commandArr.slice(1),
+    env,
+    ...(entry.cwd ? { cwd: entry.cwd } : {}),
+  }
+}
+
+function resolveRemoteServer(entry: any): McpRemoteConfig | null {
+  if (!entry || typeof entry !== "object" || entry.enabled === false) return null
+  if (typeof entry.url !== "string" || entry.url.trim() === "") return null
+  const auth = entry.headers?.Authorization ?? entry.headers?.authorization
+  const token = typeof auth === "string" && auth.startsWith("Bearer ") ? auth.slice(7) : ""
+  return { kind: "remote", url: entry.url, token }
+}
+
+function resolveFromServers(servers: any): McpResolved | null {
+  return (
+    resolveLocalServer(servers["conversation-memory-local"]) ??
+    resolveLocalServer(servers["conversation-memory"]) ??
+    resolveRemoteServer(servers["conversation-memory"])
+  )
+}
+
 function findMcpConfig(directory: string): McpResolved | null {
   const envUrl = process.env.CONVERSATION_MEMORY_URL
   const envToken = process.env.CONVERSATION_MEMORY_TOKEN
@@ -95,35 +151,10 @@ function findMcpConfig(directory: string): McpResolved | null {
     join(directory, ".opencode", "opencode.json"),
   ]
   for (const file of candidates) {
-    const cfg = readJsonc(file)
-    const mcp = cfg?.mcp
-    if (!mcp) continue
-
-    const local = mcp["conversation-memory-local"]
-    if (local?.command) {
-      const commandArr = Array.isArray(local.command)
-        ? local.command
-        : [local.command, ...(local.args ?? [])]
-      if (commandArr.length === 0) continue
-      const env: Record<string, string> = {}
-      for (const [key, raw] of Object.entries(local.environment ?? {})) {
-        const resolved = resolveEnvTemplate(String(raw))
-        if (resolved) env[key] = resolved
-      }
-      return {
-        kind: "local",
-        command: commandArr[0],
-        args: commandArr.slice(1),
-        env,
-        ...(local.cwd ? { cwd: local.cwd } : {}),
-      }
+    for (const servers of mcpServerMaps(readJsonc(file))) {
+      const resolved = resolveFromServers(servers)
+      if (resolved) return resolved
     }
-
-    const remote = mcp["conversation-memory"]
-    if (!remote?.url) continue
-    const auth = remote.headers?.Authorization ?? remote.headers?.authorization
-    const token = typeof auth === "string" && auth.startsWith("Bearer ") ? auth.slice(7) : ""
-    return { kind: "remote", url: remote.url, token }
   }
   return null
 }
@@ -217,18 +248,18 @@ async function log(client: any, level: string, message: string, extra?: unknown)
 }
 
 export const ConversationMemory: Plugin = async ({ client, project, directory }) => {
-  const projectName = resolveProjectName(
+  const fallbackProjectName = resolveProjectName(
     baseName(project?.worktree || directory || project?.id || "")
   )
   const mcpConfig = findMcpConfig(directory || "")
 
-  if (!projectName || !mcpConfig) {
+  if (!fallbackProjectName || !mcpConfig) {
     console.error(
-      `[conversation-memory] plugin desactivado: project=${projectName ?? "desconocido"}, config=${mcpConfig ? "ok" : "no encontrada"}`
+      `[conversation-memory] plugin desactivado: project=${fallbackProjectName ?? "desconocido"}, config=${mcpConfig ? "ok" : "no encontrada"}`
     )
   } else {
     log(client, "info", "Plugin conversation-memory activado", {
-      project: projectName,
+      project: fallbackProjectName,
       endpoint:
         mcpConfig.kind === "local"
           ? mcpConfig.command + " " + mcpConfig.args.join(" ")
@@ -236,8 +267,37 @@ export const ConversationMemory: Plugin = async ({ client, project, directory })
     })
   }
 
+  // El proyecto se resuelve POR SESIÓN, no una sola vez al arrancar. El plugin se
+  // instancia una vez por worktree, pero opencode puede tener sesiones de
+  // directorios distintos bajo el mismo proceso (worktree "global"), y guardar
+  // esas sesiones con el nombre del worktree del arranque las mezclaba bajo una
+  // clave ajena. La sesión manda: su `directory` es el directorio donde se
+  // trabajó. Si no se puede resolver, no se guarda.
+  async function resolveProjectForSession(sessionID: string): Promise<string> {
+    try {
+      const res: any = await client.session.get({ path: { id: sessionID } })
+      const sessionDirectory = res?.data?.directory
+      const resolved = resolveProjectName(baseName(sessionDirectory || ""))
+      if (resolved) return resolved
+      if (sessionDirectory) {
+        console.error(
+          `[conversation-memory] directorio de sesión inválido como proyecto: ${JSON.stringify(sessionDirectory)}`
+        )
+      }
+    } catch (error) {
+      console.error(
+        `[conversation-memory] no se pudo resolver el proyecto de ${sessionID}:`,
+        error instanceof Error ? error.message : String(error)
+      )
+    }
+    return fallbackProjectName
+  }
+
   async function savePending(sessionID: string): Promise<void> {
-    if (!projectName || !mcpConfig) return
+    if (!fallbackProjectName || !mcpConfig) return
+
+    const projectName = await resolveProjectForSession(sessionID)
+    if (!projectName) return
 
     try {
       const res: any = await client.session.messages({ path: { id: sessionID } })
@@ -281,7 +341,10 @@ export const ConversationMemory: Plugin = async ({ client, project, directory })
             project: projectName,
             role: "assistant",
             content: text,
-            agentId: currentAgent,
+            // Cada mensaje assistant trae su propio agent: usar el del mensaje
+            // user anterior como proxy dejaba atribuir al agente equivocado
+            // cuando un turno cambiaba de agente (build -> plan, subagentes).
+            agentId: info.agent || currentAgent,
             ...(related ? { relatedMessageId: related } : {}),
           })
           markSaved(sessionID, info.id)
@@ -315,11 +378,11 @@ export const ConversationMemory: Plugin = async ({ client, project, directory })
       }
     },
     "tool.execute.before": async (input, output) => {
-      if (!projectName) return
+      if (!fallbackProjectName) return
       if (!MCP_PREFIXES.some((prefix) => input.tool.startsWith(prefix))) return
       const args = output.args ?? {}
       if (!args.project) {
-        args.project = projectName
+        args.project = fallbackProjectName
         output.args = args
       }
     },

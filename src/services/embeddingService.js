@@ -9,6 +9,26 @@ let extractor = null;
 let initializationPromise = null;
 let transformersModulePromise = null;
 
+// El modelo trunca en silencio a 512 tokens (~2000 caracteres): indexar el
+// contenido completo de un mensaje largo produce un embedding que solo
+// representa su inicio. Recortamos de forma explícita para que el vector sea
+// interpretable y para no gastar cómputo de más.
+const MIN_EMBEDDING_CHARS = Number(process.env.MIN_EMBEDDING_CHARS || 10);
+const MAX_EMBEDDING_CHARS = Number(process.env.MAX_EMBEDDING_CHARS || 2000);
+
+/**
+ * Decide si un mensaje vale la pena ser indexado y devuelve el texto a
+ * embeber. Los turnos triviales ("ok", "dale", "sí") no aportan nada al
+ * Recall y solo cargan el índice y compiten en el reranking.
+ * @param {string} content
+ * @returns {string|null} Texto a embeber, o null si no corresponde indexar.
+ */
+function prepareForEmbedding(content) {
+  const text = typeof content === "string" ? content.trim() : "";
+  if (text.length < MIN_EMBEDDING_CHARS) return null;
+  return text.slice(0, MAX_EMBEDDING_CHARS);
+}
+
 async function loadTransformers() {
   if (!transformersModulePromise) {
     transformersModulePromise = import("@huggingface/transformers");
@@ -110,4 +130,7 @@ module.exports = {
   generateEmbeddings,
   saveEmbedding,
   getEmbedding,
+  prepareForEmbedding,
+  MIN_EMBEDDING_CHARS,
+  MAX_EMBEDDING_CHARS,
 };

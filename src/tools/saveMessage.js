@@ -1,7 +1,8 @@
-const { db, withAdvisoryLock } = require("../database");
+const { withAdvisoryLock } = require("../database");
 const { randomUUID } = require("crypto");
 const { z } = require("zod");
 const embeddingQueue = require("../services/embeddingQueue");
+const { prepareForEmbedding } = require("../services/embeddingService");
 const { resolveWriteOwner } = require("../context");
 
 const SaveMessageSchema = z.object({
@@ -13,6 +14,12 @@ const SaveMessageSchema = z.object({
   relatedMessageId: z.string().optional().nullable(),
   owner: z.string().optional(),
 });
+
+// Un project inválido (raíz, ruta, Current-Directory) rompe el aislamiento por
+// proyecto: mezcla datos de repositorios distintos bajo una misma clave. Es
+// mejor rechazar el turno que guardar bajo una clave que después no se puede
+// recuperar con fiabilidad.
+const INVALID_PROJECT = /[\\/]|^[.]{1,2}$/;
 
 function isMcpProtocolNoise(content) {
   if (!content || typeof content !== "string") return false;
@@ -43,6 +50,14 @@ async function saveMessage(params) {
   if (isMcpProtocolNoise(content)) {
     console.log(`Skipping MCP protocol message: ${content}`);
     return { success: true, messageId: null };
+  }
+
+  if (INVALID_PROJECT.test(project)) {
+    const error = new Error(
+      `El parámetro 'project' es inválido ("${project}"). Debe ser el nombre del repositorio, no una ruta ni un valor vacío.`
+    );
+    error.code = "INVALID_PROJECT";
+    throw error;
   }
 
   const messageId = randomUUID();
@@ -92,8 +107,11 @@ async function saveMessage(params) {
     );
   });
 
-  embeddingQueue.addTask({ messageId, content, role });
-  console.log(`Embedding task for message ${messageId} queued.`);
+  const embeddable = prepareForEmbedding(content);
+  if (embeddable) {
+    embeddingQueue.addTask({ messageId, content: embeddable, role });
+    console.log(`Embedding task for message ${messageId} queued.`);
+  }
 
   return { success: true, messageId };
 }

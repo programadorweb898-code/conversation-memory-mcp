@@ -25,15 +25,25 @@ describe("Embedding Worker", function () {
     while (!embeddingQueue.isEmpty()) {
       embeddingQueue.getNextTask();
     }
-    const pending = await db.allAsync(
-      `SELECT c.id FROM conversations c
-       LEFT JOIN message_embeddings me ON me.message_id = c.id
-       WHERE me.message_id IS NULL`
+    // Un solo DELETE por tabla en vez de dos por mensaje: con las suites que
+    // corren antes dejando mensajes pendientes (los triviales ya no se
+    // embeben por diseño), el bucle fila por fila empujaba el hook más allá de
+    // los 30s contra Neon. `embedding_failures` va primero porque su FK a
+    // conversations no tiene ON DELETE CASCADE.
+    await db.runAsync(
+      `DELETE FROM embedding_failures WHERE message_id IN (
+         SELECT c.id FROM conversations c
+         LEFT JOIN message_embeddings me ON me.message_id = c.id
+         WHERE me.message_id IS NULL
+       )`
     );
-    for (const { id } of pending) {
-      await db.runAsync("DELETE FROM embedding_failures WHERE message_id = $1", [id]);
-      await db.runAsync("DELETE FROM conversations WHERE id = $1", [id]);
-    }
+    await db.runAsync(
+      `DELETE FROM conversations WHERE id IN (
+         SELECT c.id FROM conversations c
+         LEFT JOIN message_embeddings me ON me.message_id = c.id
+         WHERE me.message_id IS NULL
+       )`
+    );
     sinon.restore();
   });
 

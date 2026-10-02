@@ -36,6 +36,15 @@ function isEmpty() {
 }
 
 /**
+ * Number of tasks waiting in memory. Only diagnostic: tasks are not durable,
+ * so this is a hint of pending work, not a backlog guarantee.
+ * @returns {number}
+ */
+function size() {
+  return embeddingQueue.length;
+}
+
+/**
  * Sets the processing flag to prevent multiple workers.
  * @param {boolean} status
  */
@@ -56,6 +65,7 @@ module.exports = {
   addTask,
   getNextTask,
   isEmpty,
+  size,
   setProcessingStatus,
   getProcessingStatus,
 };
