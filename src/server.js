@@ -1,5 +1,4 @@
 const { startWorker, stopWorker } = require("./services/embeddingWorker");
-const { startSessionMonitor, stopSessionMonitor } = require("./services/sessionManager");
 const app = require("./app");
 const dotenv = require("dotenv");
 dotenv.config();
@@ -32,19 +31,12 @@ async function startServer() {
     } else {
       console.log("Embedding worker disabled. Set ENABLE_EMBEDDING_WORKER=true to enable it.");
     }
-
-    if (process.env.ENABLE_SESSION_MONITOR === "true") {
-      console.time("Starting session monitor");
-      startSessionMonitor();
-      console.timeEnd("Starting session monitor");
-    }
   });
 }
 
 function shutdown(signal) {
   console.log(`${signal} received. Shutting down gracefully...`);
   stopWorker();
-  stopSessionMonitor();
 
   if (!httpServer) {
     process.exit(0);
