@@ -144,7 +144,7 @@ async function resolveAgent(agent, { input = process.stdin, output = process.std
   if (agent) {
     try {
       return { agent: normalizeAgent(agent), manual: false };
-    } catch (error) {
+    } catch {
       return {
         agent: await promptForAgent({
           reason: `Agente no soportado: ${agent}.`,
