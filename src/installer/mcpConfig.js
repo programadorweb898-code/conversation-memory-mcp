@@ -12,6 +12,7 @@ const AGENTS = {
   claude: { policy: "CLAUDE.md", config: "claude", supportsGlobal: true },
   copilot: { policy: ".github/copilot-instructions.md", config: "vscode" },
   "vscode-copilot": { policy: ".github/copilot-instructions.md", config: "vscode" },
+  "github-copilot": { policy: ".github/copilot-instructions.md", config: "github-copilot", supportsGlobal: true },
   cursor: { policy: "AGENTS.md", config: "cursor", supportsGlobal: true },
   kimi: { policy: "AGENTS.md", config: "kimi" },
   "kimi-code": { policy: "AGENTS.md", config: "kimi" },
@@ -164,6 +165,36 @@ function installCursor(cwd, scope, homeDir = homedir()) {
   };
 }
 
+function installGitHubCopilot(scope, homeDir = homedir(), commandRunner = execFileSync) {
+  const normalizedScope = normalizeScope(scope);
+
+  if (normalizedScope === "project") {
+    return {
+      ...installStandardMcpJson(process.cwd(), join(process.cwd(), ".mcp.json")),
+      scope: normalizedScope,
+    };
+  }
+
+  const file = join(homeDir, ".copilot", "mcp-config.json");
+  const executable = process.platform === "win32" ? "copilot.cmd" : "copilot";
+
+  commandRunner(
+    executable,
+    ["mcp", "add", SERVER_NAME, "--", "npx", "-y", "conversation-memory-mcp"],
+    {
+      stdio: "ignore",
+      windowsHide: true,
+    },
+  );
+
+  return {
+    changed: true,
+    file,
+    supported: true,
+    scope: normalizedScope,
+  };
+}
+
 function installOpenClaw(scope, homeDir = homedir(), commandRunner = execFileSync) {
   const normalizedScope = normalizeScope(scope);
   if (normalizedScope !== "global") {
@@ -237,6 +268,14 @@ function installMcpConfig({ cwd = process.cwd(), agent, scope, homeDir = homedir
       return installStandardMcpJson(projectRoot, join(projectRoot, ".kiro", "settings", "mcp.json"));
     case "vscode":
       return installVsCode(projectRoot);
+    case "github-copilot":
+      if (normalizedScope === "project") {
+        return {
+          ...installStandardMcpJson(projectRoot, join(projectRoot, ".mcp.json")),
+          scope: normalizedScope,
+        };
+      }
+      return installGitHubCopilot(normalizedScope, homeDir, commandRunner);
     case "gemini":
       return installGemini(projectRoot, normalizedScope, homeDir);
     case "openclaw":
