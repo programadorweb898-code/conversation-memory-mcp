@@ -52,7 +52,7 @@ describe("cli", () => {
     });
 
     assert.equal(agent, "opencode");
-    assert.match(streams.getOutput(), /Opción inválida\. Elegí un número del 1 al 17 o escribí el nombre del agente\. Intentos restantes: 2\./);
+    assert.match(streams.getOutput(), /Opción inválida\. Elegí un número del 1 al 18 o escribí el nombre del agente\. Intentos restantes: 2\./);
     assert.match(streams.getOutput(), /Intentos restantes: 1\./);
   });
 
@@ -112,7 +112,7 @@ describe("cli", () => {
       assert.equal(result.agent, "copilot");
       assert.equal(result.manual, true);
       assert.match(streams.getOutput(), /No pude detectar automáticamente qué agente utilizás\./);
-      assert.match(streams.getOutput(), /4\. GitHub Copilot/);
+      assert.match(streams.getOutput(), /4\. GitHub Copilot \(VS Code\)/);
     } finally {
       process.cwd = originalCwd;
     }
@@ -142,6 +142,7 @@ describe("cli", () => {
       "codex",
       "claude",
       "copilot",
+      "github-copilot",
       "cursor",
       "kimi",
       "gemini-cli",
@@ -162,6 +163,15 @@ describe("cli", () => {
     assert.deepEqual(parseArgs(["node", "cli.js", "install", "--agent", "hermes"]), {
       command: "install",
       agent: "hermes",
+      scope: undefined,
+    });
+  });
+
+
+  it("accepts GitHub Copilot CLI as a supported agent", () => {
+    assert.deepEqual(parseArgs(["node", "cli.js", "install", "--agent", "github-copilot"]), {
+      command: "install",
+      agent: "github-copilot",
       scope: undefined,
     });
   });
