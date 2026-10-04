@@ -9,20 +9,21 @@ const AGENT_CHOICES = [
   ["1", "opencode", "OpenCode"],
   ["2", "codex", "Codex"],
   ["3", "claude", "Claude Code"],
-  ["4", "copilot", "GitHub Copilot"],
-  ["5", "cursor", "Cursor"],
-  ["6", "kimi", "Kimi Code"],
-  ["7", "gemini-cli", "Gemini CLI"],
-  ["8", "qwen-code", "Qwen Code"],
-  ["9", "kilocode", "Kilo Code"],
-  ["10", "kiro-ide", "Kiro IDE"],
-  ["11", "windsurf", "Windsurf"],
-  ["12", "antigravity", "Antigravity"],
-  ["13", "openclaw", "OpenClaw"],
-  ["14", "trae", "Trae"],
-  ["15", "pi", "Pi"],
-  ["16", "hermes", "Hermes"],
-  ["17", "generic", "Otro / configuración manual"],
+  ["4", "copilot", "GitHub Copilot (VS Code)"],
+  ["5", "github-copilot", "GitHub Copilot CLI"],
+  ["6", "cursor", "Cursor"],
+  ["7", "kimi", "Kimi Code"],
+  ["8", "gemini-cli", "Gemini CLI"],
+  ["9", "qwen-code", "Qwen Code"],
+  ["10", "kilocode", "Kilo Code"],
+  ["11", "kiro-ide", "Kiro IDE"],
+  ["12", "windsurf", "Windsurf"],
+  ["13", "antigravity", "Antigravity"],
+  ["14", "openclaw", "OpenClaw"],
+  ["15", "trae", "Trae"],
+  ["16", "pi", "Pi"],
+  ["17", "hermes", "Hermes"],
+  ["18", "generic", "Otro / configuración manual"],
 ];
 
 const MAX_AGENT_ATTEMPTS = 3;
@@ -200,7 +201,7 @@ async function main() {
 
     const effectiveScope = resolveScope(resolved.agent, parsed.scope);
 
-    if (parsed.scope === "global" && !["claude", "cursor", "gemini-cli", "openclaw", "hermes"].includes(resolved.agent)) {
+    if (parsed.scope === "global" && !["claude", "cursor", "gemini-cli", "github-copilot", "openclaw", "hermes"].includes(resolved.agent)) {
       throw new Error("El scope global no está implementado para este agente.");
     }
 
