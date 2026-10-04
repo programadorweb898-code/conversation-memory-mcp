@@ -39,7 +39,7 @@ function printHelp() {
     "",
     "Scopes disponibles:",
     "  project  Configuración dentro del proyecto (predeterminado)",
-    "  global   Configuración global del agente (actualmente Gemini CLI)",
+    "  global   Configuración global del agente (Gemini CLI y OpenClaw)",
     "",
     "Si DATABASE_URL no existe, el instalador ofrece:",
     "  1. usar una conexión PostgreSQL existente",
@@ -196,8 +196,8 @@ async function main() {
   if (parsed.command === "install") {
     const resolved = await resolveAgent(parsed.agent);
 
-    if (parsed.scope === "global" && resolved.agent !== "gemini-cli") {
-      throw new Error("El scope global todavía está implementado solo para Gemini CLI.");
+    if (parsed.scope === "global" && !["gemini-cli", "openclaw"].includes(resolved.agent)) {
+      throw new Error("El scope global todavía está implementado solo para Gemini CLI y OpenClaw.");
     }
 
     printSuccess(`Agente seleccionado: ${resolved.agent}${resolved.manual ? " (seleccionado manualmente)" : " (detectado automáticamente)"}`);
