@@ -17,11 +17,11 @@ const AGENTS = {
   kimi: { policy: "AGENTS.md", config: "kimi" },
   "kimi-code": { policy: "AGENTS.md", config: "kimi" },
   "gemini-cli": { policy: "GEMINI.md", config: "gemini", supportsGlobal: true },
-  "qwen-code": { policy: "AGENTS.md", config: null },
+  "qwen-code": { policy: "AGENTS.md", config: "qwen", supportsGlobal: true },
   kilocode: { policy: "AGENTS.md", config: "opencode" },
   "kiro-ide": { policy: "AGENTS.md", config: "kiro" },
-  windsurf: { policy: "AGENTS.md", config: null },
-  antigravity: { policy: "GEMINI.md", config: null },
+  windsurf: { policy: "AGENTS.md", config: "windsurf", globalOnly: true },
+  antigravity: { policy: "GEMINI.md", config: "antigravity", supportsGlobal: true },
   openclaw: { policy: "AGENTS.md", config: "openclaw", globalOnly: true },
   trae: { policy: "AGENTS.md", config: null },
   pi: { policy: "AGENTS.md", config: null },
@@ -165,6 +165,53 @@ function installCursor(cwd, scope, homeDir = homedir()) {
   };
 }
 
+function installQwen(cwd, scope, homeDir = homedir()) {
+  const normalizedScope = normalizeScope(scope);
+  const file = normalizedScope === "global"
+    ? join(homeDir, ".qwen", "settings.json")
+    : join(cwd, ".qwen", "settings.json");
+
+  return {
+    ...mergeJsonServer(file, "mcpServers", {
+      command: "npx",
+      args: ["-y", "conversation-memory-mcp"],
+    }),
+    scope: normalizedScope,
+  };
+}
+
+function installWindsurf(scope, homeDir = homedir()) {
+  const normalizedScope = normalizeScope(scope);
+  if (normalizedScope !== "global") {
+    throw new Error("Windsurf administra sus servidores MCP en una configuración global; use --scope global.");
+  }
+
+  const file = join(homeDir, ".codeium", "windsurf", "mcp_config.json");
+
+  return {
+    ...mergeJsonServer(file, "mcpServers", {
+      command: "npx",
+      args: ["-y", "conversation-memory-mcp"],
+    }),
+    scope: normalizedScope,
+  };
+}
+
+function installAntigravity(cwd, scope, homeDir = homedir()) {
+  const normalizedScope = normalizeScope(scope);
+  const file = normalizedScope === "global"
+    ? join(homeDir, ".gemini", "config", "mcp_config.json")
+    : join(cwd, ".agents", "mcp_config.json");
+
+  return {
+    ...mergeJsonServer(file, "mcpServers", {
+      command: "npx",
+      args: ["-y", "conversation-memory-mcp"],
+    }),
+    scope: normalizedScope,
+  };
+}
+
 function installGitHubCopilot(scope, homeDir = homedir(), commandRunner = execFileSync) {
   const normalizedScope = normalizeScope(scope);
 
@@ -276,6 +323,12 @@ function installMcpConfig({ cwd = process.cwd(), agent, scope, homeDir = homedir
         };
       }
       return installGitHubCopilot(normalizedScope, homeDir, commandRunner);
+    case "qwen":
+      return installQwen(projectRoot, normalizedScope, homeDir);
+    case "windsurf":
+      return installWindsurf(normalizedScope, homeDir);
+    case "antigravity":
+      return installAntigravity(projectRoot, normalizedScope, homeDir);
     case "gemini":
       return installGemini(projectRoot, normalizedScope, homeDir);
     case "openclaw":
