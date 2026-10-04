@@ -10,7 +10,22 @@ describe("installer", () => {
     const result = install({ cwd, agent: "opencode" });
     assert.equal(result.agent, "opencode");
     const config = JSON.parse(readFileSync(join(cwd, ".opencode", "opencode.json"), "utf8"));
-    assert.equal(config.mcp.servers["conversation-memory"].type, "local");
+    assert.equal(config.mcp["conversation-memory"].type, "local");
+    assert.equal(config.mcp.servers, undefined);
+  });
+
+  it("migrates the invalid mcp.servers entry written by <=1.0.3 for OpenCode", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    mkdirSync(join(cwd, ".opencode"), { recursive: true });
+    writeFileSync(
+      join(cwd, ".opencode", "opencode.json"),
+      JSON.stringify({ mcp: { servers: { "conversation-memory": { type: "local" } }, other: { type: "remote", url: "https://x" } } }),
+    );
+    install({ cwd, agent: "opencode" });
+    const config = JSON.parse(readFileSync(join(cwd, ".opencode", "opencode.json"), "utf8"));
+    assert.equal(config.mcp.servers, undefined);
+    assert.ok(config.mcp.other);
+    assert.deepEqual(config.mcp["conversation-memory"].command, ["npx", "-y", "conversation-memory-mcp"]);
   });
 
   it("installs project MCP config for Claude and Cursor by default", () => {

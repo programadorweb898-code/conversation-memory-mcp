@@ -12,6 +12,7 @@ const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio
 const { createMcpServer } = require("./createMcpServer");
 const { runMigrations } = require("../scripts/migrate");
 const { startWorker, stopWorker } = require("./services/embeddingWorker");
+const { db } = require("./database");
 
 dotenv.config();
 
@@ -20,6 +21,8 @@ async function startStdioServer() {
     console.error("Fatal error: DATABASE_URL environment variable is required.");
     process.exit(1);
   }
+
+  installShutdownHandlers();
 
   // The npx package owns the schema lifecycle for the user's Neon database.
   // Keep migration logs on stderr because stdout is reserved for MCP messages.
@@ -43,8 +46,36 @@ async function startStdioServer() {
   }
 }
 
-process.on("SIGINT", () => stopWorker());
-process.on("SIGTERM", () => stopWorker());
+let shuttingDown = false;
+
+// Cierra worker y pool y TERMINA el proceso. Antes los handlers solo llamaban a
+// stopWorker(): el proceso ignoraba SIGTERM y, al cerrarse stdin, quedaba vivo
+// consultando la base (huérfano por cada cliente MCP cerrado).
+async function shutdown(code = 0) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  const forceExit = setTimeout(() => process.exit(code), 3000);
+  forceExit.unref();
+  try {
+    stopWorker();
+    await db.close();
+  } catch (error) {
+    console.error("Error durante el cierre:", error.message);
+  }
+  process.exit(code);
+}
+
+let handlersInstalled = false;
+
+function installShutdownHandlers() {
+  if (handlersInstalled) return;
+  handlersInstalled = true;
+  process.on("SIGINT", () => shutdown(0));
+  process.on("SIGTERM", () => shutdown(0));
+  // El cliente MCP cerró el pipe: no hay nadie con quien hablar.
+  process.stdin.on("end", () => shutdown(0));
+  process.stdin.on("close", () => shutdown(0));
+}
 
 // Un rechazo suelto no debe derribar el servidor: se registra en stderr, que es
 // el único stream permitido para esto, y se sigue sirviendo.
@@ -59,4 +90,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { startStdioServer };
+module.exports = { startStdioServer, shutdown, installShutdownHandlers };

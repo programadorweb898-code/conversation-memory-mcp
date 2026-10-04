@@ -84,10 +84,26 @@ function mergeJsonServer(file, rootPath, server) {
 }
 
 function installOpenCode(cwd) {
-  return mergeJsonServer(join(cwd, ".opencode", "opencode.json"), "mcp.servers", {
+  const file = join(cwd, ".opencode", "opencode.json");
+  // Versiones <=1.0.3 escribían `mcp.servers.<nombre>`, que el schema de OpenCode
+  // rechaza (`mcp` es un mapa directo nombre -> servidor). Se migra esa entrada.
+  let migrated = false;
+  if (existsSync(file)) {
+    const config = readJson(file);
+    const legacy = config.mcp && config.mcp.servers;
+    if (legacy && Object.hasOwn(legacy, SERVER_NAME)) {
+      delete legacy[SERVER_NAME];
+      if (Object.keys(legacy).length === 0) delete config.mcp.servers;
+      writeJson(file, config);
+      migrated = true;
+    }
+  }
+  const result = mergeJsonServer(file, "mcp", {
     type: "local",
     command: ["npx", "-y", "conversation-memory-mcp"],
+    enabled: true,
   });
+  return migrated ? { ...result, changed: true } : result;
 }
 
 function installStandardMcpJson(cwd, file, rootPath = "mcpServers") {

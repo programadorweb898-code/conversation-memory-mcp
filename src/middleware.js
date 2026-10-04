@@ -22,6 +22,17 @@ const messagesLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// límite para /mcp (Streamable HTTP, stateless): cada tool call es un POST, así que
+// el techo tiene que ser holgado. Antes sseLimiter/messagesLimiter se aplicaban a
+// TODAS las rutas y /mcp se cortaba con 429 a la request 11 del minuto.
+const mcpLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  message: { error: "Demasiadas solicitudes a /mcp. Intentá en un minuto." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // comparación constante para mitigar ataques de temporización
 function tokensMatch(expectedBuffer, tokenBuffer) {
   if (tokenBuffer.length !== expectedBuffer.length) {
@@ -141,8 +152,9 @@ function requireJson(req, res, next) {
 
 function applyMiddleware(app) {
   app.use(helmet());
-  app.use(sseLimiter);
-  app.use(messagesLimiter);
+  app.use("/sse", sseLimiter);
+  app.use("/messages", messagesLimiter);
+  app.use("/mcp", mcpLimiter);
   app.use(requireBearerToken);
   app.use(requireJson);
 }
@@ -150,6 +162,7 @@ function applyMiddleware(app) {
 module.exports = {
   sseLimiter,
   messagesLimiter,
+  mcpLimiter,
   requireBearerToken,
   requireJson,
   applyMiddleware,

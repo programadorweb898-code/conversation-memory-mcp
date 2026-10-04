@@ -1,7 +1,17 @@
 {
   "name": "conversation-memory-mcp",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "Servidor MCP para almacenar y recuperar el historial de conversaciones de forma persistente mediante PostgreSQL.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "memory",
+    "postgresql",
+    "pgvector",
+    "neon"
+  ],
+  "author": "programadorweb898-code",
+  "license": "ISC",
   "main": "src/server.js",
   "bin": {
     "conversation-memory-mcp": "src/cli.js"
@@ -66,5 +76,8 @@
     "fast-uri": "^3.1.8",
     "js-yaml": "^4.3.2",
     "qs": "^6.16.0"
+  },
+  "directories": {
+    "test": "tests"
   }
 }
