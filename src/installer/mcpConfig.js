@@ -55,6 +55,22 @@ function writeJson(file, value) {
   writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
+function mergeJsonServer(file, rootPath, server) {
+  const config = readJson(file);
+  const parts = rootPath.split(".");
+  let cursor = config;
+  for (const part of parts) {
+    cursor[part] = cursor[part] || {};
+    cursor = cursor[part];
+  }
+  const current = cursor[SERVER_NAME];
+  const next = { ...(current || {}), ...server };
+  if (JSON.stringify(current) === JSON.stringify(next)) return { changed: false, file, supported: true };
+  cursor[SERVER_NAME] = next;
+  writeJson(file, config);
+  return { changed: true, file, supported: true };
+}
+
 function installOpenCode(cwd) {
   return mergeJsonServer(join(cwd, ".opencode", "opencode.json"), "mcp.servers", {
     type: "local",
