@@ -64,6 +64,47 @@ describe("installer", () => {
     assert.equal(command[1][1], "set");
   });
 
+  it("installs GitHub Copilot CLI MCP in project scope by default", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    const result = install({ cwd, agent: "github-copilot" });
+
+    assert.equal(result.mcp.scope, "project");
+    assert.equal(result.mcp.file, join(cwd, ".mcp.json"));
+    const config = JSON.parse(readFileSync(result.mcp.file, "utf8"));
+    assert.equal(config.mcpServers["conversation-memory"].command, "npx");
+    assert.deepEqual(config.mcpServers["conversation-memory"].args, ["-y", "conversation-memory-mcp"]);
+  });
+
+  it("installs GitHub Copilot CLI MCP globally through its CLI", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    const homeDir = mkdtempSync(join(tmpdir(), "conversation-memory-copilot-home-"));
+    let command;
+
+    const result = install({
+      cwd,
+      agent: "github-copilot",
+      scope: "global",
+      homeDir,
+      commandRunner: (...args) => {
+        command = args;
+      },
+    });
+
+    assert.equal(result.agent, "github-copilot");
+    assert.equal(result.mcp.supported, true);
+    assert.equal(result.mcp.scope, "global");
+    assert.equal(result.mcp.file, join(homeDir, ".copilot", "mcp-config.json"));
+    assert.deepEqual(command[1], [
+      "mcp",
+      "add",
+      "conversation-memory",
+      "--",
+      "npx",
+      "-y",
+      "conversation-memory-mcp",
+    ]);
+  });
+
   it("installs Kimi and Kiro MCP configs", () => {
     const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
     install({ cwd, agent: "kimi" });
