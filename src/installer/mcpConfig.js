@@ -1,4 +1,5 @@
 const { existsSync, mkdirSync, readFileSync, writeFileSync } = require("node:fs");
+const { homedir } = require("node:os");
 const { dirname, join, resolve } = require("node:path");
 
 const SERVER_NAME = "conversation-memory";
@@ -13,7 +14,7 @@ const AGENTS = {
   cursor: { policy: "AGENTS.md", config: "cursor" },
   kimi: { policy: "AGENTS.md", config: "kimi" },
   "kimi-code": { policy: "AGENTS.md", config: "kimi" },
-  "gemini-cli": { policy: "GEMINI.md", config: null },
+  "gemini-cli": { policy: "GEMINI.md", config: "gemini" },
   "qwen-code": { policy: "AGENTS.md", config: null },
   kilocode: { policy: "AGENTS.md", config: "opencode" },
   "kiro-ide": { policy: "AGENTS.md", config: "kiro" },
@@ -32,6 +33,14 @@ function normalizeAgent(value) {
     throw new Error(`Agente no soportado: ${value}. Opciones: ${Object.keys(AGENTS).join(", ")}`);
   }
   return agent;
+}
+
+function normalizeScope(value) {
+  const scope = (value || "project").toLowerCase();
+  if (scope !== "project" && scope !== "global") {
+    throw new Error(`Scope no soportado: ${value}. Opciones: project, global`);
+  }
+  return scope;
 }
 
 function readJson(file) {
@@ -98,9 +107,25 @@ function installCodex(cwd) {
   return { changed: true, file, supported: true };
 }
 
-function installMcpConfig({ cwd = process.cwd(), agent } = {}) {
+function installGemini(cwd, scope, homeDir = homedir()) {
+  const normalizedScope = normalizeScope(scope);
+  const file = normalizedScope === "global"
+    ? join(homeDir, ".gemini", "settings.json")
+    : join(cwd, ".gemini", "settings.json");
+
+  return {
+    ...mergeJsonServer(file, "mcpServers", {
+      command: "npx",
+      args: ["-y", "conversation-memory-mcp"],
+    }),
+    scope: normalizedScope,
+  };
+}
+
+function installMcpConfig({ cwd = process.cwd(), agent, scope = "project", homeDir = homedir() } = {}) {
   const projectRoot = resolve(cwd);
-  switch (AGENTS[agent].config) {
+  const selectedAgent = normalizeAgent(agent);
+  switch (AGENTS[selectedAgent].config) {
     case "opencode":
       return installOpenCode(projectRoot);
     case "codex":
@@ -115,9 +140,11 @@ function installMcpConfig({ cwd = process.cwd(), agent } = {}) {
       return installStandardMcpJson(projectRoot, join(projectRoot, ".kiro", "settings", "mcp.json"));
     case "vscode":
       return installVsCode(projectRoot);
+    case "gemini":
+      return installGemini(projectRoot, scope, homeDir);
     default:
       return { changed: false, file: null, supported: false };
   }
 }
 
-module.exports = { AGENTS, normalizeAgent, installMcpConfig };
+module.exports = { AGENTS, normalizeAgent, normalizeScope, installMcpConfig };
