@@ -201,7 +201,7 @@ async function main() {
 
     const effectiveScope = resolveScope(resolved.agent, parsed.scope);
 
-    if (parsed.scope === "global" && !["claude", "cursor", "gemini-cli", "github-copilot", "openclaw", "hermes"].includes(resolved.agent)) {
+    if (parsed.scope === "global" && !["claude", "cursor", "gemini-cli", "github-copilot", "qwen-code", "antigravity", "windsurf", "openclaw", "hermes"].includes(resolved.agent)) {
       throw new Error("El scope global no está implementado para este agente.");
     }
 
