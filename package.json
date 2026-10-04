@@ -16,16 +16,6 @@
     "install:plugin": "node scripts/install-plugin.js",
     "check": "npm run lint && npm test"
   },
-  "keywords": [
-    "mcp",
-    "model-context-protocol",
-    "memory",
-    "postgresql",
-    "pgvector",
-    "neon"
-  ],
-  "author": "",
-  "license": "ISC",
   "type": "commonjs",
   "engines": {
     "node": ">=20"
@@ -60,9 +50,6 @@
     "mocha": "^12.0.2",
     "sinon": "^22.0.0",
     "supertest": "^7.2.2"
-  },
-  "directories": {
-    "test": "tests"
   },
   "repository": {
     "type": "git",

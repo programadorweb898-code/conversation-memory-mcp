@@ -1,3 +1,4 @@
+const { execFileSync } = require("node:child_process");
 const { existsSync, mkdirSync, readFileSync, writeFileSync } = require("node:fs");
 const { homedir } = require("node:os");
 const { dirname, join, resolve } = require("node:path");
@@ -20,7 +21,7 @@ const AGENTS = {
   "kiro-ide": { policy: "AGENTS.md", config: "kiro" },
   windsurf: { policy: "AGENTS.md", config: null },
   antigravity: { policy: "GEMINI.md", config: null },
-  openclaw: { policy: "AGENTS.md", config: null },
+  openclaw: { policy: "AGENTS.md", config: "openclaw" },
   trae: { policy: "AGENTS.md", config: null },
   pi: { policy: "AGENTS.md", config: null },
   hermes: { policy: "AGENTS.md", config: null },
@@ -122,7 +123,33 @@ function installGemini(cwd, scope, homeDir = homedir()) {
   };
 }
 
-function installMcpConfig({ cwd = process.cwd(), agent, scope = "project", homeDir = homedir() } = {}) {
+function installOpenClaw(scope, homeDir = homedir(), commandRunner = execFileSync) {
+  const normalizedScope = normalizeScope(scope);
+  if (normalizedScope !== "global") {
+    throw new Error("OpenClaw administra sus servidores MCP en una configuración central; use --scope global.");
+  }
+
+  const file = process.env.OPENCLAW_CONFIG_PATH || join(homeDir, ".openclaw", "openclaw.json");
+  const executable = process.platform === "win32" ? "openclaw.cmd" : "openclaw";
+  const server = JSON.stringify({
+    command: "npx",
+    args: ["-y", "conversation-memory-mcp"],
+  });
+
+  commandRunner(executable, ["mcp", "set", SERVER_NAME, server], {
+    stdio: "ignore",
+    windowsHide: true,
+  });
+
+  return {
+    changed: true,
+    file,
+    supported: true,
+    scope: normalizedScope,
+  };
+}
+
+function installMcpConfig({ cwd = process.cwd(), agent, scope = "project", homeDir = homedir(), commandRunner = execFileSync } = {}) {
   const projectRoot = resolve(cwd);
   const selectedAgent = normalizeAgent(agent);
   switch (AGENTS[selectedAgent].config) {
@@ -142,6 +169,8 @@ function installMcpConfig({ cwd = process.cwd(), agent, scope = "project", homeD
       return installVsCode(projectRoot);
     case "gemini":
       return installGemini(projectRoot, scope, homeDir);
+    case "openclaw":
+      return installOpenClaw(scope, homeDir, commandRunner);
     default:
       return { changed: false, file: null, supported: false };
   }
