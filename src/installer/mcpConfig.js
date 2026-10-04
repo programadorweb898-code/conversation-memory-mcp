@@ -24,7 +24,7 @@ const AGENTS = {
   openclaw: { policy: "AGENTS.md", config: "openclaw" },
   trae: { policy: "AGENTS.md", config: null },
   pi: { policy: "AGENTS.md", config: null },
-  hermes: { policy: "AGENTS.md", config: null },
+  hermes: { policy: "AGENTS.md", config: "hermes" },
 };
 
 function normalizeAgent(value) {
@@ -149,6 +149,33 @@ function installOpenClaw(scope, homeDir = homedir(), commandRunner = execFileSyn
   };
 }
 
+function installHermes(scope, homeDir = homedir(), commandRunner = execFileSync) {
+  const normalizedScope = normalizeScope(scope);
+  if (normalizedScope !== "global") {
+    throw new Error("Hermes administra sus servidores MCP en una configuración central; use --scope global.");
+  }
+
+  const hermesHome = process.env.HERMES_HOME || join(homeDir, ".hermes");
+  const file = join(hermesHome, "config.yaml");
+  const executable = process.platform === "win32" ? "hermes.exe" : "hermes";
+
+  commandRunner(
+    executable,
+    ["mcp", "add", SERVER_NAME, "--command", "npx", "--args", "-y", "conversation-memory-mcp"],
+    {
+      stdio: "ignore",
+      windowsHide: true,
+    },
+  );
+
+  return {
+    changed: true,
+    file,
+    supported: true,
+    scope: normalizedScope,
+  };
+}
+
 function installMcpConfig({ cwd = process.cwd(), agent, scope = "project", homeDir = homedir(), commandRunner = execFileSync } = {}) {
   const projectRoot = resolve(cwd);
   const selectedAgent = normalizeAgent(agent);
@@ -171,6 +198,8 @@ function installMcpConfig({ cwd = process.cwd(), agent, scope = "project", homeD
       return installGemini(projectRoot, scope, homeDir);
     case "openclaw":
       return installOpenClaw(scope, homeDir, commandRunner);
+    case "hermes":
+      return installHermes(scope, homeDir, commandRunner);
     default:
       return { changed: false, file: null, supported: false };
   }
