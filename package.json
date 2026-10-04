@@ -58,5 +58,13 @@
   "bugs": {
     "url": "https://github.com/programadorweb898-code/conversation-memory-mcp/issues"
   },
-  "homepage": "https://github.com/programadorweb898-code/conversation-memory-mcp#readme"
+  "homepage": "https://github.com/programadorweb898-code/conversation-memory-mcp#readme",
+  "overrides": {
+    "@hono/node-server": "^2.0.12",
+    "hono": "^4.13.8",
+    "ip-address": "^10.6.0",
+    "fast-uri": "^3.1.8",
+    "js-yaml": "^4.3.2",
+    "qs": "^6.16.0"
+  }
 }
