@@ -4,6 +4,7 @@ const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 const {
   AGENT_CHOICES,
+  parseArgs,
   promptForAgent,
   resolveAgent,
   MAX_AGENT_ATTEMPTS,
@@ -155,6 +156,14 @@ describe("cli", () => {
       "hermes",
       "generic",
     ]);
+  });
+
+  it("leaves scope unspecified so the installer can choose the agent default", () => {
+    assert.deepEqual(parseArgs(["node", "cli.js", "install", "--agent", "hermes"]), {
+      command: "install",
+      agent: "hermes",
+      scope: undefined,
+    });
   });
 
   it("defines three agent selection attempts", () => {
