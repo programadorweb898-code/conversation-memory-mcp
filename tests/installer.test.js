@@ -112,6 +112,51 @@ describe("installer", () => {
     );
   });
 
+  it("installs Hermes MCP through its CLI in global scope", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    const homeDir = mkdtempSync(join(tmpdir(), "conversation-memory-hermes-home-"));
+    const configFile = join(homeDir, ".hermes", "config.yaml");
+    let command;
+
+    const result = install({
+      cwd,
+      agent: "hermes",
+      scope: "global",
+      homeDir,
+      commandRunner: (...args) => {
+        command = args;
+      },
+    });
+
+    assert.equal(result.agent, "hermes");
+    assert.equal(result.mcp.supported, true);
+    assert.equal(result.mcp.scope, "global");
+    assert.equal(result.mcp.file, configFile);
+    assert.equal(command[0], process.platform === "win32" ? "hermes.exe" : "hermes");
+    assert.deepEqual(command[1], [
+      "mcp",
+      "add",
+      "conversation-memory",
+      "--command",
+      "npx",
+      "--args",
+      "-y",
+      "conversation-memory-mcp",
+    ]);
+    assert.deepEqual(command[2], {
+      stdio: "ignore",
+      windowsHide: true,
+    });
+  });
+
+  it("rejects project scope for Hermes", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    assert.throws(
+      () => install({ cwd, agent: "hermes", scope: "project" }),
+      /Hermes administra sus servidores MCP/,
+    );
+  });
+
   it("detects existing agent files", () => {
     const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
     writeFileSync(join(cwd, "CLAUDE.md"), "# Project\n");
