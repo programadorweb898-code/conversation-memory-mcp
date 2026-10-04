@@ -68,6 +68,50 @@ describe("installer", () => {
     assert.equal(config.mcpServers["conversation-memory"].command, "npx");
   });
 
+  it("installs OpenClaw MCP in its global config", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    const homeDir = mkdtempSync(join(tmpdir(), "conversation-memory-openclaw-home-"));
+    const configFile = join(homeDir, ".openclaw", "openclaw.json");
+    mkdirSync(join(homeDir, ".openclaw"), { recursive: true });
+    writeFileSync(configFile, `{
+  // Existing OpenClaw JSON5 configuration
+  gateway: { port: 18789 },
+  mcp: {
+    servers: {
+      other: { command: "other", args: [] },
+    },
+  },
+}`);
+
+    const previousConfigPath = process.env.OPENCLAW_CONFIG_PATH;
+    process.env.OPENCLAW_CONFIG_PATH = configFile;
+
+    try {
+      const result = install({ cwd, agent: "openclaw", scope: "global", homeDir });
+      assert.equal(result.agent, "openclaw");
+      assert.equal(result.mcp.supported, true);
+      assert.equal(result.mcp.scope, "global");
+      assert.equal(result.mcp.file, configFile);
+
+      const config = JSON.parse(readFileSync(configFile, "utf8"));
+      assert.equal(config.gateway.port, 18789);
+      assert.equal(config.mcp.servers.other.command, "other");
+      assert.equal(config.mcp.servers["conversation-memory"].command, "npx");
+      assert.deepEqual(config.mcp.servers["conversation-memory"].args, ["-y", "conversation-memory-mcp"]);
+    } finally {
+      if (previousConfigPath === undefined) delete process.env.OPENCLAW_CONFIG_PATH;
+      else process.env.OPENCLAW_CONFIG_PATH = previousConfigPath;
+    }
+  });
+
+  it("rejects project scope for OpenClaw", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    assert.throws(
+      () => install({ cwd, agent: "openclaw", scope: "project" }),
+      /OpenClaw administra sus servidores MCP/,
+    );
+  });
+
   it("detects existing agent files", () => {
     const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
     writeFileSync(join(cwd, "CLAUDE.md"), "# Project\n");
