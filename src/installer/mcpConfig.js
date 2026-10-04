@@ -1,7 +1,6 @@
 const { existsSync, mkdirSync, readFileSync, writeFileSync } = require("node:fs");
 const { homedir } = require("node:os");
 const { dirname, join, resolve } = require("node:path");
-const JSON5 = require("json5");
 
 const SERVER_NAME = "conversation-memory";
 
@@ -53,49 +52,6 @@ function readJson(file) {
 function writeJson(file, value) {
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-}
-
-function readJson5(file) {
-  if (!existsSync(file)) return {};
-  const content = readFileSync(file, "utf8").trim();
-  return content ? JSON5.parse(content) : {};
-}
-
-function writeJson5(file, value) {
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-}
-
-function mergeJsonServer(file, rootPath, server) {
-  const config = readJson(file);
-  const parts = rootPath.split(".");
-  let cursor = config;
-  for (const part of parts) {
-    cursor[part] = cursor[part] || {};
-    cursor = cursor[part];
-  }
-  const current = cursor[SERVER_NAME];
-  const next = { ...(current || {}), ...server };
-  if (JSON.stringify(current) === JSON.stringify(next)) return { changed: false, file, supported: true };
-  cursor[SERVER_NAME] = next;
-  writeJson(file, config);
-  return { changed: true, file, supported: true };
-}
-
-function mergeOpenClawServer(file, server) {
-  const config = readJson5(file);
-  config.mcp = config.mcp || {};
-  config.mcp.servers = config.mcp.servers || {};
-
-  const current = config.mcp.servers[SERVER_NAME];
-  const next = { ...(current || {}), ...server };
-  if (JSON.stringify(current) === JSON.stringify(next)) {
-    return { changed: false, file, supported: true };
-  }
-
-  config.mcp.servers[SERVER_NAME] = next;
-  writeJson5(file, config);
-  return { changed: true, file, supported: true };
 }
 
 function installOpenCode(cwd) {
@@ -150,23 +106,33 @@ function installGemini(cwd, scope, homeDir = homedir()) {
   };
 }
 
-function installOpenClaw(scope, homeDir = homedir()) {
+function installOpenClaw(scope, homeDir = homedir(), commandRunner = execFileSync) {
   const normalizedScope = normalizeScope(scope);
   if (normalizedScope !== "global") {
     throw new Error("OpenClaw administra sus servidores MCP en una configuración central; use --scope global.");
   }
 
   const file = process.env.OPENCLAW_CONFIG_PATH || join(homeDir, ".openclaw", "openclaw.json");
+  const executable = process.platform === "win32" ? "openclaw.cmd" : "openclaw";
+  const server = JSON.stringify({
+    command: "npx",
+    args: ["-y", "conversation-memory-mcp"],
+  });
+
+  commandRunner(executable, ["mcp", "set", SERVER_NAME, server], {
+    stdio: "ignore",
+    windowsHide: true,
+  });
+
   return {
-    ...mergeOpenClawServer(file, {
-      command: "npx",
-      args: ["-y", "conversation-memory-mcp"],
-    }),
+    changed: true,
+    file,
+    supported: true,
     scope: normalizedScope,
   };
 }
 
-function installMcpConfig({ cwd = process.cwd(), agent, scope = "project", homeDir = homedir() } = {}) {
+function installMcpConfig({ cwd = process.cwd(), agent, scope = "project", homeDir = homedir(), commandRunner = execFileSync } = {}) {
   const projectRoot = resolve(cwd);
   const selectedAgent = normalizeAgent(agent);
   switch (AGENTS[selectedAgent].config) {
@@ -187,7 +153,7 @@ function installMcpConfig({ cwd = process.cwd(), agent, scope = "project", homeD
     case "gemini":
       return installGemini(projectRoot, scope, homeDir);
     case "openclaw":
-      return installOpenClaw(scope, homeDir);
+      return installOpenClaw(scope, homeDir, commandRunner);
     default:
       return { changed: false, file: null, supported: false };
   }
