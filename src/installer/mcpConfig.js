@@ -1,3 +1,4 @@
+const { execFileSync } = require("node:child_process");
 const { existsSync, mkdirSync, readFileSync, writeFileSync } = require("node:fs");
 const { homedir } = require("node:os");
 const { dirname, join, resolve } = require("node:path");
