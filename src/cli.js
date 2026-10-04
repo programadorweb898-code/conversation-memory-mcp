@@ -2,7 +2,7 @@
 
 const { startStdioServer } = require("./stdio");
 const { install, detectAgent } = require("./installer");
-const { normalizeAgent, normalizeScope } = require("./installer/mcpConfig");
+const { getDefaultScope, normalizeAgent, normalizeScope, resolveScope } = require("./installer/mcpConfig");
 const { setupDatabase } = require("./installer/database");
 
 const AGENT_CHOICES = [
@@ -39,7 +39,9 @@ function printHelp() {
     "",
     "Scopes disponibles:",
     "  project  Configuración dentro del proyecto (predeterminado)",
-    "  global   Configuración global del agente (Gemini CLI y OpenClaw)",
+    "  global   Configuración global del agente, cuando está soportada",
+    "",
+    "Los agentes que solo soportan configuración global se instalan globalmente automáticamente.",
     "",
     "Si DATABASE_URL no existe, el instalador ofrece:",
     "  1. usar una conexión PostgreSQL existente",
@@ -60,7 +62,7 @@ function parseArgs(argv) {
   if (command !== "install") throw new Error(`Comando desconocido: ${command}`);
 
   let agent = null;
-  let scope = "project";
+  let scope;
   for (let i = 1; i < args.length; i++) {
     if (args[i] === "--agent") {
       agent = args[++i];
@@ -196,10 +198,15 @@ async function main() {
   if (parsed.command === "install") {
     const resolved = await resolveAgent(parsed.agent);
 
-    if (parsed.scope === "global" && !["gemini-cli", "openclaw"].includes(resolved.agent)) {
-      throw new Error("El scope global todavía está implementado solo para Gemini CLI y OpenClaw.");
+    const effectiveScope = resolveScope(resolved.agent, parsed.scope);
+
+    if (parsed.scope === "global" && !["claude", "cursor", "gemini-cli", "openclaw", "hermes"].includes(resolved.agent)) {
+      throw new Error("El scope global no está implementado para este agente.");
     }
 
+    if (parsed.scope === "project" && getDefaultScope(resolved.agent) === "global") {
+      throw new Error(`${resolved.agent} solo admite configuración global; omití --scope project.`);
+    }
     printSuccess(`Agente seleccionado: ${resolved.agent}${resolved.manual ? " (seleccionado manualmente)" : " (detectado automáticamente)"}`);
     printStep("Configurando base de datos...");
     const database = await setupDatabase();
@@ -210,7 +217,7 @@ async function main() {
     console.log("");
     printSuccess(`Base de datos: configurada (${database.source})`);
     printSuccess(`Agente: ${resolved.agent}${resolved.manual ? " (seleccionado manualmente)" : " (detectado automáticamente)"}`);
-    printSuccess(`Scope MCP: ${parsed.scope}`);
+    printSuccess(`Scope MCP: ${effectiveScope}${parsed.scope == null && effectiveScope === "global" ? " (automático)" : ""}`);
     printSuccess(`Política: ${result.changed ? "instalada/actualizada" : "sin cambios"} -> ${result.file}`);
 
     if (result.mcp.supported === false) {
