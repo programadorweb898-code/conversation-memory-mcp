@@ -119,6 +119,67 @@ describe("installer", () => {
     assert.match(readFileSync(join(cwd, ".codex", "config.toml"), "utf8"), /mcp_servers\.conversation-memory/);
   });
 
+  it("installs Qwen Code MCP in project scope by default", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    const result = install({ cwd, agent: "qwen-code" });
+
+    assert.equal(result.mcp.scope, "project");
+    assert.equal(result.mcp.file, join(cwd, ".qwen", "settings.json"));
+    const config = JSON.parse(readFileSync(result.mcp.file, "utf8"));
+    assert.equal(config.mcpServers["conversation-memory"].command, "npx");
+    assert.deepEqual(config.mcpServers["conversation-memory"].args, ["-y", "conversation-memory-mcp"]);
+  });
+
+  it("installs Qwen Code MCP globally when requested", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    const homeDir = mkdtempSync(join(tmpdir(), "conversation-memory-qwen-home-"));
+    const result = install({ cwd, agent: "qwen-code", scope: "global", homeDir });
+
+    assert.equal(result.mcp.scope, "global");
+    assert.equal(result.mcp.file, join(homeDir, ".qwen", "settings.json"));
+    assert.ok(!existsSync(join(cwd, ".qwen", "settings.json")));
+  });
+
+  it("installs Windsurf MCP globally by default", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    const homeDir = mkdtempSync(join(tmpdir(), "conversation-memory-windsurf-home-"));
+    const result = install({ cwd, agent: "windsurf", homeDir });
+
+    assert.equal(result.mcp.scope, "global");
+    assert.equal(result.mcp.file, join(homeDir, ".codeium", "windsurf", "mcp_config.json"));
+    assert.ok(!existsSync(join(cwd, ".windsurf", "mcp_config.json")));
+    const config = JSON.parse(readFileSync(result.mcp.file, "utf8"));
+    assert.equal(config.mcpServers["conversation-memory"].command, "npx");
+  });
+
+  it("rejects project scope for Windsurf", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    assert.throws(
+      () => install({ cwd, agent: "windsurf", scope: "project" }),
+      /Windsurf administra sus servidores MCP/,
+    );
+  });
+
+  it("installs Antigravity MCP in project scope by default", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    const result = install({ cwd, agent: "antigravity" });
+
+    assert.equal(result.mcp.scope, "project");
+    assert.equal(result.mcp.file, join(cwd, ".agents", "mcp_config.json"));
+    const config = JSON.parse(readFileSync(result.mcp.file, "utf8"));
+    assert.equal(config.mcpServers["conversation-memory"].command, "npx");
+  });
+
+  it("installs Antigravity MCP globally when requested", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    const homeDir = mkdtempSync(join(tmpdir(), "conversation-memory-antigravity-home-"));
+    const result = install({ cwd, agent: "antigravity", scope: "global", homeDir });
+
+    assert.equal(result.mcp.scope, "global");
+    assert.equal(result.mcp.file, join(homeDir, ".gemini", "config", "mcp_config.json"));
+    assert.ok(!existsSync(join(cwd, ".agents", "mcp_config.json")));
+  });
+
   it("is idempotent", () => {
     const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
     const first = install({ cwd, agent: "cursor" });
