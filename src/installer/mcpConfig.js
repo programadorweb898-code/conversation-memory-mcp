@@ -1,6 +1,7 @@
 const { existsSync, mkdirSync, readFileSync, writeFileSync } = require("node:fs");
 const { homedir } = require("node:os");
 const { dirname, join, resolve } = require("node:path");
+const JSON5 = require("json5");
 
 const SERVER_NAME = "conversation-memory";
 
@@ -20,7 +21,7 @@ const AGENTS = {
   "kiro-ide": { policy: "AGENTS.md", config: "kiro" },
   windsurf: { policy: "AGENTS.md", config: null },
   antigravity: { policy: "GEMINI.md", config: null },
-  openclaw: { policy: "AGENTS.md", config: null },
+  openclaw: { policy: "AGENTS.md", config: "openclaw" },
   trae: { policy: "AGENTS.md", config: null },
   pi: { policy: "AGENTS.md", config: null },
   hermes: { policy: "AGENTS.md", config: null },
@@ -54,6 +55,17 @@ function writeJson(file, value) {
   writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
+function readJson5(file) {
+  if (!existsSync(file)) return {};
+  const content = readFileSync(file, "utf8").trim();
+  return content ? JSON5.parse(content) : {};
+}
+
+function writeJson5(file, value) {
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
 function mergeJsonServer(file, rootPath, server) {
   const config = readJson(file);
   const parts = rootPath.split(".");
@@ -67,6 +79,22 @@ function mergeJsonServer(file, rootPath, server) {
   if (JSON.stringify(current) === JSON.stringify(next)) return { changed: false, file, supported: true };
   cursor[SERVER_NAME] = next;
   writeJson(file, config);
+  return { changed: true, file, supported: true };
+}
+
+function mergeOpenClawServer(file, server) {
+  const config = readJson5(file);
+  config.mcp = config.mcp || {};
+  config.mcp.servers = config.mcp.servers || {};
+
+  const current = config.mcp.servers[SERVER_NAME];
+  const next = { ...(current || {}), ...server };
+  if (JSON.stringify(current) === JSON.stringify(next)) {
+    return { changed: false, file, supported: true };
+  }
+
+  config.mcp.servers[SERVER_NAME] = next;
+  writeJson5(file, config);
   return { changed: true, file, supported: true };
 }
 
@@ -122,6 +150,22 @@ function installGemini(cwd, scope, homeDir = homedir()) {
   };
 }
 
+function installOpenClaw(scope, homeDir = homedir()) {
+  const normalizedScope = normalizeScope(scope);
+  if (normalizedScope !== "global") {
+    throw new Error("OpenClaw administra sus servidores MCP en una configuración central; use --scope global.");
+  }
+
+  const file = process.env.OPENCLAW_CONFIG_PATH || join(homeDir, ".openclaw", "openclaw.json");
+  return {
+    ...mergeOpenClawServer(file, {
+      command: "npx",
+      args: ["-y", "conversation-memory-mcp"],
+    }),
+    scope: normalizedScope,
+  };
+}
+
 function installMcpConfig({ cwd = process.cwd(), agent, scope = "project", homeDir = homedir() } = {}) {
   const projectRoot = resolve(cwd);
   const selectedAgent = normalizeAgent(agent);
@@ -142,6 +186,8 @@ function installMcpConfig({ cwd = process.cwd(), agent, scope = "project", homeD
       return installVsCode(projectRoot);
     case "gemini":
       return installGemini(projectRoot, scope, homeDir);
+    case "openclaw":
+      return installOpenClaw(scope, homeDir);
     default:
       return { changed: false, file: null, supported: false };
   }
