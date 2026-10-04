@@ -52,11 +52,16 @@ function installPolicy({ cwd = process.cwd(), agent } = {}) {
   return { agent: selectedAgent, file, created: !result.existed, changed: result.changed };
 }
 
-function install({ cwd = process.cwd(), agent } = {}) {
+function install({ cwd = process.cwd(), agent, scope = "project", homeDir } = {}) {
   const projectRoot = resolve(cwd);
   const selectedAgent = agent ? normalizeAgent(agent) : detectAgent(projectRoot);
   const policy = installPolicy({ cwd: projectRoot, agent: selectedAgent });
-  const mcp = installMcpConfig({ cwd: projectRoot, agent: selectedAgent });
+  const mcp = installMcpConfig({
+    cwd: projectRoot,
+    agent: selectedAgent,
+    scope,
+    ...(homeDir ? { homeDir } : {}),
+  });
   return { ...policy, mcp };
 }
 

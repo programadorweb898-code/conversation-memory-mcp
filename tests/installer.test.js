@@ -44,12 +44,28 @@ describe("installer", () => {
     assert.equal(second.changed, false);
   });
 
-  it("supports extended agents with policy-only fallback", () => {
+  it("installs Gemini CLI MCP in project scope by default", () => {
     const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
     const result = install({ cwd, agent: "gemini-cli" });
     assert.equal(result.agent, "gemini-cli");
-    assert.equal(result.mcp.supported, false);
+    assert.equal(result.mcp.supported, true);
+    assert.equal(result.mcp.scope, "project");
+    const config = JSON.parse(readFileSync(join(cwd, ".gemini", "settings.json"), "utf8"));
+    assert.equal(config.mcpServers["conversation-memory"].command, "npx");
+    assert.deepEqual(config.mcpServers["conversation-memory"].args, ["-y", "conversation-memory-mcp"]);
     assert.ok(existsSync(join(cwd, "GEMINI.md")));
+  });
+
+  it("installs Gemini CLI MCP globally without modifying the real home in tests", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    const homeDir = mkdtempSync(join(tmpdir(), "conversation-memory-home-"));
+    const result = install({ cwd, agent: "gemini-cli", scope: "global", homeDir });
+    assert.equal(result.mcp.supported, true);
+    assert.equal(result.mcp.scope, "global");
+    assert.equal(result.mcp.file, join(homeDir, ".gemini", "settings.json"));
+    assert.ok(!existsSync(join(cwd, ".gemini", "settings.json")));
+    const config = JSON.parse(readFileSync(result.mcp.file, "utf8"));
+    assert.equal(config.mcpServers["conversation-memory"].command, "npx");
   });
 
   it("detects existing agent files", () => {
