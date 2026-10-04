@@ -94,6 +94,7 @@ Agentes reconocidos:
 - Codex
 - Claude Code
 - VS Code / Copilot
+- GitHub Copilot CLI
 - Cursor
 - Kimi Code
 - Kilo Code
