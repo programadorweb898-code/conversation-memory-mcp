@@ -13,12 +13,55 @@ describe("installer", () => {
     assert.equal(config.mcp.servers["conversation-memory"].type, "local");
   });
 
-  it("installs project MCP config for Claude and Cursor", () => {
+  it("installs project MCP config for Claude and Cursor by default", () => {
     const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
     install({ cwd, agent: "claude" });
     install({ cwd, agent: "cursor" });
     assert.ok(existsSync(join(cwd, ".mcp.json")));
     assert.ok(existsSync(join(cwd, ".cursor", "mcp.json")));
+  });
+
+  it("installs Claude MCP globally when requested", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    const homeDir = mkdtempSync(join(tmpdir(), "conversation-memory-claude-home-"));
+    const result = install({ cwd, agent: "claude", scope: "global", homeDir });
+
+    assert.equal(result.mcp.scope, "global");
+    assert.equal(result.mcp.file, join(homeDir, ".claude.json"));
+    assert.ok(!existsSync(join(cwd, ".mcp.json")));
+    const config = JSON.parse(readFileSync(result.mcp.file, "utf8"));
+    assert.equal(config.mcpServers["conversation-memory"].command, "npx");
+  });
+
+  it("installs Cursor MCP globally when requested", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    const homeDir = mkdtempSync(join(tmpdir(), "conversation-memory-cursor-home-"));
+    const result = install({ cwd, agent: "cursor", scope: "global", homeDir });
+
+    assert.equal(result.mcp.scope, "global");
+    assert.equal(result.mcp.file, join(homeDir, ".cursor", "mcp.json"));
+    assert.ok(!existsSync(join(cwd, ".cursor", "mcp.json")));
+    const config = JSON.parse(readFileSync(result.mcp.file, "utf8"));
+    assert.equal(config.mcpServers["conversation-memory"].command, "npx");
+  });
+
+  it("defaults global-only agents to global scope", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    const homeDir = mkdtempSync(join(tmpdir(), "conversation-memory-openclaw-home-"));
+    let command;
+
+    const result = install({
+      cwd,
+      agent: "openclaw",
+      homeDir,
+      commandRunner: (...args) => {
+        command = args;
+      },
+    });
+
+    assert.equal(result.mcp.scope, "global");
+    assert.equal(command[1][0], "mcp");
+    assert.equal(command[1][1], "set");
   });
 
   it("installs Kimi and Kiro MCP configs", () => {
