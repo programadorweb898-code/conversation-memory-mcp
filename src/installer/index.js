@@ -52,7 +52,7 @@ function installPolicy({ cwd = process.cwd(), agent } = {}) {
   return { agent: selectedAgent, file, created: !result.existed, changed: result.changed };
 }
 
-function install({ cwd = process.cwd(), agent, scope = "project", homeDir } = {}) {
+function install({ cwd = process.cwd(), agent, scope = "project", homeDir, commandRunner } = {}) {
   const projectRoot = resolve(cwd);
   const selectedAgent = agent ? normalizeAgent(agent) : detectAgent(projectRoot);
   const policy = installPolicy({ cwd: projectRoot, agent: selectedAgent });
@@ -61,6 +61,7 @@ function install({ cwd = process.cwd(), agent, scope = "project", homeDir } = {}
     agent: selectedAgent,
     scope,
     ...(homeDir ? { homeDir } : {}),
+    ...(commandRunner ? { commandRunner } : {}),
   });
   return { ...policy, mcp };
 }
