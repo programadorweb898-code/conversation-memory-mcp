@@ -329,7 +329,7 @@ describe("Embedding Worker", function () {
       // timers: el intervalo es de 5s y el test necesita esperar a que el
       // trabajo termine de verdad, no a que arrancó.
       let tick;
-      const setTimeoutStub = sinon.stub(global, "setTimeout").callsFake((fn) => {
+      const realSetTimeout = global.setTimeout;\n      const setTimeoutStub = sinon.stub(global, "setTimeout").callsFake((fn) => {
         tick = fn;
         return timer;
       });
@@ -344,7 +344,7 @@ describe("Embedding Worker", function () {
         // esperar a que eso ocurra para poder observar si quedó sin manejar.
         const deadline = Date.now() + 15000;
         while (embeddingQueue.getProcessingStatus() && Date.now() < deadline) {
-          await new Promise((resolve) => setTimeout(resolve, 20));
+          await new Promise((resolve) => realSetTimeout(resolve, 20));
         }
         expect(embeddingQueue.getProcessingStatus()).to.equal(false);
 
