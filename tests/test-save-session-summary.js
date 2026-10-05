@@ -28,7 +28,10 @@ function loadSaveSessionSummary(generateEmbedding) {
     id: embeddingServicePath,
     filename: embeddingServicePath,
     loaded: true,
-    exports: {\n        generateEmbedding,\n        isEmbeddingsEnabled: () => true,\n      },
+    exports: {
+        generateEmbedding,
+        isEmbeddingsEnabled: () => true,
+      },
   };
 
   const loaded = require("../src/tools/saveSessionSummary");
