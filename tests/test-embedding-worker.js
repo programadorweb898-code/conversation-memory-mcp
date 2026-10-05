@@ -329,7 +329,8 @@ describe("Embedding Worker", function () {
       // timers: el intervalo es de 5s y el test necesita esperar a que el
       // trabajo termine de verdad, no a que arrancó.
       let tick;
-      const realSetTimeout = global.setTimeout;\n      const setTimeoutStub = sinon.stub(global, "setTimeout").callsFake((fn) => {
+      const realSetTimeout = global.setTimeout;
+      const setTimeoutStub = sinon.stub(global, "setTimeout").callsFake((fn) => {
         tick = fn;
         return timer;
       });
