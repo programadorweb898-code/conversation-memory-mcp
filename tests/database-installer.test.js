@@ -63,8 +63,8 @@ describe("database installer", () => {
     const connectionString = "postgresql://dedicated@memory.example/db";
 
     try {
-      process.env.XDG_CONFIG_HOME = userConfig;
-      delete process.env.APPDATA;
+      if (process.platform === "win32") process.env.APPDATA = userConfig;
+      else process.env.XDG_CONFIG_HOME = userConfig;
       process.env[DATABASE_URL_ENV] = connectionString;
       await setupDatabase({
         cwd,
