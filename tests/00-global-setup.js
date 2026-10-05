@@ -9,6 +9,11 @@
 const { Pool } = require('pg');
 const { runMigrations } = require('../scripts/migrate');
 
+// This test-only fallback reuses the developer's configured PostgreSQL URL,
+// while isolating every test object in cm_test before application modules load.
+process.env.CONVERSATION_MEMORY_DATABASE_URL =
+  process.env.TEST_DATABASE_URL || process.env.CONVERSATION_MEMORY_DATABASE_URL || process.env.DATABASE_URL || '';
+
 const TEST_SCHEMA = process.env.TEST_SCHEMA || 'cm_test';
 
 // Estas dos variables tienen que quedar listas ANTES del `before`, no durante.
@@ -24,14 +29,14 @@ process.env.PG_SEARCH_PATH = TEST_SCHEMA;
 // base, y porque el endpoint directo es el que documenta .env.example. Si algún
 // día la suite pasa por el pooler, esta línea se puede quitar: el aislamiento por
 // schema no depende de ella.
-process.env.DATABASE_URL = (process.env.DATABASE_URL || '').replace('-pooler.', '.');
+process.env.CONVERSATION_MEMORY_DATABASE_URL = process.env.CONVERSATION_MEMORY_DATABASE_URL.replace('-pooler.', '.');
 
 async function ensureSchema() {
-  if (!process.env.DATABASE_URL) {
-    throw new Error('DATABASE_URL is required to run the test suite.');
+  if (!process.env.CONVERSATION_MEMORY_DATABASE_URL) {
+    throw new Error('CONVERSATION_MEMORY_DATABASE_URL is required to run the test suite.');
   }
 
-  const bootstrap = new Pool({ connectionString: process.env.DATABASE_URL });
+  const bootstrap = new Pool({ connectionString: process.env.CONVERSATION_MEMORY_DATABASE_URL });
   try {
     const client = await bootstrap.connect();
     try {
@@ -54,5 +59,5 @@ process.env.AI_PROVIDER = 'gemini';
 before(async function () {
   this.timeout(30000);
   await ensureSchema();
-  await runMigrations();
+  await runMigrations({ confirmed: true });
 });

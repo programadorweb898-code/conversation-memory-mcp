@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const { mkdtempSync, readFileSync, writeFileSync, existsSync, mkdirSync } = require("node:fs");
 const { tmpdir } = require("node:os");
-const { join } = require("node:path");
+const { dirname, join } = require("node:path");
 const { install, detectAgent } = require("../src/installer");
 
 describe("installer", () => {
@@ -10,7 +10,25 @@ describe("installer", () => {
     const result = install({ cwd, agent: "opencode" });
     assert.equal(result.agent, "opencode");
     const config = JSON.parse(readFileSync(join(cwd, ".opencode", "opencode.json"), "utf8"));
-    assert.equal(config.mcp.servers["conversation-memory"].type, "local");
+    assert.deepEqual(config.mcp["conversation-memory"], {
+      type: "local",
+      command: ["npx", "-y", "conversation-memory-mcp"],
+    });
+    assert.equal(config.mcp.servers, undefined);
+  });
+
+  it("installs Kilo Code MCP in its project config format", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    const result = install({ cwd, agent: "kilocode" });
+    const config = JSON.parse(readFileSync(join(cwd, ".kilo", "kilo.jsonc"), "utf8"));
+    const server = config.mcp["conversation-memory"];
+
+    assert.equal(result.mcp.file, join(cwd, ".kilo", "kilo.jsonc"));
+    assert.equal(server.type, "local");
+    assert.equal(server.enabled, true);
+    assert.deepEqual(server.command, process.platform === "win32"
+      ? ["cmd", "/c", "npx", "-y", "conversation-memory-mcp"]
+      : ["npx", "-y", "conversation-memory-mcp"]);
   });
 
   it("installs project MCP config for Claude and Cursor by default", () => {
@@ -313,6 +331,104 @@ describe("installer", () => {
     mkdirSync(join(cwd, ".opencode"), { recursive: true });
     writeFileSync(join(cwd, ".opencode", "opencode.json"), "{}");
     assert.equal(detectAgent(cwd), "opencode");
+  });
+
+  it("auto-detects each supported project marker and writes that agent's config", () => {
+    const cases = [
+      {
+        agent: "opencode",
+        marker: ".opencode/opencode.json",
+        markerIsFile: true,
+        config: ".opencode/opencode.json",
+        assertConfig: (cwd) => {
+          const config = JSON.parse(readFileSync(join(cwd, ".opencode", "opencode.json"), "utf8"));
+          assert.equal(config.mcp["conversation-memory"].type, "local");
+          assert.equal(config.mcp.servers, undefined);
+        },
+      },
+      {
+        agent: "opencode",
+        marker: "opencode.json",
+        markerIsFile: true,
+        config: ".opencode/opencode.json",
+        assertConfig: (cwd) => {
+          const config = JSON.parse(readFileSync(join(cwd, ".opencode", "opencode.json"), "utf8"));
+          assert.equal(config.mcp["conversation-memory"].type, "local");
+          assert.equal(config.mcp.servers, undefined);
+        },
+      },
+      {
+        agent: "codex",
+        marker: ".codex",
+        config: ".codex/config.toml",
+        assertConfig: (cwd) => {
+          assert.match(readFileSync(join(cwd, ".codex", "config.toml"), "utf8"), /\[mcp_servers\.conversation-memory\]/);
+        },
+      },
+      {
+        agent: "claude",
+        marker: "CLAUDE.md",
+        markerIsFile: true,
+        config: ".mcp.json",
+        assertConfig: (cwd) => {
+          const config = JSON.parse(readFileSync(join(cwd, ".mcp.json"), "utf8"));
+          assert.equal(config.mcpServers["conversation-memory"].command, "npx");
+        },
+      },
+      {
+        agent: "cursor",
+        marker: ".cursor",
+        config: ".cursor/mcp.json",
+        assertConfig: (cwd) => {
+          const config = JSON.parse(readFileSync(join(cwd, ".cursor", "mcp.json"), "utf8"));
+          assert.equal(config.mcpServers["conversation-memory"].command, "npx");
+        },
+      },
+      {
+        agent: "kimi",
+        marker: ".kimi-code",
+        config: ".kimi-code/mcp.json",
+        assertConfig: (cwd) => {
+          const config = JSON.parse(readFileSync(join(cwd, ".kimi-code", "mcp.json"), "utf8"));
+          assert.equal(config.mcpServers["conversation-memory"].command, "npx");
+        },
+      },
+      {
+        agent: "kiro-ide",
+        marker: ".kiro",
+        config: ".kiro/settings/mcp.json",
+        assertConfig: (cwd) => {
+          const config = JSON.parse(readFileSync(join(cwd, ".kiro", "settings", "mcp.json"), "utf8"));
+          assert.equal(config.mcpServers["conversation-memory"].command, "npx");
+        },
+      },
+      {
+        agent: "copilot",
+        marker: ".github/copilot-instructions.md",
+        markerIsFile: true,
+        config: ".vscode/mcp.json",
+        assertConfig: (cwd) => {
+          const config = JSON.parse(readFileSync(join(cwd, ".vscode", "mcp.json"), "utf8"));
+          assert.equal(config.servers["conversation-memory"].type, "stdio");
+        },
+      },
+    ];
+
+    for (const testCase of cases) {
+      const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+      const marker = join(cwd, testCase.marker);
+      if (testCase.markerIsFile) {
+        mkdirSync(dirname(marker), { recursive: true });
+        writeFileSync(marker, "{}");
+      } else {
+        mkdirSync(marker, { recursive: true });
+      }
+
+      const result = install({ cwd });
+      assert.equal(result.agent, testCase.agent, `detected ${testCase.agent}`);
+      assert.equal(result.mcp.file, join(cwd, testCase.config), `${testCase.agent} config path`);
+      testCase.assertConfig(cwd);
+    }
   });
 
   it("auto-detects an existing agent during install", () => {

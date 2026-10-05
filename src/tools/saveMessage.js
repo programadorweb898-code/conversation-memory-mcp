@@ -2,7 +2,7 @@ const { withAdvisoryLock } = require("../database");
 const { randomUUID } = require("crypto");
 const { z } = require("zod");
 const embeddingQueue = require("../services/embeddingQueue");
-const { prepareForEmbedding } = require("../services/embeddingService");
+const { isEmbeddingsEnabled, prepareForEmbedding } = require("../services/embeddingService");
 const { resolveWriteOwner } = require("../context");
 
 const SaveMessageSchema = z.object({
@@ -61,30 +61,21 @@ async function saveMessage(params) {
   }
 
   const messageId = randomUUID();
-  const authOwner = owner || null;
   const writeOwner = resolveWriteOwner(owner);
 
   // La validación de proyecto/owner y el INSERT deben ser atómicos respecto de
   // otras escrituras sobre la misma sesión. El advisory lock se toma sobre la
   // misma conexión/transacción que ejecuta estas consultas.
-  await withAdvisoryLock(`save-message-session:${sessionId}`, async (client) => {
+  await withAdvisoryLock(`save-message-session:${writeOwner}:${sessionId}`, async (client) => {
     const existingSessionProject = await client.query(
-      `SELECT project, owner FROM conversations WHERE session_id = $1 LIMIT 1`,
-      [sessionId]
+      `SELECT project FROM conversations WHERE session_id = $1 AND owner = $2 LIMIT 1`,
+      [sessionId, writeOwner]
     );
     const existingSession = existingSessionProject.rows[0];
 
     if (existingSession && existingSession.project !== project) {
-      const error = new Error(
-        `La sesión ${sessionId} ya pertenece al proyecto "${existingSession.project}". No se permite mezclar datos entre proyectos.`
-      );
-      error.code = "PROJECT_CONFLICT";
-      throw error;
-    }
-
-    if (existingSession && authOwner && existingSession.owner !== authOwner) {
-      const error = new Error(`La sesión ${sessionId} ya existe y no pertenece a este usuario.`);
-      error.code = "OWNER_CONFLICT";
+      const error = new Error("La sesión no está disponible para este proyecto y usuario.");
+      error.code = "SESSION_UNAVAILABLE";
       throw error;
     }
 
@@ -107,7 +98,7 @@ async function saveMessage(params) {
     );
   });
 
-  const embeddable = prepareForEmbedding(content);
+  const embeddable = isEmbeddingsEnabled() ? prepareForEmbedding(content) : null;
   if (embeddable) {
     embeddingQueue.addTask({ messageId, content: embeddable, role });
     console.log(`Embedding task for message ${messageId} queued.`);

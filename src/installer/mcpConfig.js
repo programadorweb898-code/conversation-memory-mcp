@@ -1,4 +1,4 @@
-const { execFileSync } = require("node:child_process");
+const { sync: execFileSync } = require("cross-spawn");
 const { existsSync, mkdirSync, readFileSync, writeFileSync } = require("node:fs");
 const { homedir } = require("node:os");
 const { dirname, join, resolve } = require("node:path");
@@ -18,7 +18,7 @@ const AGENTS = {
   "kimi-code": { policy: "AGENTS.md", config: "kimi" },
   "gemini-cli": { policy: "GEMINI.md", config: "gemini", supportsGlobal: true },
   "qwen-code": { policy: "AGENTS.md", config: "qwen", supportsGlobal: true },
-  kilocode: { policy: "AGENTS.md", config: "opencode" },
+  kilocode: { policy: "AGENTS.md", config: "kilo" },
   "kiro-ide": { policy: "AGENTS.md", config: "kiro" },
   windsurf: { policy: "AGENTS.md", config: "windsurf", globalOnly: true },
   antigravity: { policy: "GEMINI.md", config: "antigravity", supportsGlobal: true },
@@ -84,9 +84,21 @@ function mergeJsonServer(file, rootPath, server) {
 }
 
 function installOpenCode(cwd) {
-  return mergeJsonServer(join(cwd, ".opencode", "opencode.json"), "mcp.servers", {
+  return mergeJsonServer(join(cwd, ".opencode", "opencode.json"), "mcp", {
     type: "local",
     command: ["npx", "-y", "conversation-memory-mcp"],
+  });
+}
+
+function installKilo(cwd) {
+  const command = process.platform === "win32"
+    ? ["cmd", "/c", "npx", "-y", "conversation-memory-mcp"]
+    : ["npx", "-y", "conversation-memory-mcp"];
+
+  return mergeJsonServer(join(cwd, ".kilo", "kilo.jsonc"), "mcp", {
+    type: "local",
+    command,
+    enabled: true,
   });
 }
 
@@ -303,6 +315,8 @@ function installMcpConfig({ cwd = process.cwd(), agent, scope, homeDir = homedir
   switch (AGENTS[selectedAgent].config) {
     case "opencode":
       return installOpenCode(projectRoot);
+    case "kilo":
+      return installKilo(projectRoot);
     case "codex":
       return installCodex(projectRoot);
     case "claude":

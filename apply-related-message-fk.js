@@ -1,11 +1,12 @@
 const { Client } = require('pg');
 const dotenv = require('dotenv');
+const { getDatabaseUrl } = require('./src/databaseConfig');
 
 dotenv.config();
 
-const rawUrl = process.env.DATABASE_URL;
+const rawUrl = getDatabaseUrl();
 if (!rawUrl) {
-  console.error('DATABASE_URL no está definida.');
+  console.error('CONVERSATION_MEMORY_DATABASE_URL no está definida.');
   process.exit(1);
 }
 

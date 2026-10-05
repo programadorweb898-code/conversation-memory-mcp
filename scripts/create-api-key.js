@@ -11,6 +11,7 @@
 
 const dotenv = require("dotenv");
 dotenv.config();
+const { getDatabaseUrl } = require("../src/databaseConfig");
 
 const {
   createApiKey,
@@ -42,8 +43,8 @@ function output(obj, json) {
 }
 
 async function main() {
-  if (!process.env.DATABASE_URL) {
-    console.error("DATABASE_URL environment variable is required.");
+  if (!getDatabaseUrl()) {
+    console.error("CONVERSATION_MEMORY_DATABASE_URL environment variable is required.");
     process.exit(1);
   }
 

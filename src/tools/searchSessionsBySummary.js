@@ -1,5 +1,5 @@
 const { db } = require("../database");
-const { generateEmbedding } = require("../services/embeddingService");
+const { generateEmbedding, isEmbeddingsEnabled } = require("../services/embeddingService");
 
 /**
  * Busca sesiones relevantes basándose en un resumen semántico y recupera su historial completo.
@@ -11,24 +11,21 @@ async function searchSessionsBySummary({ query, project, owner }) {
   if (!query) throw new Error("La consulta no puede estar vacía.");
   if (!project) throw new Error("El parámetro 'project' es obligatorio.");
 
-  // 1. Generar embedding de la consulta del usuario
-  const queryEmbeddingJson = await generateEmbedding({ role: "search", content: query });
-
-  // 2. Buscar las sesiones cuyos resúmenes sean semánticamente similares (distancia coseno)
-  // Restringido al proyecto (y al owner si corresponde) para aislar los datos.
-  // Ordenamos por similitud (menor distancia = mayor similitud)
-  const sql = `
-    SELECT
-      sse.session_id,
-      (1 - (sse.embedding <=> $1::vector)) AS similarity
-    FROM session_summary_embeddings AS sse
-    JOIN session_summaries AS ss ON ss.session_id = sse.session_id
-    WHERE ss.project = $2 AND ($3::text IS NULL OR ss.owner = $3)
-    ORDER BY sse.embedding <=> $1::vector ASC
-    LIMIT 1
-  `;
-  
-  const results = await db.allAsync(sql, [queryEmbeddingJson, project, owner ?? null]);
+  const results = [];
+  if (isEmbeddingsEnabled()) {
+    const queryEmbeddingJson = await generateEmbedding({ role: "search", content: query });
+    const sql = `
+      SELECT
+        sse.session_id,
+        (1 - (sse.embedding <=> $1::vector)) AS similarity
+      FROM session_summary_embeddings AS sse
+      JOIN session_summaries AS ss ON ss.session_id = sse.session_id AND ss.owner = sse.owner
+      WHERE ss.project = $2 AND ($3::text IS NULL OR ss.owner = $3)
+      ORDER BY sse.embedding <=> $1::vector ASC
+      LIMIT 1
+    `;
+    results.push(...await db.allAsync(sql, [queryEmbeddingJson, project, owner ?? null]));
+  }
 
   if (results.length === 0) {
     const lexicalResults = await db.allAsync(

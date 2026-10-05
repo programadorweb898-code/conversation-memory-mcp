@@ -10,25 +10,17 @@ console.warn = logger.error;
 
 const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
 const { createMcpServer } = require("./createMcpServer");
-const { runMigrations } = require("../scripts/migrate");
 const { startWorker, stopWorker } = require("./services/embeddingWorker");
+const { db } = require("./database");
+const { getDatabaseUrl } = require("./databaseConfig");
 
 dotenv.config();
 
-async function startStdioServer() {
-  if (!process.env.DATABASE_URL) {
-    console.error("Fatal error: DATABASE_URL environment variable is required.");
+async function startStdioServer({ processRef = process } = {}) {
+  if (!getDatabaseUrl()) {
+    console.error("Fatal error: CONVERSATION_MEMORY_DATABASE_URL environment variable is required. Run `conversation-memory-mcp install` first.");
     process.exit(1);
   }
-
-  // The npx package owns the schema lifecycle for the user's Neon database.
-  // Keep migration logs on stderr because stdout is reserved for MCP messages.
-  await runMigrations({
-    logger: {
-      log: (...args) => console.error(...args),
-      error: (...args) => console.error(...args),
-    },
-  });
 
   const server = createMcpServer();
   const transport = new StdioServerTransport();
@@ -41,6 +33,43 @@ async function startStdioServer() {
   if (process.env.ENABLE_EMBEDDING_WORKER !== "false") {
     startWorker();
   }
+
+  let shutdownPromise;
+  const shutdown = (exitCode = 0) => {
+    if (shutdownPromise) return shutdownPromise;
+
+    shutdownPromise = (async () => {
+      try {
+        await stopWorker();
+      } catch (error) {
+        console.error("Error stopping embedding worker:", error.message);
+      }
+
+      try {
+        await server.close();
+      } catch (error) {
+        console.error("Error closing MCP server:", error.message);
+      }
+
+      try {
+        await db.close();
+      } catch (error) {
+        console.error("Error closing database pool:", error.message);
+        if (exitCode === 0) exitCode = 1;
+      }
+
+      processRef.exit(exitCode);
+    })();
+
+    return shutdownPromise;
+  };
+
+  processRef.stdin.once("end", () => { void shutdown(0); });
+  processRef.stdin.once("close", () => { void shutdown(0); });
+  processRef.once("SIGINT", () => { void shutdown(130); });
+  processRef.once("SIGTERM", () => { void shutdown(143); });
+
+  return { server, transport, shutdown };
 }
 
 process.on("SIGINT", () => stopWorker());

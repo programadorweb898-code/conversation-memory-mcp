@@ -11,6 +11,10 @@ const { db } = require("../database");
 const embeddingQueue = require("./embeddingQueue");
 const { MIN_EMBEDDING_CHARS } = require("./embeddingService");
 
+async function checkDatabase() {
+  await db.query("SELECT 1");
+}
+
 async function getHealth() {
   const messages = await db.getAsync(`
     SELECT
@@ -50,10 +54,10 @@ async function getHealth() {
 
   const sessions = await db.getAsync(`
     SELECT
-      count(DISTINCT c.session_id)::int AS total,
-      count(DISTINCT c.session_id) FILTER (WHERE ss.session_id IS NULL)::int AS sin_resumen
+      count(DISTINCT (c.owner, c.session_id))::int AS total,
+      count(DISTINCT (c.owner, c.session_id)) FILTER (WHERE ss.session_id IS NULL)::int AS sin_resumen
     FROM conversations c
-    LEFT JOIN session_summaries ss ON ss.session_id = c.session_id
+    LEFT JOIN session_summaries ss ON ss.session_id = c.session_id AND ss.owner = c.owner
   `);
 
   const summaries = await db.getAsync(`
@@ -61,7 +65,7 @@ async function getHealth() {
       count(*)::int AS total,
       count(*) FILTER (WHERE e.session_id IS NULL)::int AS sin_embedding
     FROM session_summaries ss
-    LEFT JOIN session_summary_embeddings e ON e.session_id = ss.session_id
+    LEFT JOIN session_summary_embeddings e ON e.session_id = ss.session_id AND e.owner = ss.owner
   `);
 
   const total = messages?.total ?? 0;
@@ -92,4 +96,4 @@ async function getHealth() {
   };
 }
 
-module.exports = { getHealth };
+module.exports = { checkDatabase, getHealth };

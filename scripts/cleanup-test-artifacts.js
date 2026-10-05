@@ -15,6 +15,7 @@
 
 const { Pool } = require("pg");
 const dotenv = require("dotenv");
+const { getDatabaseUrl } = require("../src/databaseConfig");
 
 dotenv.config();
 
@@ -52,10 +53,11 @@ function projectPredicate(includes) {
 const EXECUTE = process.argv.includes("--execute");
 
 function getPool() {
-  if (!process.env.DATABASE_URL) {
-    throw new Error("DATABASE_URL environment variable is required.");
+  const connectionString = getDatabaseUrl();
+  if (!connectionString) {
+    throw new Error("CONVERSATION_MEMORY_DATABASE_URL environment variable is required.");
   }
-  return new Pool({ connectionString: process.env.DATABASE_URL });
+  return new Pool({ connectionString });
 }
 
 async function report(client, label, sql, params = []) {

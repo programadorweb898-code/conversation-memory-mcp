@@ -21,11 +21,11 @@ Este modo **no necesita Render ni otro servidor intermedio**.
 
 Cada usuario utiliza su propia base/credencial de Neon. De esta forma, el aislamiento entre usuarios no depende de un `user_id` enviado por el agente ni de un filtro de aplicación.
 
-La seguridad queda apoyada en la propia credencial de PostgreSQL: una instalación solo puede consultar la base a la que su `DATABASE_URL` le da acceso.
+La seguridad queda apoyada en la propia credencial de PostgreSQL: una instalación solo puede consultar la base a la que `CONVERSATION_MEMORY_DATABASE_URL` le da acceso.
 
 ## Importante sobre el aislamiento
 
-No es seguro distribuir una única `DATABASE_URL` privilegiada a todos los usuarios y pretender aislarlos solamente agregando `user_id` a las tablas.
+No es seguro distribuir una única `CONVERSATION_MEMORY_DATABASE_URL` privilegiada a todos los usuarios y pretender aislarlos solamente agregando `user_id` a las tablas.
 
 Un cliente que posee credenciales PostgreSQL puede conectarse directamente a la base y ejecutar SQL fuera de las reglas de la aplicación.
 
@@ -47,18 +47,18 @@ Requisitos:
 - una base PostgreSQL en Neon
 - `pgvector` disponible en esa base
 
-Ejecutar:
+Primero instalá y confirmá el destino dedicado:
 
 ```bash
-npx conversation-memory-mcp
+npx conversation-memory-mcp install --agent opencode
 ```
 
-El proceso necesita `DATABASE_URL`. `MCP_DEFAULT_OWNER` es opcional y usa `local-user` por defecto.
+Después, el cliente inicia `npx conversation-memory-mcp` por stdio. Ese arranque requiere `CONVERSATION_MEMORY_DATABASE_URL`, pero no ejecuta migraciones. `MCP_DEFAULT_OWNER` es opcional y usa `local-user` por defecto.
 
 ### Windows PowerShell
 
 ```powershell
-$env:DATABASE_URL="postgresql://USER:PASSWORD@HOST/DB?sslmode=require"
+$env:CONVERSATION_MEMORY_DATABASE_URL="postgresql://USER:PASSWORD@HOST/DB?sslmode=require"
 $env:MCP_DEFAULT_OWNER="local-user"
 npx conversation-memory-mcp
 ```
@@ -66,20 +66,20 @@ npx conversation-memory-mcp
 ### Linux / macOS / Git Bash
 
 ```bash
-export DATABASE_URL="postgresql://USER:PASSWORD@HOST/DB?sslmode=require"
+export CONVERSATION_MEMORY_DATABASE_URL="postgresql://USER:PASSWORD@HOST/DB?sslmode=require"
 export MCP_DEFAULT_OWNER="local-user"
 npx conversation-memory-mcp
 ```
 
-También puede utilizarse un archivo `.env` cuando el cliente MCP ejecute el proceso en un entorno donde ese archivo sea accesible.
+En scope de proyecto, la URL se guarda en el `.env` del proyecto. En scope global, se guarda en `%APPDATA%/conversation-memory-mcp/.env` (Windows) o `~/.config/conversation-memory-mcp/.env` (Linux/macOS), y el servidor la busca aunque el agente lo ejecute desde otro directorio.
 
 ## Migraciones
 
-El modo `npx` ejecuta las migraciones antes de iniciar el servidor MCP.
+El instalador muestra host, base y schema, y pide confirmar que la base está dedicada exclusivamente a Conversation Memory antes de ejecutar migraciones. No adopta `DATABASE_URL` de la aplicación anfitriona.
 
-Las migraciones son idempotentes y utilizan un advisory lock de PostgreSQL para evitar que dos procesos las ejecuten simultáneamente.
+El arranque stdio no ejecuta migraciones. Para una actualización manual, `npm run migrate` también muestra el destino y pide confirmación. Las migraciones normales son idempotentes y usan un advisory lock de PostgreSQL.
 
-Por lo tanto, el usuario no necesita ejecutar manualmente `npm run migrate` para la primera instalación del MCP.
+Las limpiezas históricas y destructivas están en `migrations/manual/` y no forman parte de la instalación normal; revisalas y hacé un backup antes de ejecutarlas manualmente.
 
 ## Varios dispositivos
 
@@ -110,9 +110,9 @@ Otro agente ───┘
 
 El campo `project` continúa siendo el mecanismo lógico para separar proyectos dentro de la base del usuario, mientras que la propia base/credencial proporciona el aislamiento entre usuarios.
 
-## Seguridad de la DATABASE_URL
+## Seguridad de CONVERSATION_MEMORY_DATABASE_URL
 
-`DATABASE_URL` contiene credenciales de PostgreSQL.
+`CONVERSATION_MEMORY_DATABASE_URL` contiene credenciales de PostgreSQL.
 
 No debe:
 
@@ -122,4 +122,4 @@ No debe:
 - incluirse en capturas de pantalla;
 - guardarse en un repositorio público.
 
-Si una credencial se filtra, debe rotarse desde Neon.
+Si una credencial se filtra, debe rotarse desde Neon. El MCP ignora `DATABASE_URL` genérica para evitar adoptar la base de datos de la aplicación anfitriona.

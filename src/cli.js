@@ -4,6 +4,8 @@ const { startStdioServer } = require("./stdio");
 const { install, detectAgent } = require("./installer");
 const { getDefaultScope, normalizeAgent, normalizeScope, resolveScope } = require("./installer/mcpConfig");
 const { setupDatabase } = require("./installer/database");
+const { confirmMigrationTarget, runMigrations } = require("../scripts/migrate");
+const { getDatabaseUrl } = require("./databaseConfig");
 
 const AGENT_CHOICES = [
   ["1", "opencode", "OpenCode"],
@@ -37,6 +39,7 @@ function printHelp() {
     "  conversation-memory-mcp install     Configura base de datos + MCP + política",
     "  conversation-memory-mcp install --agent <agente>",
     "  conversation-memory-mcp install --agent <agente> --scope <scope>",
+    "  conversation-memory-mcp migrate     Migra una base dedicada tras confirmación",
     "",
     "Scopes disponibles:",
     "  project  Configuración dentro del proyecto (predeterminado)",
@@ -44,9 +47,10 @@ function printHelp() {
     "",
     "Los agentes que solo soportan configuración global se instalan globalmente automáticamente.",
     "",
-    "Si DATABASE_URL no existe, el instalador ofrece:",
-    "  1. usar una conexión PostgreSQL existente",
-    "  2. crear una base temporal con Neon Claimable",
+    "Si CONVERSATION_MEMORY_DATABASE_URL no existe, el instalador ofrece:",
+    "  1. indicar una base dedicada a Conversation Memory",
+    "  2. crear una base dedicada con Neon Claimable",
+    "Las migraciones requieren confirmar el host, la base y el schema antes de ejecutarse.",
     "",
     "Si no puede detectar el agente, muestra un menú para seleccionarlo.",
     "",
@@ -60,6 +64,10 @@ function parseArgs(argv) {
   const command = args[0];
   if (command === "--help" || command === "-h") return { command: "help" };
   if (!command || command === "serve") return { command: "serve" };
+  if (command === "migrate") {
+    if (args.length > 1) throw new Error("migrate no acepta argumentos adicionales");
+    return { command: "migrate" };
+  }
   if (command !== "install") throw new Error(`Comando desconocido: ${command}`);
 
   let agent = null;
@@ -196,6 +204,18 @@ async function main() {
   const parsed = parseArgs(process.argv);
   if (parsed.command === "help") return printHelp();
 
+  if (parsed.command === "migrate") {
+    const connectionString = getDatabaseUrl();
+    if (!connectionString) {
+      throw new Error("CONVERSATION_MEMORY_DATABASE_URL environment variable is required.");
+    }
+    if (!(await confirmMigrationTarget(connectionString))) {
+      throw new Error("Migración cancelada.");
+    }
+    await runMigrations({ confirmed: true });
+    return;
+  }
+
   if (parsed.command === "install") {
     const resolved = await resolveAgent(parsed.agent);
 
@@ -210,7 +230,7 @@ async function main() {
     }
     printSuccess(`Agente seleccionado: ${resolved.agent}${resolved.manual ? " (seleccionado manualmente)" : " (detectado automáticamente)"}`);
     printStep("Configurando base de datos...");
-    const database = await setupDatabase();
+    const database = await setupDatabase({ scope: effectiveScope });
 
     printStep("Configurando MCP y política...");
     const result = install({ agent: resolved.agent, scope: parsed.scope });

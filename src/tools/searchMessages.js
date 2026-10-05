@@ -1,6 +1,6 @@
 const { db } = require("../database");
 const { z } = require("zod");
-const { generateEmbedding } = require("../services/embeddingService");
+const { generateEmbedding, isEmbeddingsEnabled } = require("../services/embeddingService");
 const removeStopwords = require("../services/stopwords");
 const { lexicalSearch, countEmbeddings } = require("../services/lexicalSearch");
 
@@ -71,6 +71,10 @@ async function searchMessages(params) {
           similarity: normalized,
         };
       });
+
+      if (!isEmbeddingsEnabled()) {
+        return await fallbackToLexical();
+      }
     };
 
     // Sin embeddings indexados no hay vía semántica posible: respondemos con

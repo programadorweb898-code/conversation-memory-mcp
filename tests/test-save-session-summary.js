@@ -11,6 +11,7 @@ const { expect } = require("chai");
 const sinon = require("sinon");
 const { v4: uuidv4 } = require("uuid");
 const { db } = require("./test-helper");
+const { createSaveSessionSummaryHandler } = require("../src/mcpTools");
 
 const PROJECT = "test";
 
@@ -65,6 +66,17 @@ describe("Atomicidad de saveSessionSummary", function () {
     delete require.cache[saveSessionSummaryPath];
   });
 
+  it("returns an MCP error when the summary UPSERT makes no change", async () => {
+    const saveSummary = sinon.stub().resolves(false);
+    const handler = createSaveSessionSummaryHandler(saveSummary);
+
+    const result = await handler({ sessionId: "session-a", project: PROJECT, summary: "summary" });
+
+    expect(saveSummary.calledOnce).to.equal(true);
+    expect(result.isError).to.equal(true);
+    expect(result.content[0].text).to.include("No se guardó el resumen");
+  });
+
   afterEach(async () => {
     sinon.restore();
     delete require.cache[saveSessionSummaryPath];
@@ -75,18 +87,20 @@ describe("Atomicidad de saveSessionSummary", function () {
     }
   });
 
-  function readSummary(sessionId) {
+  function readSummary(sessionId, owner) {
+    const ownerClause = owner ? " AND owner = $2" : "";
     return db.getAsync(
-      `SELECT summary, last_processed_seq_id FROM session_summaries WHERE session_id = $1`,
-      [sessionId]
+      `SELECT summary, last_processed_seq_id FROM session_summaries WHERE session_id = $1${ownerClause}`,
+      owner ? [sessionId, owner] : [sessionId]
     );
   }
 
-  function readEmbedding(sessionId) {
+  function readEmbedding(sessionId, owner) {
+    const ownerClause = owner ? " AND owner = $2" : "";
     return db
       .getAsync(
-        `SELECT embedding::text AS embedding FROM session_summary_embeddings WHERE session_id = $1`,
-        [sessionId]
+        `SELECT embedding::text AS embedding FROM session_summary_embeddings WHERE session_id = $1${ownerClause}`,
+        owner ? [sessionId, owner] : [sessionId]
       )
       .then((row) => (row ? row.embedding : null));
   }
@@ -154,6 +168,46 @@ describe("Atomicidad de saveSessionSummary", function () {
     const embedding = await readEmbedding(sessionId);
     expect(embedding).to.not.equal(null);
     expect(leadingValues(embedding)[0]).to.be.closeTo(0.9, 0.001);
+  });
+
+  it("stores summaries and embeddings separately when owners reuse a session id", async () => {
+    const sessionId = `owner-summary-collision-${uuidv4()}`;
+    sessions.push(sessionId);
+    const generateEmbedding = sinon.stub().callsFake(async ({ content }) =>
+      vector(content === "Resumen de A" ? 0.2 : 0.8)
+    );
+    const saveSessionSummary = loadSaveSessionSummary(generateEmbedding);
+
+    await saveSessionSummary({
+      sessionId,
+      project: PROJECT,
+      owner: "owner-a",
+      summary: "Resumen de A",
+      lastProcessedSeqId: 1,
+    });
+    await saveSessionSummary({
+      sessionId,
+      project: PROJECT,
+      owner: "owner-b",
+      summary: "Resumen de B",
+      lastProcessedSeqId: 1,
+    });
+
+    const rows = await db.allAsync(
+      `SELECT owner, summary FROM session_summaries WHERE session_id = $1 ORDER BY owner`,
+      [sessionId]
+    );
+    const embeddings = await db.allAsync(
+      `SELECT owner, embedding::text AS embedding FROM session_summary_embeddings WHERE session_id = $1 ORDER BY owner`,
+      [sessionId]
+    );
+
+    expect(rows.map((row) => [row.owner, row.summary])).to.deep.equal([
+      ["owner-a", "Resumen de A"],
+      ["owner-b", "Resumen de B"],
+    ]);
+    expect(leadingValues(embeddings[0].embedding)[0]).to.be.closeTo(0.2, 0.001);
+    expect(leadingValues(embeddings[1].embedding)[0]).to.be.closeTo(0.8, 0.001);
   });
 
   it("no toca session_summaries si la generación del embedding falla, y conserva el resumen previo", async () => {

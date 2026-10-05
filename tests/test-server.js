@@ -7,6 +7,9 @@ const mcpSdk = require('@modelcontextprotocol/sdk/server/mcp.js');
 const sseSdk = require('@modelcontextprotocol/sdk/server/sse.js');
 const streamableHttpSdk = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const embeddingService = require('../src/services/embeddingService');
+const { db } = require('../src/database');
+const { createApiKey } = require('../src/services/apiKeyService');
+const { sseLimiter, messagesLimiter } = require('../src/middleware');
 
 function resetServerModule() {
   delete require.cache[require.resolve('../src/server')];
@@ -43,7 +46,7 @@ function close(server) {
   });
 }
 
-function openSse(server) {
+function openSse(server, token = 'test-token') {
   return new Promise((resolve, reject) => {
     const { port } = server.address();
     const req = http.get(
@@ -51,7 +54,7 @@ function openSse(server) {
         port,
         path: '/sse',
         headers: {
-          authorization: 'Bearer test-token',
+          authorization: `Bearer ${token}`,
         },
       },
       (res) => {
@@ -174,6 +177,32 @@ describe('Server HTTP layer', () => {
     expect(transportInstance.handlePostMessage.calledOnce).to.be.true;
   });
 
+  it('should reject an SSE session used with a different API key', async function () {
+    this.timeout(30000);
+    const owner = `sse-owner-${Date.now()}`;
+    const first = await createApiKey({ name: `sse-key-a-${Date.now()}`, owner });
+    const second = await createApiKey({ name: `sse-key-b-${Date.now()}`, owner });
+
+    try {
+      const { app } = require('../src/server');
+      httpServer = await listen(app);
+      sseConnection = await openSse(httpServer, first.token);
+      const clientId = sseConnection.res.headers['x-client-id'];
+
+      const response = await request(httpServer)
+        .post('/messages')
+        .set('content-type', 'application/json')
+        .set('authorization', `Bearer ${second.token}`)
+        .set('x-client-id', clientId)
+        .send({ hello: 'world' });
+
+      expect(response.status).to.equal(403);
+      expect(transportInstance.handlePostMessage.called).to.be.false;
+    } finally {
+      await db.runAsync('DELETE FROM api_keys WHERE id = ANY($1)', [[first.key.id, second.key.id]]);
+    }
+  });
+
   it('should forward authenticated POST /mcp through the Streamable HTTP transport', async () => {
     const { app } = require('../src/server');
 
@@ -191,6 +220,81 @@ describe('Server HTTP layer', () => {
     expect(transportInstance.handleRequest.firstCall.args[0].method).to.equal('POST');
   });
 
+  it('should not apply the SSE limit to authenticated /mcp requests', async () => {
+    const { app } = require('../src/server');
+    const clientIp = '198.51.100.77';
+    sseLimiter.resetKey(clientIp);
+    messagesLimiter.resetKey(clientIp);
+
+    try {
+      for (let requestNumber = 0; requestNumber < 11; requestNumber += 1) {
+        const response = await request(app)
+          .post('/mcp')
+          .set('content-type', 'application/json')
+          .set('authorization', 'Bearer test-token')
+          .set('x-forwarded-for', clientIp)
+          .send({ jsonrpc: '2.0', id: requestNumber, method: 'tools/list', params: {} });
+
+        expect(response.status).to.equal(200);
+      }
+    } finally {
+      sseLimiter.resetKey(clientIp);
+      messagesLimiter.resetKey(clientIp);
+    }
+  });
+
+  it('should give each owner an independent message limit across API keys on the same IP', async function () {
+    this.timeout(30000);
+    const { app } = require('../src/server');
+    const ownerA = 'test-rate-limit-owner-a';
+    const ownerB = 'test-rate-limit-owner-b';
+    const keyNames = [
+      'test-rate-limit-owner-a-key-1',
+      'test-rate-limit-owner-a-key-2',
+      'test-rate-limit-owner-b-key',
+    ];
+    const firstKey = await createApiKey({ name: keyNames[0], owner: ownerA });
+    const secondKey = await createApiKey({ name: keyNames[1], owner: ownerA });
+    const otherOwnerKey = await createApiKey({ name: keyNames[2], owner: ownerB });
+    const clientIp = '198.51.100.78';
+    messagesLimiter.resetKey(`owner:${ownerA}`);
+    messagesLimiter.resetKey(`owner:${ownerB}`);
+
+    try {
+      for (let requestNumber = 0; requestNumber < 60; requestNumber += 1) {
+        const response = await request(app)
+          .post('/mcp')
+          .set('content-type', 'application/json')
+          .set('authorization', `Bearer ${firstKey.token}`)
+          .set('x-forwarded-for', clientIp)
+          .send({ jsonrpc: '2.0', id: requestNumber, method: 'tools/list', params: {} });
+
+        expect(response.status).to.equal(200);
+      }
+
+      const sameOwnerResponse = await request(app)
+        .post('/mcp')
+        .set('content-type', 'application/json')
+        .set('authorization', `Bearer ${secondKey.token}`)
+        .set('x-forwarded-for', clientIp)
+        .send({ jsonrpc: '2.0', id: 61, method: 'tools/list', params: {} });
+
+      const otherOwnerResponse = await request(app)
+        .post('/mcp')
+        .set('content-type', 'application/json')
+        .set('authorization', `Bearer ${otherOwnerKey.token}`)
+        .set('x-forwarded-for', clientIp)
+        .send({ jsonrpc: '2.0', id: 62, method: 'tools/list', params: {} });
+
+      expect(sameOwnerResponse.status).to.equal(429);
+      expect(otherOwnerResponse.status).to.equal(200);
+    } finally {
+      messagesLimiter.resetKey(`owner:${ownerA}`);
+      messagesLimiter.resetKey(`owner:${ownerB}`);
+      await db.runAsync('DELETE FROM api_keys WHERE name = ANY($1)', [keyNames]);
+    }
+  });
+
   it('should reject requests without token', async () => {
     const { app } = require('../src/server');
     const response = await request(app).get('/mcp');
@@ -205,7 +309,9 @@ describe('Server HTTP layer', () => {
 
   it('should report store metrics on /health without leaking project or owner names', async () => {
     const { app } = require('../src/server');
-    const response = await request(app).get('/health');
+    const response = await request(app)
+      .get('/health/details')
+      .set('authorization', 'Bearer test-token');
 
     expect(response.status).to.equal(200);
     expect(response.body.status).to.equal('ok');
@@ -216,6 +322,23 @@ describe('Server HTTP layer', () => {
 
     const serialized = JSON.stringify(response.body);
     expect(serialized).to.not.match(/local-user|test-owner|"project"/);
+  });
+
+  it('should require authentication for detailed health metrics', async () => {
+    const { app } = require('../src/server');
+    const response = await request(app).get('/health/details');
+    expect(response.status).to.equal(401);
+  });
+
+  it('should return 503 when the public health database ping fails', async () => {
+    const { db } = require('../src/database');
+    sinon.stub(db, 'query').rejects(new Error('database unavailable'));
+    const { app } = require('../src/server');
+
+    const response = await request(app).get('/health');
+
+    expect(response.status).to.equal(503);
+    expect(response.body).to.deep.equal({ status: 'degraded', database: 'unreachable' });
   });
 
   it('should not count messages too short to embed as pending work on /health', async () => {

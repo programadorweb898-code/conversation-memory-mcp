@@ -55,23 +55,26 @@ npx conversation-memory-mcp install
 
 El instalador realiza en este orden:
 
-1. busca `DATABASE_URL` en el entorno o en `.env`;
-2. si no existe, permite introducir una conexión PostgreSQL existente o crear una base temporal mediante Neon Claimable;
-3. valida la conexión;
-4. ejecuta las migraciones necesarias;
-5. agrega `.env` a `.gitignore` si todavía no está ignorado;
-6. detecta/configura el agente y agrega la política de prioridad de memoria.
+1. busca `CONVERSATION_MEMORY_DATABASE_URL` en el entorno o en `.env`;
+2. si no existe, permite introducir una conexión dedicada exclusivamente a Conversation Memory o crear una base mediante Neon Claimable;
+3. valida la conexión y muestra host, base y schema;
+4. solicita confirmación explícita antes de ejecutar migraciones;
+5. guarda la URL dedicada en `.env` sin cambiar `DATABASE_URL` de la aplicación anfitriona;
+6. agrega `.env` a `.gitignore` si todavía no está ignorado;
+7. detecta/configura el agente y agrega la política de prioridad de memoria.
 
 La opción Neon Claimable permite empezar sin una cuenta Neon. El instalador ejecuta automáticamente el comando de Neon para crear la base temporal y el CLI de Neon muestra un enlace de reclamación durante ese paso. Guardá ese enlace y abrilo para transferir el proyecto a tu organización de Neon. El proyecto sin reclamar expira después de 72 horas. Para una base permanente, se recomienda reclamarla o utilizar una conexión PostgreSQL existente.
 
-Si ya tenés una `DATABASE_URL`, no se crea ninguna base nueva:
+Si ya tenés una base **dedicada a Conversation Memory**, podés configurar:
 
 ```env
-DATABASE_URL=postgresql://USER:PASSWORD@HOST/DB?sslmode=require
+CONVERSATION_MEMORY_DATABASE_URL=postgresql://USER:PASSWORD@HOST/DB?sslmode=require
 MCP_DEFAULT_OWNER=local-user
 ```
 
-Las migraciones también se ejecutan cuando el servidor se inicia normalmente.
+El instalador no adopta `DATABASE_URL` automáticamente. No apuntes esta variable a una base de otra aplicación. Las migraciones se ejecutan durante la instalación solo después de confirmar el destino; iniciar el MCP por stdio no ejecuta migraciones.
+
+En instalación de proyecto, la URL dedicada se guarda en el `.env` de ese proyecto. En instalación global, se guarda en el archivo de configuración del usuario (`%APPDATA%/conversation-memory-mcp/.env` en Windows o `~/.config/conversation-memory-mcp/.env` en Linux/macOS), para que el MCP funcione aunque el agente arranque desde otro directorio.
 
 ## Instalación de la política del agente
 
@@ -147,13 +150,14 @@ para que varios usuarios/dispositivos compartan una misma instancia (por
 ejemplo en Render).
 
 **Diferencia clave con el modo local:** acá el aislamiento entre usuarios NO
-depende de bases de datos separadas — todos comparten el mismo `DATABASE_URL`,
+depende de bases de datos separadas — los usuarios autorizados del servidor
+comparten la base dedicada configurada en `CONVERSATION_MEMORY_DATABASE_URL`,
 y el aislamiento lo da el token de cada usuario (`owner`), nunca un dato que
 mande el cliente.
 
 ### Variables de entorno requeridas
 
-- `DATABASE_URL`: la base compartida por todos los usuarios del servidor.
+- `CONVERSATION_MEMORY_DATABASE_URL`: la base dedicada compartida por los usuarios autorizados del servidor.
 - `MCP_BEARER_TOKEN`: token maestro de administración. El proceso no arranca
   sin esta variable.
 - `PORT` (opcional): puerto HTTP. Render la inyecta automáticamente.
@@ -162,7 +166,7 @@ mande el cliente.
 
 1. Desplegar el servicio con `node src/server.js` como comando de inicio
    (en Render: Web Service, Node, start command `node src/server.js`).
-2. Definir `DATABASE_URL` y `MCP_BEARER_TOKEN` en las variables de entorno del
+2. Definir `CONVERSATION_MEMORY_DATABASE_URL` y `MCP_BEARER_TOKEN` en las variables de entorno del
    servicio.
 3. Generar una API key por usuario/dispositivo:
 
@@ -285,7 +289,7 @@ Scripts principales:
 npm test
 npm run lint
 npm run check
-npm run migrate
+npx conversation-memory-mcp migrate
 ```
 
 ### Scripts de `scripts/`
@@ -293,6 +297,10 @@ npm run migrate
 El campo `files` de `package.json` publica solo tres: `migrate.js`,
 `create-api-key.js` e `install-plugin.js`. Son los que hacen falta para
 instalar el MCP. El resto queda en el repo y **no viaja en el paquete**.
+
+`npx conversation-memory-mcp migrate` muestra host, base y schema, y exige confirmación explícita antes de aplicar migraciones. `npm run migrate` es el runner de desarrollo; sus callers programáticos deben pasar autorización.
+
+Las operaciones históricas y destructivas se mantienen fuera del loader automático en `migrations/manual/`. No se ejecutan durante `install` ni al iniciar stdio; requieren revisión del destino y backup antes de aplicarse manualmente.
 
 **No ejecutar (LEGACY).** `migrate_sequence.js`, `migrate_to_pgvector.js` y
 `migrate_project_backfill.js` son migraciones de una sola vez, aplicadas sobre

@@ -2,11 +2,31 @@ const fs = require("fs");
 const path = require("path");
 const { Pool } = require("pg");
 const dotenv = require("dotenv");
+const readline = require("node:readline/promises");
+const { stdin, stdout } = require("node:process");
+const { describeDatabaseTarget, getDatabaseUrl } = require("../src/databaseConfig");
 
 dotenv.config();
 
 const MIGRATIONS_DIR = path.join(__dirname, "..", "migrations");
 const MIGRATION_LOCK_KEY = 19082026;
+
+async function confirmMigrationTarget(connectionString, input = stdin, output = stdout) {
+  const target = describeDatabaseTarget(connectionString);
+  output.write("Destino de migración:\n");
+  output.write(`  Host: ${target.host}\n`);
+  output.write(`  Base: ${target.database}\n`);
+  output.write(`  Schema: ${process.env.PG_SEARCH_PATH || "public"}\n`);
+  output.write("Confirmá que esta base está dedicada exclusivamente a Conversation Memory y autorizás las migraciones [s/N]: ");
+
+  const prompt = readline.createInterface({ input, output });
+  try {
+    const answer = (await prompt.question("")).trim().toLowerCase();
+    return ["s", "si", "sí", "y", "yes"].includes(answer);
+  } finally {
+    prompt.close();
+  }
+}
 
 function getDefaultOwner() {
   return process.env.MCP_DEFAULT_OWNER || "local-user";
@@ -33,12 +53,13 @@ function getSearchPath() {
 }
 
 function getPool() {
-  if (!process.env.DATABASE_URL) {
-    throw new Error("DATABASE_URL environment variable is required.");
+  const connectionString = getDatabaseUrl();
+  if (!connectionString) {
+    throw new Error("CONVERSATION_MEMORY_DATABASE_URL environment variable is required.");
   }
 
   return new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString,
   });
 }
 
@@ -57,7 +78,11 @@ function loadMigrations() {
     });
 }
 
-async function runMigrations({ logger = console } = {}) {
+async function runMigrations({ logger = console, confirmed = false } = {}) {
+  if (!confirmed) {
+    throw new Error("Migration refused: confirm the dedicated Conversation Memory database before running migrations.");
+  }
+
   let pool;
   let client;
   let connectionErrorLogged = false;
@@ -71,7 +96,7 @@ async function runMigrations({ logger = console } = {}) {
     } catch (error) {
       connectionErrorLogged = true;
       logger.error(
-        "No se pudo conectar a la base de datos. Revisá que DATABASE_URL en tu .env sea correcta y que el proyecto de Neon esté activo."
+        "No se pudo conectar a la base de datos. Revisá CONVERSATION_MEMORY_DATABASE_URL y que el proyecto de Neon esté activo."
       );
       logger.error(error);
       throw error;
@@ -135,11 +160,24 @@ async function runMigrations({ logger = console } = {}) {
 }
 
 if (require.main === module) {
-  runMigrations().catch(() => process.exit(1));
+  (async () => {
+    const connectionString = getDatabaseUrl();
+    if (!connectionString) {
+      throw new Error("CONVERSATION_MEMORY_DATABASE_URL environment variable is required.");
+    }
+
+    const confirmed = await confirmMigrationTarget(connectionString);
+    if (!confirmed) throw new Error("Migración cancelada.");
+    await runMigrations({ confirmed: true });
+  })().catch((error) => {
+    console.error(error.message);
+    process.exit(1);
+  });
 }
 
 module.exports = {
   loadMigrations,
+  confirmMigrationTarget,
   runMigrations,
   resolveEnvPlaceholders,
   getDefaultOwner,

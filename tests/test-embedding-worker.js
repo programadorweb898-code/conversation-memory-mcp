@@ -230,6 +230,80 @@ describe("Embedding Worker", function () {
   });
 
   describe("startWorker", () => {
+    it("waits for an active batch when stopping despite repeated ticks", async () => {
+      await insertMessage("Mensaje para validar el apagado del worker");
+
+      let resolveBatch;
+      const generatedBatch = new Promise((resolve) => {
+        resolveBatch = resolve;
+      });
+      const generateEmbeddings = sinon.stub(embeddingService, "generateEmbeddings").returns(generatedBatch);
+      sinon.stub(embeddingService, "saveEmbedding").resolves();
+
+      let tick;
+      const timer = { unref: sinon.spy() };
+      const setTimeoutStub = sinon.stub(global, "setTimeout").callsFake((callback) => {
+        tick = callback;
+        return timer;
+      });
+
+      try {
+        embeddingWorker.startWorker();
+        expect(timer.unref.calledOnce).to.equal(true);
+
+        const firstTick = tick();
+        const secondTick = tick();
+        expect(firstTick).to.be.a("promise");
+        expect(secondTick).to.be.a("promise");
+
+        const deadline = Date.now() + 10000;
+        while (!generateEmbeddings.called && Date.now() < deadline) {
+          await new Promise((resolve) => setImmediate(resolve));
+        }
+        expect(generateEmbeddings.calledOnce).to.equal(true);
+
+        let stopped = false;
+        const stopPromise = embeddingWorker.stopWorker().then(() => {
+          stopped = true;
+        });
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(stopped).to.equal(false);
+
+        resolveBatch([JSON.stringify(fakeEmbedding(0.6))]);
+        await Promise.all([firstTick, secondTick, stopPromise]);
+        expect(stopped).to.equal(true);
+        expect(embeddingQueue.getProcessingStatus()).to.equal(false);
+      } finally {
+        if (embeddingQueue.getProcessingStatus()) {
+          resolveBatch([JSON.stringify(fakeEmbedding(0.6))]);
+          await embeddingWorker.stopWorker();
+        }
+        setTimeoutStub.restore();
+      }
+    });
+
+    it("does not count model infrastructure failures against individual messages", async () => {
+      const messageId = await insertMessage("Mensaje pendiente durante una caída del modelo");
+      const infrastructureError = new Error("model download unavailable");
+      infrastructureError.code = "EMBEDDING_INFRASTRUCTURE";
+      infrastructureError.retryable = true;
+      sinon.stub(embeddingService, "generateEmbeddings").rejects(infrastructureError);
+
+      const didWork = await embeddingWorker.processNextEmbeddingTask();
+      const failure = await db.getAsync(
+        "SELECT attempts FROM embedding_failures WHERE message_id = $1",
+        [messageId]
+      );
+      const embedding = await db.getAsync(
+        "SELECT message_id FROM message_embeddings WHERE message_id = $1",
+        [messageId]
+      );
+
+      expect(didWork).to.equal(false);
+      expect(failure).to.equal(undefined);
+      expect(embedding).to.equal(undefined);
+    });
+
     it("no genera unhandledRejection cuando processNextEmbeddingTask rechaza", async () => {
       // El intervalo de startWorker captura la referencia local de
       // processNextEmbeddingTask, así que no alcanza con stubear el export:
@@ -249,18 +323,20 @@ describe("Embedding Worker", function () {
       const unhandled = [];
       const onUnhandled = (reason) => unhandled.push(reason);
       process.on("unhandledRejection", onUnhandled);
+      const timer = { unref: sinon.spy() };
 
       // Se captura el callback que registró startWorker en lugar de usar
       // timers: el intervalo es de 5s y el test necesita esperar a que el
       // trabajo termine de verdad, no a que arrancó.
       let tick;
-      const setIntervalStub = sinon.stub(global, "setInterval").callsFake((fn) => {
+      const setTimeoutStub = sinon.stub(global, "setTimeout").callsFake((fn) => {
         tick = fn;
-        return { unref() {} };
+        return timer;
       });
 
       try {
         embeddingWorker.startWorker();
+        expect(timer.unref.calledOnce).to.equal(true);
         tick();
 
         // El 23503 hace que recordEmbeddingFailure intente insertar en una
@@ -276,7 +352,8 @@ describe("Embedding Worker", function () {
         await new Promise((resolve) => setImmediate(resolve));
         await new Promise((resolve) => setImmediate(resolve));
       } finally {
-        setIntervalStub.restore();
+        await embeddingWorker.stopWorker();
+        setTimeoutStub.restore();
         process.off("unhandledRejection", onUnhandled);
       }
 

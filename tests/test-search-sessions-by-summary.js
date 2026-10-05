@@ -48,9 +48,9 @@ describe("Search Sessions By Summary", function () {
       [sessionId, project, owner, summary]
     );
     await db.runAsync(
-      `INSERT INTO session_summary_embeddings (session_id, embedding)
-       VALUES ($1, $2)`,
-      [sessionId, summaryEmbedding]
+      `INSERT INTO session_summary_embeddings (session_id, owner, embedding)
+       VALUES ($1, $2, $3)`,
+      [sessionId, owner, summaryEmbedding]
     );
   }
 
@@ -122,9 +122,9 @@ describe("Search Sessions By Summary", function () {
       [sessionId, "other-project", ownerA, "Resumen de otro proyecto"]
     );
     await db.runAsync(
-      `INSERT INTO session_summary_embeddings (session_id, embedding)
-       VALUES ($1, $2)`,
-      [sessionId, fakeEmbedding(0.1)]
+      `INSERT INTO session_summary_embeddings (session_id, owner, embedding)
+       VALUES ($1, $2, $3)`,
+      [sessionId, ownerA, fakeEmbedding(0.1)]
     );
 
     const history = await searchSessionsBySummary({

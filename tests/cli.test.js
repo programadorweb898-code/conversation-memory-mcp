@@ -167,6 +167,11 @@ describe("cli", () => {
     });
   });
 
+  it("accepts the explicit migrate subcommand", () => {
+    assert.deepEqual(parseArgs(["node", "cli.js", "migrate"]), { command: "migrate" });
+    assert.throws(() => parseArgs(["node", "cli.js", "migrate", "--force"]), /no acepta argumentos/);
+  });
+
 
   it("accepts GitHub Copilot CLI as a supported agent", () => {
     assert.deepEqual(parseArgs(["node", "cli.js", "install", "--agent", "github-copilot"]), {

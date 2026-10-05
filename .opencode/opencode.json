@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "conversation-memory": {
+        "type": "local",
+        "command": [
+          "npx",
+          "-y",
+          "conversation-memory-mcp"
+        ]
+      }
+    }
+  }
+}

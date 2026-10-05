@@ -25,3 +25,13 @@ Cuando el usuario pregunte por una sesión o período anterior:
 - Si no existe un resumen adecuado, recuperá los mensajes originales necesarios y generá la respuesta en el momento.
 - `conversation-memory-mcp` proporciona el contexto persistente; la respuesta final la genera el agente.
 - No crees un nuevo resumen persistente únicamente por responder una pregunta histórica. Los resúmenes persistentes se generan mediante `finalizeSession`.
+
+<!-- conversation-memory-mcp:memory-priority-policy -->
+## Prioridad de memoria conversacional
+
+Cuando una pregunta requiera información sobre trabajo anterior, sesiones anteriores, historial del proyecto, qué se habló, qué se hizo, qué se probó o qué ocurrió en una conversación, consulta primero `conversation-memory-mcp`.
+
+No utilices el historial de la sesión actual o del IDE como fuente de verdad para recuperar información histórica cuando `conversation-memory-mcp` esté disponible.
+
+Usa siempre el parámetro `project` al consultar `conversation-memory-mcp`.
+<!-- /conversation-memory-mcp:memory-priority-policy -->

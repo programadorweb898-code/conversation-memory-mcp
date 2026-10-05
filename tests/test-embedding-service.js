@@ -5,6 +5,7 @@ const {
   generateEmbeddings,
   saveEmbedding,
   getEmbedding,
+  createRetryablePromise,
 } = require("../src/services/embeddingService");
 const { db } = require("./test-helper");
 
@@ -21,6 +22,26 @@ describe("Embedding Service", function () {
   after(async () => {
     await db.runAsync("DELETE FROM message_embeddings WHERE message_id = $1", [testMessageId]);
     await db.runAsync("DELETE FROM conversations WHERE id = $1", [testMessageId]);
+  });
+
+  it("retries model initialization after a transient failure", async () => {
+    let attempts = 0;
+    const initialize = createRetryablePromise(async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("offline");
+      return "initialized";
+    });
+
+    let failure;
+    try {
+      await initialize();
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).to.be.instanceOf(Error);
+    expect(failure.message).to.equal("offline");
+    expect(await initialize()).to.equal("initialized");
+    expect(attempts).to.equal(2);
   });
 
   it("genera un embedding de 384 dimensiones a partir de un mensaje", async () => {

@@ -9,7 +9,7 @@ const { db } = require("../database");
 async function getSessionSummary({ sessionId, project, owner }) {
   if (!project) throw new Error("El parámetro 'project' es obligatorio.");
   try {
-    const sql = `SELECT summary, timestamp FROM session_summaries WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)`;
+    const sql = `SELECT summary, timestamp FROM session_summaries WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3) ORDER BY owner LIMIT 1`;
     const row = await db.getAsync(sql, [sessionId, project, owner ?? null]);
     return row || null;
   } catch (err) {

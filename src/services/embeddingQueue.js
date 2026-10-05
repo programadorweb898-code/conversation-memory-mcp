@@ -2,6 +2,10 @@
 
 const embeddingQueue = [];
 let processing = false; // Flag to prevent multiple workers processing the queue
+const configuredMaxQueueSize = Number(process.env.EMBEDDING_QUEUE_MAX_SIZE || 1000);
+const maxQueueSize = Number.isInteger(configuredMaxQueueSize) && configuredMaxQueueSize > 0
+  ? configuredMaxQueueSize
+  : 1000;
 
 /**
  * Adds a task to the embedding queue.
@@ -11,8 +15,13 @@ let processing = false; // Flag to prevent multiple workers processing the queue
  * @param {string} task.content
  */
 function addTask(task) {
+  if (embeddingQueue.length >= maxQueueSize) {
+    console.warn(`Embedding queue is full (${maxQueueSize}); message ${task.messageId} will be picked up from the database later.`);
+    return false;
+  }
   embeddingQueue.push(task);
   console.log(`Task added to embedding queue: ${task.messageId}. Queue size: ${embeddingQueue.length}`);
+  return true;
 }
 
 /**

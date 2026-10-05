@@ -129,7 +129,7 @@ describe('saveMessage', () => {
     }
 
     expect(error).to.exist;
-    expect(error.code).to.equal('PROJECT_CONFLICT');
+    expect(error.code).to.equal('SESSION_UNAVAILABLE');
     expect(queueStub.calledOnce).to.be.true;
   });
 
@@ -147,7 +147,9 @@ describe('saveMessage', () => {
 
     expect(fulfilled).to.have.length(1);
     expect(rejected).to.have.length(1);
-    expect(rejected[0].reason.code).to.equal('PROJECT_CONFLICT');
+    expect(rejected[0].reason.code).to.equal('SESSION_UNAVAILABLE');
+    expect(rejected[0].reason.message).to.not.include('proj-a');
+    expect(rejected[0].reason.message).to.not.include('proj-b');
 
     const messages = await db.allAsync(
       `SELECT project FROM conversations WHERE session_id = $1`,

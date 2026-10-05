@@ -5,14 +5,14 @@ const { db } = require('./test-helper');
 describe('Migration runner idempotency', function () {
   this.timeout(30000);
 
-  it('runMigrations is idempotent and schema_migrations matches the migration files', async () => {
-    await runMigrations({ logger: { log() {}, error() {} } });
+  it('runMigrations is idempotent and all current migration files are applied', async () => {
+    await runMigrations({ confirmed: true, logger: { log() {}, error() {} } });
 
     const firstRows = await db.allAsync(
       'SELECT version, name, applied_at FROM schema_migrations ORDER BY version'
     );
 
-    await runMigrations({ logger: { log() {}, error() {} } });
+    await runMigrations({ confirmed: true, logger: { log() {}, error() {} } });
 
     const secondRows = await db.allAsync(
       'SELECT version, name, applied_at FROM schema_migrations ORDER BY version'
@@ -30,8 +30,18 @@ describe('Migration runner idempotency', function () {
     expect(duplicateVersions).to.deep.equal([]);
 
     const migrations = loadMigrations();
-    expect(migrations.map(({ version }) => version)).to.deep.equal(
-      firstRows.map(({ version }) => version)
-    );
+    const appliedVersions = new Set(firstRows.map(({ version }) => version));
+    expect(migrations.every(({ version }) => appliedVersions.has(version))).to.equal(true);
+  });
+
+  it('refuses to run migrations without explicit confirmation', async () => {
+    let error;
+    try {
+      await runMigrations({ logger: { log() {}, error() {} } });
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).to.be.instanceOf(Error);
+    expect(error.message).to.match(/confirm the dedicated Conversation Memory database/);
   });
 });

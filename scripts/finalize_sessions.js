@@ -1,11 +1,13 @@
 const { db } = require("../src/database");
-const { runMigrations } = require("./migrate");
+const { getDatabaseUrl } = require("../src/databaseConfig");
 const listSessions = require("../src/tools/listSessions");
 const finalizeSession = require("../src/tools/finalizeSession");
 
 async function run() {
     try {
-        await runMigrations();
+        if (!getDatabaseUrl()) {
+            throw new Error("CONVERSATION_MEMORY_DATABASE_URL environment variable is required.");
+        }
 
         const projects = await db.allAsync(
             `SELECT DISTINCT project FROM conversations WHERE project IS NOT NULL`

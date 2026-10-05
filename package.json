@@ -6,6 +6,16 @@
   "bin": {
     "conversation-memory-mcp": "src/cli.js"
   },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "memory",
+    "postgresql",
+    "pgvector",
+    "neon"
+  ],
+  "author": "programadorweb898-code",
+  "license": "ISC",
   "scripts": {
     "start": "node src/server.js",
     "start:stdio": "node src/stdio.js",
@@ -34,8 +44,9 @@
   ],
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "@modelcontextprotocol/sdk": "^1.30.0",
     "@huggingface/transformers": "^4.3.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "cross-spawn": "^7.0.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",
@@ -50,6 +61,9 @@
     "mocha": "^12.0.2",
     "sinon": "^22.0.0",
     "supertest": "^7.2.2"
+  },
+  "directories": {
+    "test": "tests"
   },
   "repository": {
     "type": "git",

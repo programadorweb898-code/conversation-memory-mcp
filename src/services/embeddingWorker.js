@@ -2,14 +2,26 @@
 
 const embeddingQueue = require("./embeddingQueue");
 const embeddingService = require("./embeddingService");
-const { prepareForEmbedding, MIN_EMBEDDING_CHARS } = require("./embeddingService");
+const { isEmbeddingsEnabled, prepareForEmbedding, MIN_EMBEDDING_CHARS } = require("./embeddingService");
 const { db } = require("../database");
 
-const workerIntervalMs = 5000; // Poll the database/queue every 5 seconds
+const initialPollIntervalMs = positiveInteger(process.env.EMBEDDING_POLL_INTERVAL_MS, 5000);
+const maxPollIntervalMs = positiveInteger(process.env.EMBEDDING_MAX_POLL_INTERVAL_MS, 900000);
 const maxEmbeddingAttempts = 3;
 const batchSize = Number(process.env.EMBEDDING_BATCH_SIZE || 10);
 // Violación de clave foránea: el mensaje fue borrado mientras esperaba.
 const FK_VIOLATION = "23503";
+
+function positiveInteger(value, fallback) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function isInfrastructureFailure(error) {
+  const code = String(error?.code || "");
+  return error?.retryable === true || code === "EMBEDDING_INFRASTRUCTURE" ||
+    code.startsWith("08") || ["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EAI_AGAIN", "57P01", "53300"].includes(code);
+}
 
 // Si el mensaje ya no existe, no hay nada que registrar: embedding_failures
 // tiene la misma FK contra conversations, así que intentar insertar también
@@ -19,6 +31,11 @@ async function recordEmbeddingFailure(messageId, error) {
   const errorMessage = error && error.message ? error.message : String(error);
 
   try {
+    if (isInfrastructureFailure(error)) {
+      console.error(`Embedding infrastructure unavailable; ${messageId} remains pending:`, errorMessage);
+      return;
+    }
+
     if (error && error.code === FK_VIOLATION) {
       console.log(`No se registra fallo de embedding para ${messageId}: el mensaje ya no existe.`);
       return;
@@ -61,15 +78,20 @@ async function processBatchSerially(batchTasks) {
         console.log(`Descartada la tarea de ${messageId}: el mensaje ya no existe.`);
         continue;
       }
+      if (isInfrastructureFailure(error)) {
+        console.error(`Embedding infrastructure unavailable; ${messageId} remains pending:`, error.message);
+        return false;
+      }
       await recordEmbeddingFailure(messageId, error);
       console.error(`Error processing embedding for message ${messageId}:`, error);
     }
   }
+  return true;
 }
 
 async function processNextEmbeddingTask() {
   if (embeddingQueue.getProcessingStatus()) {
-    return;
+    return false;
   }
 
   embeddingQueue.setProcessingStatus(true);
@@ -113,7 +135,7 @@ async function processNextEmbeddingTask() {
     batchTasks = [...new Map(batchTasks.map((task) => [task.messageId, task])).values()];
 
     if (batchTasks.length === 0) {
-      return;
+      return false;
     }
 
     console.log(`Processing embedding batch of ${batchTasks.length} messages.`);
@@ -134,34 +156,81 @@ async function processNextEmbeddingTask() {
           console.log(`Descartada la tarea de ${messageId}: el mensaje ya no existe.`);
           continue;
         }
+        if (isInfrastructureFailure(error)) {
+          console.error(`Embedding infrastructure unavailable; ${messageId} remains pending:`, error.message);
+          return false;
+        }
         await recordEmbeddingFailure(messageId, error);
         console.error(`Error processing embedding for message ${messageId}:`, error);
       }
     }
+    return true;
   } catch (error) {
     console.error(`Error in embedding worker batch:`, error);
-    await processBatchSerially(batchTasks);
+    if (isInfrastructureFailure(error) || batchTasks.length === 0) return false;
+    return await processBatchSerially(batchTasks);
   } finally {
     embeddingQueue.setProcessingStatus(false);
   }
 }
 
-let workerInterval;
+let workerTimer;
+let workerTask;
+let workerRunning = false;
+let idlePollIntervalMs = initialPollIntervalMs;
 
-function startWorker() {
-  console.log("Starting embedding worker (model will load on first use)...");
-  // El intervalo nunca puede dejar una promesa rechazada sin manejar: eso
-  // escalaba a unhandledRejection ymataba el proceso.
-  workerInterval = setInterval(() => {
-    processNextEmbeddingTask().catch((error) => {
+function runWorkerTick() {
+  if (workerTask) return workerTask;
+
+  workerTask = processNextEmbeddingTask()
+    .catch((error) => {
       console.error("Error inesperado en el worker de embeddings:", error);
+    })
+    .finally(() => {
+      workerTask = undefined;
     });
-  }, workerIntervalMs);
+
+  return workerTask;
 }
 
-function stopWorker() {
+function startWorker() {
+  if (workerRunning) return;
+  if (!isEmbeddingsEnabled()) {
+    console.log("Embedding worker disabled by ENABLE_EMBEDDINGS=false.");
+    return;
+  }
+
+  console.log("Starting embedding worker (model will load on first use)...");
+  workerRunning = true;
+  idlePollIntervalMs = initialPollIntervalMs;
+  scheduleWorkerTick(idlePollIntervalMs);
+}
+
+function scheduleWorkerTick(delay) {
+  if (!workerRunning) return;
+  workerTimer = setTimeout(async () => {
+    workerTimer = undefined;
+    let didWork = false;
+    try {
+      didWork = await runWorkerTick();
+    } catch (error) {
+      console.error("Error inesperado en el worker de embeddings:", error);
+    }
+
+    idlePollIntervalMs = didWork
+      ? initialPollIntervalMs
+      : Math.min(maxPollIntervalMs, idlePollIntervalMs * 2);
+    scheduleWorkerTick(idlePollIntervalMs);
+  }, delay);
+  workerTimer.unref?.();
+}
+
+async function stopWorker() {
   console.log("Stopping embedding worker...");
-  clearInterval(workerInterval);
+  workerRunning = false;
+  clearTimeout(workerTimer);
+  workerTimer = undefined;
+  if (workerTask) await workerTask;
 }
 
 module.exports = {

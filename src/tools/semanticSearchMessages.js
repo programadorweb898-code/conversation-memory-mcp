@@ -1,5 +1,5 @@
 const { db } = require("../database");
-const { generateEmbedding } = require("../services/embeddingService");
+const { generateEmbedding, isEmbeddingsEnabled } = require("../services/embeddingService");
 const { lexicalSearch, countEmbeddings } = require("../services/lexicalSearch");
 
 async function semanticSearchMessages({ query, project, agentId, limit = 5, owner }) {
@@ -19,6 +19,10 @@ async function semanticSearchMessages({ query, project, agentId, limit = 5, owne
       similarity: Number(row.lexical_score) || 0,
     }));
   };
+
+  if (!isEmbeddingsEnabled()) {
+    return await fallbackToLexical();
+  }
 
   // Sin embeddings indexados no hay vía semántica posible: respondemos con
   // búsqueda léxica sin cargar el modelo (rápida y siempre disponible).

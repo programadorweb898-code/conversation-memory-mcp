@@ -1,41 +1,35 @@
 const generateSessionSummary = require("./generateSessionSummary");
 const saveSessionSummary = require("./saveSessionSummary");
 const { db } = require("../database");
+const { resolveWriteOwner } = require("../context");
 
 async function finalizeSession({ sessionId, project, owner }) {
   if (!project) throw new Error("El parámetro 'project' es obligatorio.");
   console.log(`Finalizando sesión: ${sessionId}`);
+  const writeOwner = resolveWriteOwner(owner);
 
   const existingSession = await db.getAsync(
-    "SELECT project, owner FROM conversations WHERE session_id = $1 LIMIT 1",
-    [sessionId]
+    "SELECT project FROM conversations WHERE session_id = $1 AND owner = $2 LIMIT 1",
+    [sessionId, writeOwner]
   );
 
   if (existingSession?.project && existingSession.project !== project) {
-    const error = new Error(
-      `La sesión ${sessionId} ya pertenece al proyecto "${existingSession.project}". No se permite mezclar datos entre proyectos.`
-    );
-    error.code = "PROJECT_CONFLICT";
-    throw error;
-  }
-
-  if (existingSession?.owner && existingSession.owner !== (owner ?? process.env.MCP_DEFAULT_OWNER ?? "local-user")) {
-    const error = new Error(`La sesión ${sessionId} ya existe y no pertenece a este usuario.`);
-    error.code = "OWNER_CONFLICT";
+    const error = new Error("La sesión no está disponible para este proyecto y usuario.");
+    error.code = "SESSION_UNAVAILABLE";
     throw error;
   }
 
   const existingSummary = await db.getAsync(
-    "SELECT summary, last_processed_seq_id FROM session_summaries WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)",
-    [sessionId, project, owner ?? null]
+    "SELECT summary, last_processed_seq_id FROM session_summaries WHERE session_id = $1 AND project = $2 AND owner = $3",
+    [sessionId, project, writeOwner]
   );
 
   let query = `
     SELECT id, sequence_id, role, content, timestamp
     FROM conversations
-    WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)
+    WHERE session_id = $1 AND project = $2 AND owner = $3
   `;
-  const params = [sessionId, project, owner ?? null];
+  const params = [sessionId, project, writeOwner];
 
   if (existingSummary && existingSummary.last_processed_seq_id) {
     query += " AND sequence_id > $4";
@@ -76,15 +70,15 @@ async function finalizeSession({ sessionId, project, owner }) {
   const saved = await saveSessionSummary({
     sessionId,
     project,
-    owner,
+    owner: writeOwner,
     summary,
     lastProcessedSeqId: lastMessageSeqId,
   });
 
   if (!saved) {
     const latest = await db.getAsync(
-      "SELECT summary FROM session_summaries WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)",
-      [sessionId, project, owner ?? null]
+      "SELECT summary FROM session_summaries WHERE session_id = $1 AND project = $2 AND owner = $3",
+      [sessionId, project, writeOwner]
     );
 
     return {

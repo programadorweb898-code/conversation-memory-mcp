@@ -6,8 +6,41 @@ const logger = require("../logger");
 // Specify the model and ensure it's quantized for efficiency
 const model = "Xenova/all-MiniLM-L6-v2";
 let extractor = null;
-let initializationPromise = null;
-let transformersModulePromise = null;
+
+function createRetryablePromise(factory, onFailure = () => {}) {
+  let cachedPromise;
+  return () => {
+    if (!cachedPromise) {
+      cachedPromise = Promise.resolve()
+        .then(factory)
+        .catch((error) => {
+          cachedPromise = undefined;
+          onFailure(error);
+          throw error;
+        });
+    }
+    return cachedPromise;
+  };
+}
+
+class EmbeddingInfrastructureError extends Error {
+  constructor(error) {
+    super(`No se pudo inicializar el modelo de embeddings: ${error.message}`, { cause: error });
+    this.name = "EmbeddingInfrastructureError";
+    this.code = "EMBEDDING_INFRASTRUCTURE";
+    this.retryable = true;
+  }
+}
+
+function isEmbeddingsEnabled() {
+  return process.env.ENABLE_EMBEDDINGS !== "false";
+}
+
+function asInfrastructureError(error) {
+  return error?.code === "EMBEDDING_INFRASTRUCTURE"
+    ? error
+    : new EmbeddingInfrastructureError(error);
+}
 
 // El modelo trunca en silencio a 512 tokens (~2000 caracteres): indexar el
 // contenido completo de un mensaje largo produce un embedding que solo
@@ -29,28 +62,35 @@ function prepareForEmbedding(content) {
   return text.slice(0, MAX_EMBEDDING_CHARS);
 }
 
-async function loadTransformers() {
-  if (!transformersModulePromise) {
-    transformersModulePromise = import("@huggingface/transformers");
-  }
+const loadTransformers = createRetryablePromise(
+  () => import("@huggingface/transformers"),
+  () => {}
+);
 
-  return transformersModulePromise;
-}
+const initializePipeline = createRetryablePromise(async () => {
+  try {
+    const { pipeline } = await loadTransformers();
+    logger.log(`Loading embedding model: ${model}`);
+    extractor = await pipeline("feature-extraction", model, { dtype: "q8" });
+    logger.log("Embedding model loaded.");
+  } catch (error) {
+    extractor = null;
+    throw asInfrastructureError(error);
+  }
+});
 
 /**
  * Initializes the embedding pipeline.
  * This should be called once at application startup.
  */
 async function initializeEmbeddingPipeline() {
-  if (!initializationPromise) {
-    initializationPromise = (async () => {
-      const { pipeline } = await loadTransformers();
-      logger.log(`Loading embedding model: ${model}`);
-      extractor = await pipeline("feature-extraction", model, { dtype: "q8" });
-      logger.log("Embedding model loaded.");
-    })();
+  if (!isEmbeddingsEnabled()) {
+    const error = new Error("Embeddings están deshabilitados por ENABLE_EMBEDDINGS=false.");
+    error.code = "EMBEDDINGS_DISABLED";
+    throw error;
   }
-  return initializationPromise;
+
+  return initializePipeline();
 }
 
 /**
@@ -59,6 +99,12 @@ async function initializeEmbeddingPipeline() {
  * @returns {Promise<string>} A JSON string representation of the embedding vector.
  */
 async function generateEmbedding(message) {
+  if (!isEmbeddingsEnabled()) {
+    const error = new Error("Embeddings están deshabilitados por ENABLE_EMBEDDINGS=false.");
+    error.code = "EMBEDDINGS_DISABLED";
+    throw error;
+  }
+
   if (!extractor) {
     await initializeEmbeddingPipeline();
   }
@@ -69,6 +115,12 @@ async function generateEmbedding(message) {
 }
 
 async function generateEmbeddings(messages) {
+  if (!isEmbeddingsEnabled()) {
+    const error = new Error("Embeddings están deshabilitados por ENABLE_EMBEDDINGS=false.");
+    error.code = "EMBEDDINGS_DISABLED";
+    throw error;
+  }
+
   if (!extractor) {
     await initializeEmbeddingPipeline();
   }
@@ -131,6 +183,9 @@ module.exports = {
   saveEmbedding,
   getEmbedding,
   prepareForEmbedding,
+  isEmbeddingsEnabled,
+  EmbeddingInfrastructureError,
+  createRetryablePromise,
   MIN_EMBEDDING_CHARS,
   MAX_EMBEDDING_CHARS,
 };

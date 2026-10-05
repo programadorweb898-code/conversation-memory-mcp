@@ -1,6 +1,7 @@
 const { z } = require("zod");
 const { getAuth } = require("./context");
 const logger = require("./logger");
+const { withLocalToolRateLimit } = require("./services/stdioRateLimiter");
 
 // Import tools
 const { saveMessage } = require("./tools/saveMessage");
@@ -31,10 +32,29 @@ function withScope(params) {
   return owner ? { ...params, owner } : params;
 }
 
+function createSaveSessionSummaryHandler(saveSummary = saveSessionSummary) {
+  return async ({ sessionId, project, summary }) => {
+    const saved = await saveSummary(withScope({ sessionId, project, summary }));
+    if (!saved) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: "No se guardó el resumen porque su watermark no avanzó." }],
+      };
+    }
+
+    return { content: [{ type: "text", text: "Resumen guardado correctamente." }] };
+  };
+}
+
+const saveSessionSummaryHandler = createSaveSessionSummaryHandler();
+
 function registerMcpTools(server) {
   const registrationStartedAt = Date.now();
+  const registerTool = (name, description, schema, handler) =>
+    server.tool(name, description, schema, withLocalToolRateLimit(handler));
+
   // 1. saveMessage
-  server.tool(
+  registerTool(
   "saveMessage",           // nombre de la tool
   `Guarda un mensaje de conversación real en Neon.
 Esta tool NO debe usarse para mensajes de protocolo MCP ni para eventos de infraestructura. Solo persiste turnos reales de usuario o asistente, con contenido útil para el historial del proyecto.
@@ -60,7 +80,7 @@ Esta tool debe usarse únicamente para conservar el historial real de conversaci
 );
 
   // 2. searchMessages
-  server.tool(
+  registerTool(
     "searchMessages",
     `Busca mensajes en el historial.
 Búsqueda híbrida: usa similitud semántica (pgvector) cuando hay embeddings y cae a coincidencia léxica (ILIKE) si no los hay, así el conocimiento siempre es recuperable.
@@ -79,7 +99,7 @@ async ({ searchTerm, project, agentId }) => {
   );
 
   // 2.5. semanticSearchMessages
-  server.tool(
+  registerTool(
     "semanticSearchMessages",
     `Busca mensajes semánticamente similares a una consulta.
 ACCESO MULTI-AGENTE: el conocimiento es compartido y remoto (Neon). Si NO pasás agentId, buscás en TODO lo que guardaron todos los agentes; pasándolo, acotás a un agente.
@@ -99,7 +119,7 @@ async ({ query, project, agentId, limit }) => {
   );
 
   // 2.6. searchSessionsBySummary
-  server.tool(
+  registerTool(
     "searchSessionsBySummary",
     "Busca sesiones relevantes mediante su resumen semántico y recupera todo su historial",
     {
@@ -113,7 +133,7 @@ async ({ query, project, agentId, limit }) => {
   );
 
   // 3. lastSession
-  server.tool(
+  registerTool(
     "lastSession",
     `Recupera el ID de la última sesión del proyecto.
 REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícitamente la última sesión de un agente. Sin agentId devuelve la última sesión de cualquier agente.`,
@@ -128,7 +148,7 @@ REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícit
   );
 
   // 4. recoverSession
-  server.tool(
+  registerTool(
     "recoverSession",
     `Recupera todos los mensajes de una sesión, ordenados cronológicamente.
 Cada mensaje incluye agent_id para saber qué agente lo escribió (turno, plan o acción).
@@ -146,7 +166,7 @@ REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícit
   );
 
   // 5. listSessions
-  server.tool(
+  registerTool(
     "listSessions",
     `Lista todas las sesiones disponibles del proyecto.
 ACCESO MULTI-AGENTE: si NO pasás agentId, listás sesiones de todos los agentes; pasándolo, solo las de ese agente.
@@ -162,7 +182,7 @@ REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícit
   );
 
   // 7. getLastSessionContext
-  server.tool(
+  registerTool(
     "getLastSessionContext",
     `Recupera el historial completo de la última sesión.
 Cada mensaje incluye agent_id para saber qué agente lo escribió.
@@ -179,7 +199,7 @@ REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícit
   );
 
   // 8. saveSessionSummary
-  server.tool(
+  registerTool(
     "saveSessionSummary",
     "Guarda o actualiza el resumen de una sesión",
     {
@@ -187,14 +207,11 @@ REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícit
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
       summary: z.string().describe("Contenido del resumen"),
     },
-    async ({ sessionId, project, summary }) => {
-      await saveSessionSummary(withScope({ sessionId, project, summary }));
-      return { content: [{ type: "text", text: "Resumen guardado correctamente." }] };
-    }
+    saveSessionSummaryHandler
   );
 
   // 9. getSessionSummary
-  server.tool(
+  registerTool(
     "getSessionSummary",
     "Recupera el resumen de una sesión específica",
     {
@@ -215,7 +232,7 @@ REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícit
   );
 
   // 10. finalizeSession
-  server.tool(
+  registerTool(
     "finalizeSession",
     "Finaliza explícitamente una sesión, generando y guardando su resumen",
     {
@@ -229,7 +246,7 @@ REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícit
   );
 
   // 11. deleteSession
-  server.tool(
+  registerTool(
     "deleteSession",
     "Elimina todos los mensajes, embeddings y el resumen de una sesión específica",
     {
@@ -243,7 +260,7 @@ REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícit
   );
 
   // 12. deleteMessage
-  server.tool(
+  registerTool(
     "deleteMessage",
     "Elimina un mensaje específico y su embedding asociado",
     {
@@ -257,7 +274,7 @@ REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícit
   );
 
   // 13. deleteMessagePair
-  server.tool(
+  registerTool(
     "deleteMessagePair",
     "Elimina un mensaje y su mensaje relacionado (pregunta/respuesta) y sus embeddings",
     {
@@ -273,4 +290,4 @@ REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícit
   logger.log(`⏱️ Registering MCP tools: ${Date.now() - registrationStartedAt}ms`);
 }
 
-module.exports = { registerMcpTools, withScope };
+module.exports = { createSaveSessionSummaryHandler, registerMcpTools, saveSessionSummaryHandler, withScope };

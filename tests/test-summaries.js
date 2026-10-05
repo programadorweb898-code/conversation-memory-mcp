@@ -183,26 +183,33 @@ describe('Session Summaries Tool', () => {
     expect(Number(after.last_processed_seq_id)).to.equal(Number(before.last_processed_seq_id));
   });
 
-  it('rechaza finalizar una sesión que pertenece a otro owner', async function() {
+  it('finaliza solo los mensajes del owner autenticado cuando se reutiliza session_id', async function() {
     const ownerA = "summary-session-owner-a";
     const ownerB = "summary-session-owner-b";
     const sessionId = `owner-finalize-${Date.now()}`;
 
-    await saveMessage({
-      sessionId,
-      project: "test",
-      owner: ownerA,
-      role: "user",
-      content: "Mensaje privado de A",
-    });
+    try {
+      for (const [owner, content] of [[ownerA, "Mensaje privado de A"], [ownerB, "Mensaje privado de B"]]) {
+        await db.runAsync(
+          `INSERT INTO conversations (id, session_id, project, role, content, owner)
+           VALUES ($1, $2, 'test', 'user', $3, $4)`,
+          [`${sessionId}-${owner}`, sessionId, content, owner]
+        );
+      }
 
-    await assert.rejects(
-      finalizeSession({ sessionId, project: "test", owner: ownerB }),
-      (error) => error.code === "OWNER_CONFLICT",
-    );
+      const result = await finalizeSession({ sessionId, project: "test", owner: ownerB });
+      const summaryB = await getSessionSummary({ sessionId, project: "test", owner: ownerB });
+      const summaryA = await getSessionSummary({ sessionId, project: "test", owner: ownerA });
 
-    await db.runAsync(`DELETE FROM conversations WHERE session_id = $1`, [sessionId]);
-    await db.runAsync(`DELETE FROM session_summaries WHERE session_id = $1`, [sessionId]);
+      expect(result.summaryGenerated).to.equal(true);
+      expect(summaryB).to.exist;
+      expect(summaryA).to.equal(null);
+      expect(llmClient.generateText.firstCall.args[0]).to.include("Mensaje privado de B");
+      expect(llmClient.generateText.firstCall.args[0]).to.not.include("Mensaje privado de A");
+    } finally {
+      await db.runAsync(`DELETE FROM session_summaries WHERE session_id = $1`, [sessionId]);
+      await db.runAsync(`DELETE FROM conversations WHERE session_id = $1`, [sessionId]);
+    }
   });
 
   it('no expone un resumen a otro owner', async function() {

@@ -37,7 +37,11 @@ function setupMcpRoutes(app, { createMcpServer }) {
     const transport = new sseSdk.SSEServerTransport("/messages", res);
     const sessionId = transport.sessionId || createSessionId();
     transport.sessionId = sessionId;
-    transports.set(sessionId, transport);
+    transports.set(sessionId, {
+      transport,
+      apiKeyId: req.auth?.apiKeyId ?? null,
+      master: Boolean(req.auth?.master),
+    });
     res.setHeader("x-client-id", sessionId);
 
     console.log("SSE transport created for session:", sessionId);
@@ -79,9 +83,17 @@ function setupMcpRoutes(app, { createMcpServer }) {
       return res.status(400).json({ error: "Cliente no identificado o sesion expirada" });
     }
 
-    const transport = transports.get(sessionId);
+    const transportSession = transports.get(sessionId);
+    const auth = req.auth || {};
+    const sameCredential = transportSession.master
+      ? auth.master === true
+      : auth.master !== true && auth.apiKeyId === transportSession.apiKeyId;
 
-    await transport.handlePostMessage(req, res, req.body);
+    if (!sameCredential) {
+      return res.status(403).json({ error: "Sesión MCP no disponible para estas credenciales." });
+    }
+
+    await transportSession.transport.handlePostMessage(req, res, req.body);
   });
 }
 

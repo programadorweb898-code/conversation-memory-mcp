@@ -1,25 +1,43 @@
 const crypto = require("crypto");
-const rateLimit = require("express-rate-limit");
+const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 const helmet = require("helmet");
 const { hashToken, findByTokenHash, touchApiKey } = require("./services/apiKeyService");
 const { runWithAuth } = require("./context");
 
-// límite para conexiones SSE: máximo 10 por IP por minuto
+function rateLimitKeyGenerator(req) {
+  if (req.auth?.owner) {
+    return `owner:${req.auth.owner}`;
+  }
+
+  if (req.auth?.apiKeyId) {
+    return `api-key:${req.auth.apiKeyId}`;
+  }
+
+  if (req.auth?.master) {
+    return "master";
+  }
+
+  return `ip:${ipKeyGenerator(req.ip)}`;
+}
+
+// límite para conexiones SSE: máximo 10 por usuario por minuto
 const sseLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,
   message: { error: "Demasiadas conexiones SSE. Intentá en un minuto." },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: rateLimitKeyGenerator,
 });
 
-// límite para mensajes: máximo 60 por IP por minuto
+// límite para mensajes: máximo 60 por usuario por minuto
 const messagesLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 60,
   message: { error: "Demasiados mensajes. Intentá en un minuto." },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: rateLimitKeyGenerator,
 });
 
 // comparación constante para mitigar ataques de temporización
@@ -42,29 +60,29 @@ function scopeProject(req, res, apiKey) {
     return true;
   }
 
-  const params = req.body.params;
-  const isToolCall =
-    req.body.method === "tools/call" &&
-    params &&
-    typeof params === "object" &&
-    params.arguments &&
-    typeof params.arguments === "object";
+  const requests = Array.isArray(req.body) ? req.body : [req.body];
+  for (const request of requests) {
+    const params = request?.params;
+    const isToolCall =
+      request?.method === "tools/call" &&
+      params &&
+      typeof params === "object" &&
+      params.arguments &&
+      typeof params.arguments === "object";
 
-  if (!isToolCall) {
-    return true;
-  }
+    if (!isToolCall) continue;
 
-  const requestedProject = params.arguments.project;
+    const requestedProject = params.arguments.project;
+    if (requestedProject !== undefined && requestedProject !== apiKey.project) {
+      res.status(403).json({
+        error: "Token no autorizado para uno o más proyectos de la solicitud.",
+      });
+      return false;
+    }
 
-  if (requestedProject !== undefined && requestedProject !== apiKey.project) {
-    res.status(403).json({
-      error: `Este token solo puede acceder al proyecto "${apiKey.project}".`,
-    });
-    return false;
-  }
-
-  if (requestedProject === undefined) {
-    params.arguments.project = apiKey.project;
+    if (requestedProject === undefined) {
+      params.arguments.project = apiKey.project;
+    }
   }
 
   return true;
@@ -141,9 +159,10 @@ function requireJson(req, res, next) {
 
 function applyMiddleware(app) {
   app.use(helmet());
-  app.use(sseLimiter);
-  app.use(messagesLimiter);
   app.use(requireBearerToken);
+  app.use("/sse", sseLimiter);
+  app.use("/messages", messagesLimiter);
+  app.use("/mcp", messagesLimiter);
   app.use(requireJson);
 }
 

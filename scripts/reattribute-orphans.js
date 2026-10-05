@@ -25,6 +25,7 @@
 
 const { Pool } = require("pg");
 const dotenv = require("dotenv");
+const { getDatabaseUrl } = require("../src/databaseConfig");
 
 dotenv.config();
 
@@ -37,7 +38,7 @@ dotenv.config();
 //   ses_f3e7e3a9c...  C:/Users/gomit            (home, sin repo abierto)
 //
 // Las 13 del home NO son de ningún repo: opencode no tiene un proyecto para ese
-// path y no existe carpeta engram ni similar en el disco. Van a `sin-proyecto`
+// path y no existe carpeta de proyecto asociada en el disco. Van a `sin-proyecto`
 // para que no queden en un limbo ni mezcladas con la memoria de un repo real.
 const SESSION_TARGETS = {
   ses_f110c7834ffea4XUmGd1vJ8S3S: "corralon_proyect",
@@ -50,10 +51,11 @@ const SOURCE_PROJECT = "/";
 const EXECUTE = process.argv.includes("--execute");
 
 function getPool() {
-  if (!process.env.DATABASE_URL) {
-    throw new Error("DATABASE_URL environment variable is required.");
+  const connectionString = getDatabaseUrl();
+  if (!connectionString) {
+    throw new Error("CONVERSATION_MEMORY_DATABASE_URL environment variable is required.");
   }
-  return new Pool({ connectionString: process.env.DATABASE_URL });
+  return new Pool({ connectionString });
 }
 
 // Una fila que no aparece en SESSION_TARGETS es un dato huérfano sin destino

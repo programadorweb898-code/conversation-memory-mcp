@@ -24,8 +24,8 @@
  *   3. Si no, se infiere el proyecto a partir del nombre del session_id.
  *   4. Si no se puede inferir, se usa DEFAULT_PROJECT.
  *
- * IMPORTANTE: este script corre contra la BD de Neon. Asegurate de que
- * DATABASE_URL en .env apunte a Neon antes de ejecutarlo.
+ * IMPORTANTE: este script corre contra la base dedicada de Conversation Memory.
+ * Verificá CONVERSATION_MEMORY_DATABASE_URL antes de ejecutarlo.
  *
  * Uso:
  *   node scripts/migrate_project_backfill.js            # dry-run (no modifica nada)
@@ -33,7 +33,7 @@
  */
 
 const { db } = require("../src/database");
-const { runMigrations } = require("./migrate");
+const { getDatabaseUrl } = require("../src/databaseConfig");
 
 // Mapeo explícito sesión -> proyecto. Alineá los nombres con los que envía tu plugin/agente.
 const SESSION_PROJECT_MAP = {
@@ -50,7 +50,7 @@ const SESSION_PROJECT_MAP = {
 const DEFAULT_PROJECT = "default";
 
 function assertNeonDatabase() {
-  const url = process.env.DATABASE_URL || "";
+  const url = getDatabaseUrl();
   let host = "";
   try {
     host = new URL(url).hostname;
@@ -58,13 +58,13 @@ function assertNeonDatabase() {
     host = "";
   }
   if (!host) {
-    console.error("ERROR: DATABASE_URL no está configurada o no es válida. Revisá tu .env.");
+    console.error("ERROR: CONVERSATION_MEMORY_DATABASE_URL no está configurada o no es válida. Revisá tu .env.");
     process.exit(1);
   }
   if (!host.includes("neon.tech")) {
     console.warn(
       `ADVERTENCIA: el host '${host}' no parece ser de Neon (esperado *.neon.tech). ` +
-        "Si no estás seguro, abortá y verificá DATABASE_URL."
+        "Si no estás seguro, abortá y verificá CONVERSATION_MEMORY_DATABASE_URL."
     );
   }
 }
@@ -131,7 +131,6 @@ function projectSource(session) {
 async function run() {
   const apply = process.argv.includes("--apply");
   assertNeonDatabase();
-  await runMigrations();
   await ensureProjectColumn();
 
   const sessions = await getSessionsToFix();

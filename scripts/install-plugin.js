@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-const { spawnSync } = require("node:child_process")
+const spawnSync = require("cross-spawn").sync
 const { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync } = require("node:fs")
 const { homedir } = require("node:os")
 const { join, dirname, resolve } = require("node:path")
@@ -25,7 +25,7 @@ function warn(msg) {
 }
 
 function run(command, args, cwd) {
-  const res = spawnSync(command, args, { cwd, stdio: "inherit", shell: process.platform === "win32" })
+  const res = spawnSync(command, args, { cwd, stdio: "inherit" })
   return res.status === 0
 }
 
@@ -289,8 +289,8 @@ function configureOpencodeJsonc() {
   if (insideRaw.includes('"conversation-memory-local"')) {
     if (insideRaw.includes("environment")) {
       warn(
-        'el bloque conversation-memory-local ya existe pero contiene "environment" con DATABASE_URL; ' +
-          "quitá esa sección para que el server lea el .env del repo"
+        'el bloque conversation-memory-local ya existe pero contiene "environment" con CONVERSATION_MEMORY_DATABASE_URL; ' +
+          "quitá esa sección para que el server lea la configuración local del repo"
       )
     } else {
       log("el bloque conversation-memory-local ya está configurado con cwd; sin cambios")
@@ -364,15 +364,15 @@ function ensureEnvFile() {
         `se creó .env a partir de .env.example. Pegá tu cadena de conexión de Neon en .env (requiere reiniciar el MCP)`
       )
     } else {
-      warn("no se encontró .env ni .env.example; creá .env con DATABASE_URL")
+      warn("no se encontró .env ni .env.example; ejecutá el instalador para configurar una base dedicada")
     }
     return
   }
   const content = readFileSync(envFile, "utf8")
-  if (!/^DATABASE_URL\s*=\s*\S+/m.test(content)) {
-    warn("DATABASE_URL no está definido en el .env del repo; sin él el server no arranca")
+  if (!/^CONVERSATION_MEMORY_DATABASE_URL\s*=\s*\S+/m.test(content)) {
+    warn("CONVERSATION_MEMORY_DATABASE_URL no está definido en el .env del repo; ejecutá el instalador")
   } else {
-    log(`.env del repo ya tiene DATABASE_URL definida`)
+    log(`.env del repo ya tiene CONVERSATION_MEMORY_DATABASE_URL definida`)
   }
 }
 

@@ -113,23 +113,17 @@ describe('Aislamiento por owner', () => {
     expect(lastA).to.equal(sessionB);
   });
 
-  it('rechaza escribir en una sesión existente de otro owner (OWNER_CONFLICT)', async () => {
+  it('aisla owners distintos aunque reutilicen el mismo session_id', async () => {
     const sessionA = uniqueId('conflict');
     createdSessions.push(sessionA);
 
     await saveMessage({ sessionId: sessionA, project: PROJECT, role: 'user', content: 'de A', owner: OWNER_A });
+    await saveMessage({ sessionId: sessionA, project: PROJECT, role: 'user', content: 'de B', owner: OWNER_B });
 
-    let error = null;
-    try {
-      await saveMessage({ sessionId: sessionA, project: PROJECT, role: 'user', content: 'intento de B', owner: OWNER_B });
-    } catch (err) {
-      error = err;
-    }
-    expect(error).to.exist;
-    expect(error.code).to.equal('OWNER_CONFLICT');
-
-    const rows = await db.allAsync(`SELECT content FROM conversations WHERE session_id = $1`, [sessionA]);
-    expect(rows.map((r) => r.content)).to.not.include('intento de B');
+    const rowsA = await db.allAsync(`SELECT content FROM conversations WHERE session_id = $1 AND owner = $2`, [sessionA, OWNER_A]);
+    const rowsB = await db.allAsync(`SELECT content FROM conversations WHERE session_id = $1 AND owner = $2`, [sessionA, OWNER_B]);
+    expect(rowsA.map((row) => row.content)).to.deep.equal(['de A']);
+    expect(rowsB.map((row) => row.content)).to.deep.equal(['de B']);
   });
 
   it('deleteSession solo elimina la sesión del owner pedido', async () => {

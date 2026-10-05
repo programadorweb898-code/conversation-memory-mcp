@@ -124,6 +124,37 @@ describe('requireBearerToken', () => {
     expect(req.body.params.arguments.project).to.equal('proyecto-test');
   });
 
+  it('should scope every tools/call in a JSON-RPC batch', async () => {
+    const body = [
+      toolCall({ searchTerm: 'uno' }),
+      toolCall({ project: 'proyecto-test', searchTerm: 'dos' }),
+    ];
+    const req = mockReq({ authorization: `Bearer ${SCOPED_TOKEN}`, body, method: 'POST' });
+    const res = mockRes();
+    const next = sinon.stub();
+
+    await requireBearerToken(req, res, next);
+
+    expect(next.calledOnce).to.be.true;
+    expect(body[0].params.arguments.project).to.equal('proyecto-test');
+    expect(body[1].params.arguments.project).to.equal('proyecto-test');
+  });
+
+  it('should reject a batch containing a tools/call for another project', async () => {
+    const body = [
+      toolCall({ searchTerm: 'permitido' }),
+      toolCall({ project: 'otro-proyecto', searchTerm: 'no permitido' }),
+    ];
+    const req = mockReq({ authorization: `Bearer ${SCOPED_TOKEN}`, body, method: 'POST' });
+    const res = mockRes();
+    const next = sinon.stub();
+
+    await requireBearerToken(req, res, next);
+
+    expect(res.status.calledWith(403)).to.be.true;
+    expect(next.called).to.be.false;
+  });
+
   it('should allow a tools/call when project matches the token', async () => {
     const body = toolCall({ project: 'proyecto-test', searchTerm: 'hola' });
     const req = mockReq({ authorization: `Bearer ${SCOPED_TOKEN}`, body, method: 'POST' });
