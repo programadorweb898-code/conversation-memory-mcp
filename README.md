@@ -235,6 +235,9 @@ Variables disponibles:
 - `GEMINI_API_KEY`
 - `AI_PROVIDER`
 - `AI_MODEL`
+- `CONVERSATION_MEMORY_LLM_TIMEOUT_MS` (opcional; por defecto 30000 ms)
+
+Las llamadas al LLM tienen un timeout explícito para no quedar esperando indefinidamente ante un proveedor externo sin respuesta. En OpenRouter el timeout aborta la petición HTTP; en Gemini se envía como timeout de la petición del SDK.
 
 La ausencia de un LLM no impide guardar ni recuperar el historial.
 
