@@ -1,13 +1,17 @@
 const { db } = require("../database");
 const embeddingService = require("../services/embeddingService");
 const { lexicalSearch, countEmbeddings } = require("../services/lexicalSearch");
+const { config } = require("../config");
 
 async function semanticSearchMessages({ query, project, agentId, limit = 5, owner }) {
   if (!query) throw new Error("La consulta no puede estar vacía.");
   if (!project) throw new Error("El parámetro 'project' es obligatorio para aislar los datos por proyecto.");
 
+  const requestedLimit = Number.isInteger(limit) && limit > 0 ? limit : 5;
+  const effectiveLimit = Math.min(requestedLimit, config.searchLimit);
+
   const fallbackToLexical = async () => {
-    const rows = await lexicalSearch({ searchTerm: query, project, agentId, owner, limit });
+    const rows = await lexicalSearch({ searchTerm: query, project, agentId, owner, limit: effectiveLimit });
     return rows.map((row) => ({
       message_id: row.id,
       content: row.content,
@@ -72,7 +76,7 @@ async function semanticSearchMessages({ query, project, agentId, limit = 5, owne
 
   sql += ` WHERE ` + whereClauses.join(" AND ");
   sql += ` ORDER BY me.embedding <=> $1::vector ASC LIMIT $${params.length + 1}`;
-  params.push(limit);
+  params.push(effectiveLimit);
 
   const results = await db.allAsync(sql, params);
 
