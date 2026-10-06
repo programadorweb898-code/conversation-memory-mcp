@@ -20,7 +20,7 @@ async function lastSession({ project, agentId, owner } = {}) {
       where.push(`owner = $${params.length + 1}`);
       params.push(owner);
     }
-    let sql = `SELECT session_id FROM conversations WHERE ${where.join(" AND ")} ORDER BY timestamp DESC LIMIT 1`;
+    const sql = `SELECT session_id FROM conversations WHERE ${where.join(" AND ")} ORDER BY sequence_id DESC LIMIT 1`;
     const row = await db.getAsync(sql, params);
     return row ? row.session_id : null;
   } catch (err) {
