@@ -301,6 +301,96 @@ describe('Server HTTP layer', () => {
     expect(response.status).to.equal(401);
   });
 
+  it('should reject a disallowed MCP host before authentication', async () => {
+    const { app } = require('../src/server');
+    const previousHosts = process.env.MCP_ALLOWED_HOSTS;
+
+    process.env.MCP_ALLOWED_HOSTS = 'allowed.example';
+
+    try {
+      const response = await request(app)
+        .get('/mcp')
+        .set('host', 'attacker.example')
+        .set('authorization', 'Bearer test-token');
+
+      expect(response.status).to.equal(403);
+      expect(response.body).to.deep.equal({ error: 'Host no autorizado.' });
+    } finally {
+      if (previousHosts === undefined) {
+        delete process.env.MCP_ALLOWED_HOSTS;
+      } else {
+        process.env.MCP_ALLOWED_HOSTS = previousHosts;
+      }
+    }
+  });
+
+  it('should accept an allowed MCP host and origin', async () => {
+    const { app } = require('../src/server');
+    const previousHosts = process.env.MCP_ALLOWED_HOSTS;
+    const previousOrigins = process.env.MCP_ALLOWED_ORIGINS;
+
+    process.env.MCP_ALLOWED_HOSTS = 'allowed.example';
+    process.env.MCP_ALLOWED_ORIGINS = 'https://allowed.example';
+
+    try {
+      const response = await request(app)
+        .post('/mcp')
+        .set('host', 'allowed.example')
+        .set('origin', 'https://allowed.example/')
+        .set('content-type', 'application/json')
+        .set('authorization', 'Bearer test-token')
+        .send({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+
+      expect(response.status).to.equal(200);
+    } finally {
+      if (previousHosts === undefined) {
+        delete process.env.MCP_ALLOWED_HOSTS;
+      } else {
+        process.env.MCP_ALLOWED_HOSTS = previousHosts;
+      }
+
+      if (previousOrigins === undefined) {
+        delete process.env.MCP_ALLOWED_ORIGINS;
+      } else {
+        process.env.MCP_ALLOWED_ORIGINS = previousOrigins;
+      }
+    }
+  });
+
+  it('should reject a disallowed MCP origin', async () => {
+    const { app } = require('../src/server');
+    const previousHosts = process.env.MCP_ALLOWED_HOSTS;
+    const previousOrigins = process.env.MCP_ALLOWED_ORIGINS;
+
+    process.env.MCP_ALLOWED_HOSTS = 'allowed.example';
+    process.env.MCP_ALLOWED_ORIGINS = 'https://allowed.example';
+
+    try {
+      const response = await request(app)
+        .post('/mcp')
+        .set('host', 'allowed.example')
+        .set('origin', 'https://attacker.example')
+        .set('content-type', 'application/json')
+        .set('authorization', 'Bearer test-token')
+        .send({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+
+      expect(response.status).to.equal(403);
+      expect(response.body).to.deep.equal({ error: 'Origin no autorizado.' });
+    } finally {
+      if (previousHosts === undefined) {
+        delete process.env.MCP_ALLOWED_HOSTS;
+      } else {
+        process.env.MCP_ALLOWED_HOSTS = previousHosts;
+      }
+
+      if (previousOrigins === undefined) {
+        delete process.env.MCP_ALLOWED_ORIGINS;
+      } else {
+        process.env.MCP_ALLOWED_ORIGINS = previousOrigins;
+      }
+    }
+  });
+
   it('should rate limit invalid-token requests before querying the database', async function () {
     this.timeout(30000);
     const { app } = require('../src/server');
