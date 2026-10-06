@@ -70,6 +70,7 @@ describe('Server HTTP layer', () => {
   let connectStub;
   let transportConstructorStub;
   let streamableTransportConstructorStub;
+  let serverCloseStub;
   let transportInstance;
   let httpServer;
   let sseConnection;
@@ -101,11 +102,12 @@ describe('Server HTTP layer', () => {
       return transportInstance;
     });
     streamableTransportConstructorStub = sinon.stub().callsFake(() => transportInstance);
+    serverCloseStub = sinon.stub();
 
     sinon.stub(mcpSdk, 'McpServer').callsFake(() => ({
       tool: sinon.stub(),
       connect: connectStub,
-      close: sinon.stub(),
+      close: serverCloseStub,
     }));
     sinon.stub(sseSdk, 'SSEServerTransport').callsFake(transportConstructorStub);
     sinon.stub(streamableHttpSdk, 'StreamableHTTPServerTransport').callsFake(streamableTransportConstructorStub);
@@ -175,6 +177,20 @@ describe('Server HTTP layer', () => {
 
     expect(response.status).to.equal(200);
     expect(transportInstance.handlePostMessage.calledOnce).to.be.true;
+  });
+
+  it('should close the SSE MCP server exactly once when the client disconnects', async () => {
+    const { app } = require('../src/server');
+
+    httpServer = await listen(app);
+    sseConnection = await openSse(httpServer);
+
+    sseConnection.req.destroy();
+    sseConnection.res.destroy();
+
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(serverCloseStub.calledOnce).to.be.true;
   });
 
   it('should reject an SSE session used with a different API key', async function () {
