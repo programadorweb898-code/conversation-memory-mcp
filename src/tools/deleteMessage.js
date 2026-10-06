@@ -1,4 +1,4 @@
-const { db } = require("../database");
+const { withTransaction } = require("../database");
 
 /**
  * Elimina un mensaje especifico y su embedding asociado de la base de datos.
@@ -7,14 +7,20 @@ const { db } = require("../database");
  */
 async function deleteMessage({ messageId, project, owner }) {
   if (!project) throw new Error("El parámetro 'project' es obligatorio.");
-  try {
-    await db.runAsync(
-      "DELETE FROM message_embeddings WHERE message_id IN (SELECT id FROM conversations WHERE id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3))",
-      [messageId, project, owner ?? null]
-    );
-    console.log(`Embedding for message ${messageId} deleted (if existed).`);
 
-    const result = await db.runAsync("DELETE FROM conversations WHERE id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)", [messageId, project, owner ?? null]);
+  try {
+    const result = await withTransaction(async (tx) => {
+      await tx.runAsync(
+        "DELETE FROM message_embeddings WHERE message_id IN (SELECT id FROM conversations WHERE id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3))",
+        [messageId, project, owner ?? null]
+      );
+
+      return tx.runAsync(
+        "DELETE FROM conversations WHERE id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)",
+        [messageId, project, owner ?? null]
+      );
+    });
+
     if (result.changes > 0) {
       console.log(`Message ${messageId} deleted successfully.`);
     } else {
