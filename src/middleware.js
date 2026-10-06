@@ -21,6 +21,20 @@ function rateLimitKeyGenerator(req) {
 }
 
 // límite para conexiones SSE: máximo 10 por usuario por minuto
+// límite previo a autenticación: máximo 100 requests por IP por minuto.
+// Este limiter se ejecuta antes de consultar la base para validar el token.
+// Se excluye /health para no interferir con health checks del balanceador.
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  message: { error: "Demasiadas solicitudes de autenticación. Intentá en un minuto." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  skip: (req) => req.path === "/health",
+});
+
+// límite para conexiones SSE: máximo 10 por usuario por minuto
 const sseLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,
@@ -159,6 +173,7 @@ function requireJson(req, res, next) {
 
 function applyMiddleware(app) {
   app.use(helmet());
+  app.use(authLimiter);
   app.use(requireBearerToken);
   app.use("/sse", sseLimiter);
   app.use("/messages", messagesLimiter);
@@ -167,6 +182,7 @@ function applyMiddleware(app) {
 }
 
 module.exports = {
+  authLimiter,
   sseLimiter,
   messagesLimiter,
   requireBearerToken,
