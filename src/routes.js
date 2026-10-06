@@ -7,6 +7,19 @@ function createSessionId() {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+async function closeMcpRoutes() {
+  const sessions = Array.from(transports.values());
+  await Promise.allSettled(
+    sessions.map(async ({ transport }) => {
+      try {
+        await transport.close();
+      } catch (error) {
+        console.error("Error closing MCP SSE transport:", error.message);
+      }
+    }),
+  );
+}
+
 function setupMcpRoutes(app, { createMcpServer }) {
   app.all("/mcp", async (req, res, next) => {
     // Modo stateless: el SDK de MCP no permite reutilizar un StreamableHTTPServerTransport
@@ -95,6 +108,7 @@ function setupMcpRoutes(app, { createMcpServer }) {
 
     await transportSession.transport.handlePostMessage(req, res, req.body);
   });
+  return { close: closeMcpRoutes };
 }
 
-module.exports = { setupMcpRoutes };
+module.exports = { setupMcpRoutes, closeMcpRoutes };

@@ -136,6 +136,60 @@ describe('Server HTTP layer', () => {
     resetServerModule();
   });
 
+  it('should shut down HTTP, worker and database in order and be idempotent', async function () {
+    this.timeout(10000);
+    const previousPort = process.env.PORT;
+    const previousWorkerSetting = process.env.ENABLE_EMBEDDING_WORKER;
+    process.env.PORT = '0';
+    process.env.ENABLE_EMBEDDING_WORKER = 'false';
+    const order = [];
+    const stopWorkerStub = sinon.stub(embeddingWorker, 'stopWorker').callsFake(async () => order.push('worker'));
+    const dbCloseStub = sinon.stub(db, 'close').callsFake(async () => order.push('db'));
+    const exitStub = sinon.stub(process, 'exit');
+    try {
+      const { startServer, shutdown } = require('../src/server');
+      httpServer = await startServer();
+      const realClose = httpServer.close.bind(httpServer);
+      sinon.stub(httpServer, 'close').callsFake((callback) => { order.push('http'); return realClose(callback); });
+      const firstShutdown = shutdown('SIGTERM');
+      const secondShutdown = shutdown('SIGTERM');
+      expect(secondShutdown).to.equal(firstShutdown);
+      await firstShutdown;
+      expect(order).to.deep.equal(['http', 'worker', 'db']);
+      expect(stopWorkerStub.calledOnce).to.be.true;
+      expect(dbCloseStub.calledOnce).to.be.true;
+      expect(exitStub.calledOnceWithExactly(143)).to.be.true;
+    } finally {
+      if (previousPort === undefined) delete process.env.PORT; else process.env.PORT = previousPort;
+      if (previousWorkerSetting === undefined) delete process.env.ENABLE_EMBEDDING_WORKER; else process.env.ENABLE_EMBEDDING_WORKER = previousWorkerSetting;
+    }
+  });
+
+  it('should close active SSE transports before completing HTTP shutdown', async function () {
+    this.timeout(10000);
+    const previousPort = process.env.PORT;
+    const previousWorkerSetting = process.env.ENABLE_EMBEDDING_WORKER;
+    process.env.PORT = '0';
+    process.env.ENABLE_EMBEDDING_WORKER = 'false';
+    const stopWorkerStub = sinon.stub(embeddingWorker, 'stopWorker').resolves();
+    const dbCloseStub = sinon.stub(db, 'close').resolves();
+    const exitStub = sinon.stub(process, 'exit');
+    transportInstance.close.callsFake(async () => { transportInstance.response?.end(); });
+    try {
+      const { startServer, shutdown } = require('../src/server');
+      httpServer = await startServer();
+      sseConnection = await openSse(httpServer);
+      await shutdown('SIGTERM');
+      expect(transportInstance.close.calledOnce).to.be.true;
+      expect(stopWorkerStub.calledOnce).to.be.true;
+      expect(dbCloseStub.calledOnce).to.be.true;
+      expect(exitStub.calledOnceWithExactly(143)).to.be.true;
+    } finally {
+      if (previousPort === undefined) delete process.env.PORT; else process.env.PORT = previousPort;
+      if (previousWorkerSetting === undefined) delete process.env.ENABLE_EMBEDDING_WORKER; else process.env.ENABLE_EMBEDDING_WORKER = previousWorkerSetting;
+    }
+  });
+
   it('should expose a working Express app and accept GET /sse', async () => {
     const { app } = require('../src/server');
 

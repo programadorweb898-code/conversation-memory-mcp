@@ -18,55 +18,144 @@
 //     ninguna, generateText devuelve null.
 
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { getConfig, DEFAULT_LLM_TIMEOUT_MS, DEFAULT_LLM_MAX_RETRIES, DEFAULT_LLM_RETRY_BASE_DELAY_MS, DEFAULT_LLM_RETRY_MAX_DELAY_MS } = require("../config");
 
 const GEMINI_DEFAULT_MODEL = "gemini-2.5-flash-lite";
 const OPENROUTER_DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
+function resolveLlmTimeoutMs() {
+  return getConfig().llm.timeoutMs;
+}
+
+function createLlmTimeoutError(provider, timeoutMs, cause) {
+  const error = new Error(`${provider} request timed out after ${timeoutMs}ms`);
+  error.code = "LLM_TIMEOUT";
+  error.cause = cause;
+  return error;
+}
+
+function resolveLlmRetries() {
+  return getConfig().llm.maxRetries;
+}
+
+function resolveRetryBaseDelayMs() {
+  return getConfig().llm.retryBaseDelayMs;
+}
+
+function resolveRetryMaxDelayMs() {
+  return getConfig().llm.retryMaxDelayMs;
+}
+
+function getErrorStatus(error) {
+  return Number(error?.status ?? error?.statusCode ?? error?.cause?.status ?? 0);
+}
+
+function isRetryableLlmError(error) {
+  if (!error) return false;
+  if (error.code === "LLM_TIMEOUT") return true;
+
+  const status = getErrorStatus(error);
+  return status === 429 || (status >= 500 && status <= 599);
+}
+
+function retryDelayMs(attempt) {
+  const base = resolveRetryBaseDelayMs();
+  const max = resolveRetryMaxDelayMs();
+  return Math.min(max, base * (2 ** Math.max(0, attempt - 1)));
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withLlmRetries(operation) {
+  const maxRetries = resolveLlmRetries();
+
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isRetryableLlmError(error) || attempt >= maxRetries) {
+        throw error;
+      }
+
+      await sleep(retryDelayMs(attempt + 1));
+    }
+  }
+}
+
 function detectProvider() {
-  const explicit = (process.env.AI_PROVIDER || "").trim().toLowerCase();
-  if (explicit === "openrouter") return "openrouter";
-  if (explicit === "gemini" || explicit === "google") return "gemini";
-  if (process.env.OPENROUTER_API_KEY) return "openrouter";
-  if (process.env.GEMINI_API_KEY) return "gemini";
+  const config = getConfig().llm;
+  if (config.provider === "openrouter") return "openrouter";
+  if (config.provider === "gemini" || config.provider === "google") return "gemini";
+  if (config.openrouterApiKey) return "openrouter";
+  if (config.geminiApiKey) return "gemini";
   return null;
 }
 
 function resolveModel(provider) {
-  const override = (process.env.AI_MODEL || "").trim();
+  const override = getConfig().llm.model;
   if (override) return override;
   return provider === "gemini" ? GEMINI_DEFAULT_MODEL : OPENROUTER_DEFAULT_MODEL;
 }
 
 async function generateWithGemini(prompt) {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = getConfig().llm.geminiApiKey;
   if (!apiKey) return null;
+
+  const timeoutMs = resolveLlmTimeoutMs();
   const genAI = new GoogleGenerativeAI(apiKey);
   const generativeModel = genAI.getGenerativeModel({ model: resolveModel("gemini") });
-  const result = await generativeModel.generateContent(prompt);
-  return result.response.text();
+
+  return withLlmRetries(async () => {
+    try {
+      const result = await generativeModel.generateContent(prompt, { timeout: timeoutMs });
+      return result.response.text();
+    } catch (error) {
+      if (error?.name === "GoogleGenerativeAIAbortError") {
+        throw createLlmTimeoutError("Gemini", timeoutMs, error);
+      }
+      throw error;
+    }
+  });
 }
 
 async function generateWithOpenRouter(prompt) {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = getConfig().llm.openrouterApiKey;
   if (!apiKey) return null;
-  const res = await fetch(OPENROUTER_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: resolveModel("openrouter"),
-      messages: [{ role: "user", content: prompt }],
-    }),
+
+  const timeoutMs = resolveLlmTimeoutMs();
+
+  return withLlmRetries(async () => {
+    try {
+      const res = await fetch(OPENROUTER_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: resolveModel("openrouter"),
+          messages: [{ role: "user", content: prompt }],
+        }),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        const error = new Error(`OpenRouter ${res.status}: ${detail.slice(0, 300)}`);
+        error.status = res.status;
+        throw error;
+      }
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content ?? null;
+    } catch (error) {
+      if (error?.name === "TimeoutError" || error?.name === "AbortError") {
+        throw createLlmTimeoutError("OpenRouter", timeoutMs, error);
+      }
+      throw error;
+    }
   });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`OpenRouter ${res.status}: ${detail.slice(0, 300)}`);
-  }
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content ?? null;
 }
 
 /**
@@ -86,8 +175,18 @@ module.exports = {
   generateText,
   detectProvider,
   resolveModel,
+  resolveLlmTimeoutMs,
+  resolveLlmRetries,
+  resolveRetryBaseDelayMs,
+  resolveRetryMaxDelayMs,
+  isRetryableLlmError,
+  retryDelayMs,
   generateWithGemini,
   generateWithOpenRouter,
   OPENROUTER_DEFAULT_MODEL,
   GEMINI_DEFAULT_MODEL,
+  DEFAULT_LLM_TIMEOUT_MS,
+  DEFAULT_LLM_MAX_RETRIES,
+  DEFAULT_LLM_RETRY_BASE_DELAY_MS,
+  DEFAULT_LLM_RETRY_MAX_DELAY_MS,
 };

@@ -1,6 +1,7 @@
 // src/services/embeddingService.js
 
 const { db } = require("../database");
+const { getConfig } = require("../config");
 const logger = require("../logger");
 
 // Specify the model and ensure it's quantized for efficiency
@@ -33,7 +34,7 @@ class EmbeddingInfrastructureError extends Error {
 }
 
 function isEmbeddingsEnabled() {
-  return process.env.ENABLE_EMBEDDINGS !== "false";
+  return getConfig().embeddings.enabled;
 }
 
 function asInfrastructureError(error) {
@@ -46,8 +47,7 @@ function asInfrastructureError(error) {
 // contenido completo de un mensaje largo produce un embedding que solo
 // representa su inicio. Recortamos de forma explícita para que el vector sea
 // interpretable y para no gastar cómputo de más.
-const MIN_EMBEDDING_CHARS = Number(process.env.MIN_EMBEDDING_CHARS || 10);
-const MAX_EMBEDDING_CHARS = Number(process.env.MAX_EMBEDDING_CHARS || 2000);
+const { minChars: MIN_EMBEDDING_CHARS, maxChars: MAX_EMBEDDING_CHARS } = getConfig().embeddings;
 
 /**
  * Decide si un mensaje vale la pena ser indexado y devuelve el texto a

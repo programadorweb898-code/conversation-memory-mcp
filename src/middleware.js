@@ -3,6 +3,7 @@ const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 const helmet = require("helmet");
 const { hashToken, findByTokenHash, touchApiKey } = require("./services/apiKeyService");
 const { runWithAuth } = require("./context");
+const { getConfig } = require("./config");
 
 function rateLimitKeyGenerator(req) {
   if (req.auth?.owner) {
@@ -35,15 +36,9 @@ function validateMcpHostOrigin(req, res, next) {
     return next();
   }
 
-  const allowedHosts = (process.env.MCP_ALLOWED_HOSTS || "")
-    .split(",")
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean);
+  const allowedHosts = getConfig().server.allowedHosts;
 
-  const allowedOrigins = (process.env.MCP_ALLOWED_ORIGINS || "")
-    .split(",")
-    .map((value) => value.trim().replace(/\/$/, "").toLowerCase())
-    .filter(Boolean);
+  const allowedOrigins = getConfig().server.allowedOrigins;
 
   if (allowedHosts.length > 0) {
     const host = (req.get("host") || "").trim().toLowerCase();
@@ -169,7 +164,7 @@ async function requireBearerToken(req, res, next) {
   }
 
   try {
-    const expectedToken = process.env.MCP_BEARER_TOKEN || "";
+    const expectedToken = getConfig().server.bearerToken;
     if (expectedToken && tokensMatch(Buffer.from(expectedToken), Buffer.from(token))) {
       // token master: acceso total, sin scope ni owner
       req.auth = { scope: null, master: true, owner: null, apiKeyId: null };

@@ -1,6 +1,7 @@
 const { join } = require("node:path");
 const { homedir } = require("node:os");
 const dotenv = require("dotenv");
+const { getConfig } = require("./config");
 
 const DATABASE_URL_ENV = "CONVERSATION_MEMORY_DATABASE_URL";
 
@@ -34,9 +35,7 @@ function describeDatabaseTarget(connectionString) {
 }
 
 function getPgSslOptions() {
-  return process.env.PGSSL_REJECT_UNAUTHORIZED === "false"
-    ? { rejectUnauthorized: false }
-    : undefined;
+  return getConfig().database.sslRejectUnauthorized ? undefined : { rejectUnauthorized: false };
 }
 
 module.exports = {
