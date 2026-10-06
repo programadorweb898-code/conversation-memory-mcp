@@ -4,6 +4,7 @@
 // conoce el owner autenticado sin recibirlo en los parámetros públicos (no es
 // posible falsificarlo desde el request).
 const { AsyncLocalStorage } = require("async_hooks");
+const { getConfig } = require("./config");
 
 const als = new AsyncLocalStorage();
 
@@ -37,7 +38,7 @@ function getAuth() {
  * @returns {string}
  */
 function resolveWriteOwner(owner) {
-  return owner || process.env.MCP_DEFAULT_OWNER || "local-user";
+  return owner || getConfig().database.defaultOwner;
 }
 
 module.exports = { runWithAuth, getAuth, resolveWriteOwner };
