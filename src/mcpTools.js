@@ -159,7 +159,7 @@ REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícit
       sessionId: z.string().describe("ID de la sesión a recuperar"),
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
       agentId: z.string().optional().describe("Filtrar por ID de agente (SOLO si el usuario lo pidió explícitamente; no lo uses en lecturas base)"),
-       limit: z.number().int().positive().optional().describe("Número máximo de mensajes a recuperar (por defecto: 100; sujeto al máximo configurado)"),
+      limit: z.number().int().positive().optional().describe("Número máximo de mensajes a recuperar (por defecto: 100; sujeto al máximo configurado)"),
       afterSequenceId: z.string().regex(/^\d+$/).optional().describe("Cursor exclusivo: devuelve solo mensajes posteriores a este sequence_id"),
     },
     async ({ sessionId, project, agentId, limit, afterSequenceId }) => {
