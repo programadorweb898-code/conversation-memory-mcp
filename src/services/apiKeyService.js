@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { db } = require('../database');
+const { getConfig } = require('../config');
 
 /**
  * Hash SHA-256 hex de un token. Solo se persiste el hash, nunca el token plano.
@@ -45,7 +46,7 @@ async function createApiKey({ name, project = null, owner = null }) {
     token_hash: hashToken(token),
     name,
     project: project || null,
-    owner: owner || process.env.MCP_DEFAULT_OWNER || name,
+    owner: owner || getConfig().database.defaultOwner || name,
     enabled: true,
   };
   await db.runAsync(
