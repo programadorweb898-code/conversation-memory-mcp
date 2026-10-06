@@ -9,8 +9,7 @@ dotenv.config();
 // `pool.query()` no llega a resolver ni a rechazar. El keepalive cubre el otro
 // caso, una conexión ya establecida cuyo peer se cierra sin FIN, que los
 // keepalive del sistema por defecto no detectarían a tiempo.
-const CONNECT_TIMEOUT_MS = 10000;
-const KEEPALIVE_DELAY_MS = 30000;
+const { connectTimeoutMs: CONNECT_TIMEOUT_MS, keepaliveDelayMs: KEEPALIVE_DELAY_MS } = getConfig().database;
 
 // Tope de duración de cada statement. Hay dos mecanismos y el orden importa:
 // `statement_timeout` (el que se le manda al servidor en `acquire()`) es el
