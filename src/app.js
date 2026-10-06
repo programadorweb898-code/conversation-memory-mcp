@@ -40,9 +40,7 @@ app.get("/health/details", async (req, res) => {
 
 // Create servers for the modern HTTP transport and the legacy SSE transport.
 // El /mcp crea un McpServer nuevo por request (stateless); el /sse reutiliza sseServer.
-const sseServer = createMcpServer();
-
-setupMcpRoutes(app, { createMcpServer, sseServer });
+const { close: closeMcpRoutes } = setupMcpRoutes(app, { createMcpServer });
 
 // Coloca el middleware de errores después de todas las rutas y middleware para que capture los errores.
 app.use(errorHandler);
@@ -50,3 +48,4 @@ app.use(errorHandler);
 console.timeEnd("⏱️ App initialization");
 
 module.exports = app;
+module.exports.closeMcpRoutes = closeMcpRoutes;
