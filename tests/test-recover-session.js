@@ -53,6 +53,43 @@ describe('Recover Session Tool', () => {
     expect(messages[0].agent_id).to.equal(agentId);
   });
 
+  it('debería paginar después de un sequence_id sin alterar el límite máximo', async () => {
+    const allAsyncStub = sinon.stub(db, 'allAsync').resolves([]);
+    const originalLimit = config.recoverSessionLimit;
+    config.recoverSessionLimit = 3;
+
+    try {
+      await recoverSession({
+        sessionId: 'test-cursor-session',
+        project,
+        afterSequenceId: '42',
+        limit: 2,
+      });
+
+      expect(allAsyncStub.calledOnce).to.equal(true);
+      const [sql, params] = allAsyncStub.firstCall.args;
+      expect(sql).to.include('sequence_id > $3::bigint');
+      expect(sql).to.include('ORDER BY sequence_id ASC LIMIT $4');
+      expect(params).to.deep.equal(['test-cursor-session', project, '42', 2]);
+    } finally {
+      config.recoverSessionLimit = originalLimit;
+      allAsyncStub.restore();
+    }
+  });
+
+  it('debería rechazar un cursor que no sea un entero no negativo', async () => {
+    try {
+      await recoverSession({
+        sessionId: 'test-invalid-cursor',
+        project,
+        afterSequenceId: 'abc',
+      });
+      throw new Error('Se esperaba un error de validación del cursor');
+    } catch (err) {
+      expect(err.message).to.equal("El parámetro 'afterSequenceId' debe ser un sequence_id entero no negativo.");
+    }
+  });
+
   it('debería limitar la cantidad de mensajes recuperados y respetar el máximo configurado', async () => {
     const allAsyncStub = sinon.stub(db, 'allAsync').resolves([]);
     const originalLimit = config.recoverSessionLimit;
