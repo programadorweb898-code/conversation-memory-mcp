@@ -61,7 +61,7 @@ describe("LLM client timeout", () => {
       thrown = error;
     }
 
-    expect(global.fetch).to.have.been.calledOnce;
+    expect(global.fetch.calledOnce).to.equal(true);
     expect(thrown).to.be.an("error");
     expect(thrown.code).to.equal("LLM_TIMEOUT");
     expect(thrown.message).to.include("OpenRouter request timed out after 25ms");
@@ -80,9 +80,10 @@ describe("LLM client timeout", () => {
     const result = await llmClient.generateWithGemini("prompt de prueba");
 
     expect(result).to.equal("respuesta");
-    expect(generateContent).to.have.been.calledOnceWithExactly(
+    expect(generateContent.calledOnce).to.equal(true);
+    expect(generateContent.firstCall.args).to.deep.equal([
       "prompt de prueba",
       { timeout: 4321 },
-    );
+    ]);
   });
 });
