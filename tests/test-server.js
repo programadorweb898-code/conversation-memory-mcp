@@ -369,6 +369,50 @@ describe('Server HTTP layer', () => {
     expect(response.status).to.equal(401);
   });
 
+  it('should scope detailed health metrics to the authenticated owner', async function () {
+    this.timeout(30000);
+    const { app } = require('../src/server');
+    const ownerA = `health-owner-a-${Date.now()}`;
+    const ownerB = `health-owner-b-${Date.now()}`;
+    const firstKey = await createApiKey({ name: `health-key-a-${Date.now()}`, owner: ownerA });
+    const secondKey = await createApiKey({ name: `health-key-b-${Date.now()}`, owner: ownerB });
+    const messageA = `health-message-a-${Date.now()}`;
+    const messageB = `health-message-b-${Date.now()}`;
+
+    await db.runAsync(
+      `INSERT INTO conversations (id, session_id, project, role, content, owner)
+       VALUES ($1, $2, 'health-test', 'user', $3, $4)`,
+      [messageA, `health-session-a-${Date.now()}`, 'This message belongs only to owner A and must not be visible to owner B.', ownerA]
+    );
+    await db.runAsync(
+      `INSERT INTO conversations (id, session_id, project, role, content, owner)
+       VALUES ($1, $2, 'health-test', 'user', $3, $4)`,
+      [messageB, `health-session-b-${Date.now()}`, 'This message belongs only to owner B and must not be visible to owner A.', ownerB]
+    );
+
+    try {
+      const firstResponse = await request(app)
+        .get('/health/details')
+        .set('authorization', `Bearer ${firstKey.token}`);
+
+      const secondResponse = await request(app)
+        .get('/health/details')
+        .set('authorization', `Bearer ${secondKey.token}`);
+
+      expect(firstResponse.status).to.equal(200);
+      expect(secondResponse.status).to.equal(200);
+      expect(firstResponse.body.messages.total).to.equal(1);
+      expect(secondResponse.body.messages.total).to.equal(1);
+      expect(firstResponse.body.sessions.total).to.equal(1);
+      expect(secondResponse.body.sessions.total).to.equal(1);
+      expect(firstResponse.body.embeddingQueueSize).to.equal(null);
+      expect(secondResponse.body.embeddingQueueSize).to.equal(null);
+    } finally {
+      await db.runAsync('DELETE FROM conversations WHERE id = ANY($1)', [[messageA, messageB]]);
+      await db.runAsync('DELETE FROM api_keys WHERE id = ANY($1)', [[firstKey.key.id, secondKey.key.id]]);
+    }
+  });
+
   it('should return 503 when the public health database ping fails', async () => {
     const { db } = require('../src/database');
     sinon.stub(db, 'query').rejects(new Error('database unavailable'));
