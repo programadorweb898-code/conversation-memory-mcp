@@ -9,7 +9,7 @@ const sessionSummarySchema = z.object({
 }).strict();
 
 function parseSessionSummary(text) {
-  const jsonString = text.replace(/```json\\s*|\\s*```/gi, "").trim();
+  const jsonString = text.replace(/```json\s*|\s*```/gi, "").trim();
 
   let parsed;
   try {
