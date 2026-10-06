@@ -3,9 +3,9 @@
 // Métricas agregadas del almacén. El objetivo es responder una sola pregunta:
 // ¿la memoria conversacional está sirviendo lo que debería?
 //
-// Son agregados globales a propósito. /health es público (no exige token), así
-// que no puede revelar nombres de proyecto ni de owner. El detalle por proyecto
-// se consulta a mano contra la base cuando hace falta.
+// /health es público y solo expone el estado básico del servicio. /health/details
+// se encuentra autenticado y devuelve métricas globales solo para el token master;
+// para API keys se limita estrictamente al owner autenticado.
 
 const { db } = require("../database");
 const embeddingQueue = require("./embeddingQueue");
@@ -104,7 +104,7 @@ async function getHealth(owner = null) {
     },
     embeddingFailures: embeddingFailures?.with_failures ?? 0,
     embeddingsDescartados: embeddingFailures?.sin_generador ?? 0,
-    embeddingQueueSize: embeddingQueue.size(),
+    embeddingQueueSize: owner ? null : embeddingQueue.size(),
   };
 }
 
