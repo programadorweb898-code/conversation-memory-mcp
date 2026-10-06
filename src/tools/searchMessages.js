@@ -3,6 +3,7 @@ const { z } = require("zod");
 const embeddingService = require("../services/embeddingService");
 const removeStopwords = require("../services/stopwords");
 const { lexicalSearch, countEmbeddings } = require("../services/lexicalSearch");
+const { config } = require("../config");
 
 const SearchMessagesSchema = z.object({
   searchTerm: z.string().optional(),
@@ -50,6 +51,8 @@ async function searchMessages(params) {
         sql += ` WHERE ` + whereClauses.join(` AND `);
       }
 
+      sql += ` ORDER BY c.sequence_id DESC LIMIT ${dbParams.length + 1}`;
+      dbParams.push(config.searchLimit);
       return await db.allAsync(sql, dbParams);
     }
 
@@ -60,7 +63,7 @@ async function searchMessages(params) {
       .filter((token) => token.length > 2);
 
     const fallbackToLexical = async () => {
-      const rows = await lexicalSearch({ searchTerm, project, agentId, owner });
+      const rows = await lexicalSearch({ searchTerm, project, agentId, owner, limit: config.searchLimit });
       return rows.map((row) => {
         const lexicalScore = Number(row.lexical_score) || 0;
         const normalized = queryTokens.length > 0 ? lexicalScore / queryTokens.length : lexicalScore;
@@ -125,8 +128,10 @@ async function searchMessages(params) {
       sql += ` WHERE ` + whereClauses.join(` AND `);
     }
 
-    // Ordenamos por distancia de coseno ascendente (mayor similitud primero) y limitamos a los top 100.
-    sql += ` ORDER BY me.embedding <=> $1::vector ASC LIMIT 100`;
+    // Ordenamos por distancia de coseno ascendente (mayor similitud primero)
+    // y limitamos los resultados para mantener acotada la respuesta.
+    sql += ` ORDER BY me.embedding <=> $1::vector ASC LIMIT ${dbParams.length + 1}`;
+    dbParams.push(config.searchLimit);
 
     const rows = await db.allAsync(sql, dbParams);
 
