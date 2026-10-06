@@ -1,8 +1,6 @@
 const { startWorker, stopWorker } = require("./services/embeddingWorker");
 const { getConfig } = require("./config");
 const app = require("./app");
-const dotenv = require("dotenv");
-dotenv.config();
 let httpServer;
 
 function shouldStartEmbeddingWorker() {
