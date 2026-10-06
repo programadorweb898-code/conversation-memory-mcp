@@ -1,13 +1,15 @@
 const { expect } = require('chai');
+const sinon = require('sinon');
 const searchMessages = require("../src/tools/searchMessages");
 const semanticSearchMessages = require("../src/tools/semanticSearchMessages");
 const saveMessage = require("../src/tools/saveMessage");
 const { db } = require("./test-helper");
+const embeddingService = require("../src/services/embeddingService");
 const {
   generateEmbedding,
   initializeEmbeddingPipeline,
   saveEmbedding,
-} = require("../src/services/embeddingService");
+} = embeddingService;
 
 describe('Semantic Search Messages Tool', () => {
   const testSessionId = `test-session-semantic-${Date.now()}`;
@@ -112,6 +114,43 @@ describe('Semantic Search Messages Tool', () => {
     expect(results).to.have.length.at.least(1);
     expect(results.every(r => r.agent_id === "test-agent-semantic")).to.be.true;
     expect(results.map(r => r.content)).to.include("Mensaje semántico generado por un agente específico.");
+  }).timeout(10000);
+
+  it('debería caer a búsqueda léxica si falla la generación del embedding híbrido', async () => {
+    const embeddingStub = sinon.stub(embeddingService, 'generateEmbedding')
+      .rejects(new Error('embedding model unavailable'));
+
+    try {
+      const results = await searchMessages({
+        query: "coche rojo",
+        project: testProject,
+      });
+
+      expect(results).to.be.an('array');
+      expect(results).to.not.be.empty;
+      expect(results.some((result) => result.content.includes("coche rojo"))).to.be.true;
+      expect(results.every((result) => result.semanticScore === 0)).to.be.true;
+    } finally {
+      embeddingStub.restore();
+    }
+  }).timeout(10000);
+
+  it('debería caer a búsqueda léxica si falla la generación del embedding semántico', async () => {
+    const embeddingStub = sinon.stub(embeddingService, 'generateEmbedding')
+      .rejects(new Error('embedding model unavailable'));
+
+    try {
+      const results = await semanticSearchMessages({
+        query: "coche rojo",
+        project: testProject,
+      });
+
+      expect(results).to.be.an('array');
+      expect(results).to.not.be.empty;
+      expect(results.some((result) => result.content.includes("coche rojo"))).to.be.true;
+    } finally {
+      embeddingStub.restore();
+    }
   }).timeout(10000);
 
   it('no debería encontrar mensajes de otros proyectos al filtrar', async () => {
