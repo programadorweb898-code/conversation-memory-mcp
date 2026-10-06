@@ -310,6 +310,25 @@ turnos del mismo milisegundo; `vector(384)` porque los embeddings se guardaban
 como texto y sin eso no hay búsqueda semántica; y el backfill de `project`
 porque la columna nació después que las filas que ya existían.
 
+`migrate_sequence.js` hace su backfill con un único `UPDATE` sobre toda la tabla
+`conversations`, así que es la única operación del repo que podría pasarse del
+tope de 60s si la tabla creciera mucho. Si eso pasara, se sube solo para esa
+corrida:
+
+```bash
+CONVERSATION_MEMORY_QUERY_TIMEOUT_MS=600000 npm run migrate
+```
+
+### Tope de duración de las queries
+
+Por default cada statement tiene 60s de tope, aplicado por el servidor con
+`statement_timeout`. El server-side es el mecanismo primario a propósito:
+Postgres cancela la query él mismo y la conexión sigue reutilizable. Hay
+además un timeout del lado cliente, 5s por encima, que solo entra en juego si el
+socket se muere y el servidor no puede cancelar nada; cuando ese caso se
+dispara, la conexión se destruye en vez de volver al pool, porque para entonces
+ya no es confiable. Se ajusta con `CONVERSATION_MEMORY_QUERY_TIMEOUT_MS`.
+
 Una instalación nueva no los necesita: `migrations/001_initial_schema.sql` ya
 incluye `CREATE EXTENSION vector`, `ADD COLUMN IF NOT EXISTS project`,
 `sequence_id`, la secuencia y el índice HNSW, todo con `IF NOT EXISTS` e

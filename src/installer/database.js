@@ -10,7 +10,6 @@ const { confirmMigrationTarget, runMigrations } = require("../../scripts/migrate
 const {
   DATABASE_URL_ENV,
   describeDatabaseTarget,
-  getDatabaseUrl,
   getGlobalDatabaseEnvFile,
   getPgSslOptions,
 } = require("../databaseConfig");
@@ -24,7 +23,7 @@ function getDatabaseEnvFile(cwd, scope = "project") {
 
 function loadEnvironment(cwd, scope = "project") {
   dotenv.config({ path: getDatabaseEnvFile(cwd, scope), override: false });
-  return getDatabaseUrl();
+  return process.env[DATABASE_URL_ENV] || "";
 }
 
 async function testDatabaseConnection(connectionString) {
@@ -34,6 +33,7 @@ async function testDatabaseConnection(connectionString) {
     ...(getPgSslOptions() ? { ssl: getPgSslOptions() } : {}),
     connectionTimeoutMillis: 10000,
   });
+  client.on("error", () => {});
   try {
     await client.connect();
     await client.query("SELECT 1");

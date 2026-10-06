@@ -240,21 +240,27 @@ describe("Embedding Worker", function () {
       const generateEmbeddings = sinon.stub(embeddingService, "generateEmbeddings").returns(generatedBatch);
       sinon.stub(embeddingService, "saveEmbedding").resolves();
 
-      let tick;
       const timer = { unref: sinon.spy() };
-      const setTimeoutStub = sinon.stub(global, "setTimeout").callsFake((callback) => {
-        tick = callback;
-        return timer;
-      });
+      const setTimeoutStub = sinon.stub(global, "setTimeout").callsFake(() => timer);
+      let stubRestored = false;
+      const restoreTimerStub = () => {
+        if (stubRestored) return;
+        stubRestored = true;
+        setTimeoutStub.restore();
+      };
 
       try {
         embeddingWorker.startWorker();
         expect(timer.unref.calledOnce).to.equal(true);
 
-        const firstTick = tick();
-        const secondTick = tick();
+        // Los ticks se disparan contra el worker y no contra el callback
+        // capturado: con el stub global cualquier `setTimeout` que se dispare en
+        // paralelo (pg-pool arma uno al conectar) se queda con la referencia.
+        restoreTimerStub();
+        const firstTick = embeddingWorker.runWorkerTick();
+        const secondTick = embeddingWorker.runWorkerTick();
         expect(firstTick).to.be.a("promise");
-        expect(secondTick).to.be.a("promise");
+        expect(secondTick).to.equal(firstTick);
 
         const deadline = Date.now() + 10000;
         while (!generateEmbeddings.called && Date.now() < deadline) {
@@ -278,7 +284,7 @@ describe("Embedding Worker", function () {
           resolveBatch([JSON.stringify(fakeEmbedding(0.6))]);
           await embeddingWorker.stopWorker();
         }
-        setTimeoutStub.restore();
+        restoreTimerStub();
       }
     });
 

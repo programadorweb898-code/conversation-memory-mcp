@@ -54,6 +54,39 @@ describe("database installer", () => {
     }
   });
 
+  it("reads the dedicated URL only from the target .env", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-db-"));
+    const elsewhere = mkdtempSync(join(tmpdir(), "conversation-memory-db-other-"));
+    writeFileSync(join(cwd, ".env"), `${DATABASE_URL_ENV}="postgresql://target@memory.example/db"\n`);
+    writeFileSync(join(elsewhere, ".env"), `${DATABASE_URL_ENV}="postgresql://unrelated@other.example/db"\n`);
+    const previousDedicatedUrl = process.env[DATABASE_URL_ENV];
+    const previousCwd = process.cwd();
+
+    try {
+      process.chdir(elsewhere);
+      delete process.env[DATABASE_URL_ENV];
+      assert.equal(loadEnvironment(cwd), "postgresql://target@memory.example/db");
+    } finally {
+      process.chdir(previousCwd);
+      if (previousDedicatedUrl === undefined) delete process.env[DATABASE_URL_ENV];
+      else process.env[DATABASE_URL_ENV] = previousDedicatedUrl;
+    }
+  });
+
+  it("prefers an exported dedicated URL over the target .env", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-db-"));
+    writeFileSync(join(cwd, ".env"), `${DATABASE_URL_ENV}="postgresql://from-file@memory.example/db"\n`);
+    const previousDedicatedUrl = process.env[DATABASE_URL_ENV];
+
+    try {
+      process.env[DATABASE_URL_ENV] = "postgresql://from-env@memory.example/db";
+      assert.equal(loadEnvironment(cwd), "postgresql://from-env@memory.example/db");
+    } finally {
+      if (previousDedicatedUrl === undefined) delete process.env[DATABASE_URL_ENV];
+      else process.env[DATABASE_URL_ENV] = previousDedicatedUrl;
+    }
+  });
+
   it("stores a global installation URL outside the project cwd", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-db-project-"));
     const userConfig = mkdtempSync(join(tmpdir(), "conversation-memory-user-config-"));

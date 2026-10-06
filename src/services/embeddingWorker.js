@@ -236,6 +236,7 @@ async function stopWorker() {
 module.exports = {
   startWorker,
   stopWorker,
+  runWorkerTick,
   processNextEmbeddingTask,
   recordEmbeddingFailure,
 };
