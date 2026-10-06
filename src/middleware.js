@@ -42,7 +42,7 @@ function validateMcpHostOrigin(req, res, next) {
 
   const allowedOrigins = (process.env.MCP_ALLOWED_ORIGINS || "")
     .split(",")
-    .map((value) => value.trim().replace(/\\/$/, "").toLowerCase())
+    .map((value) => value.trim().replace(/\/$/, "").toLowerCase())
     .filter(Boolean);
 
   if (allowedHosts.length > 0) {
@@ -55,7 +55,7 @@ function validateMcpHostOrigin(req, res, next) {
   if (allowedOrigins.length > 0) {
     const origin = req.get("origin");
     if (origin) {
-      const normalizedOrigin = origin.trim().replace(/\\/$/, "").toLowerCase();
+      const normalizedOrigin = origin.trim().replace(/\/$/, "").toLowerCase();
       if (!allowedOrigins.includes(normalizedOrigin)) {
         return res.status(403).json({ error: "Origin no autorizado." });
       }
