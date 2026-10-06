@@ -18,24 +18,14 @@
 //     ninguna, generateText devuelve null.
 
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { getConfig, DEFAULT_LLM_TIMEOUT_MS, DEFAULT_LLM_MAX_RETRIES, DEFAULT_LLM_RETRY_BASE_DELAY_MS, DEFAULT_LLM_RETRY_MAX_DELAY_MS } = require("../config");
 
 const GEMINI_DEFAULT_MODEL = "gemini-2.5-flash-lite";
 const OPENROUTER_DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const DEFAULT_LLM_TIMEOUT_MS = 30000;
-const DEFAULT_LLM_MAX_RETRIES = 2;
-const DEFAULT_LLM_RETRY_BASE_DELAY_MS = 250;
-const DEFAULT_LLM_RETRY_MAX_DELAY_MS = 2000;
 
 function resolveLlmTimeoutMs() {
-  const raw = process.env.CONVERSATION_MEMORY_LLM_TIMEOUT_MS;
-  if (raw === undefined || raw === "") return DEFAULT_LLM_TIMEOUT_MS;
-
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`CONVERSATION_MEMORY_LLM_TIMEOUT_MS inválido: "${raw}"`);
-  }
-  return parsed;
+  return getConfig().llm.timeoutMs;
 }
 
 function createLlmTimeoutError(provider, timeoutMs, cause) {
@@ -46,36 +36,15 @@ function createLlmTimeoutError(provider, timeoutMs, cause) {
 }
 
 function resolveLlmRetries() {
-  const raw = process.env.CONVERSATION_MEMORY_LLM_MAX_RETRIES;
-  if (raw === undefined || raw === "") return DEFAULT_LLM_MAX_RETRIES;
-
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    throw new Error(`CONVERSATION_MEMORY_LLM_MAX_RETRIES inválido: "${raw}"`);
-  }
-  return parsed;
+  return getConfig().llm.maxRetries;
 }
 
 function resolveRetryBaseDelayMs() {
-  const raw = process.env.CONVERSATION_MEMORY_LLM_RETRY_BASE_DELAY_MS;
-  if (raw === undefined || raw === "") return DEFAULT_LLM_RETRY_BASE_DELAY_MS;
-
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    throw new Error(`CONVERSATION_MEMORY_LLM_RETRY_BASE_DELAY_MS inválido: "${raw}"`);
-  }
-  return parsed;
+  return getConfig().llm.retryBaseDelayMs;
 }
 
 function resolveRetryMaxDelayMs() {
-  const raw = process.env.CONVERSATION_MEMORY_LLM_RETRY_MAX_DELAY_MS;
-  if (raw === undefined || raw === "") return DEFAULT_LLM_RETRY_MAX_DELAY_MS;
-
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    throw new Error(`CONVERSATION_MEMORY_LLM_RETRY_MAX_DELAY_MS inválido: "${raw}"`);
-  }
-  return parsed;
+  return getConfig().llm.retryMaxDelayMs;
 }
 
 function getErrorStatus(error) {
@@ -117,22 +86,22 @@ async function withLlmRetries(operation) {
 }
 
 function detectProvider() {
-  const explicit = (process.env.AI_PROVIDER || "").trim().toLowerCase();
-  if (explicit === "openrouter") return "openrouter";
-  if (explicit === "gemini" || explicit === "google") return "gemini";
-  if (process.env.OPENROUTER_API_KEY) return "openrouter";
-  if (process.env.GEMINI_API_KEY) return "gemini";
+  const config = getConfig().llm;
+  if (config.provider === "openrouter") return "openrouter";
+  if (config.provider === "gemini" || config.provider === "google") return "gemini";
+  if (config.openrouterApiKey) return "openrouter";
+  if (config.geminiApiKey) return "gemini";
   return null;
 }
 
 function resolveModel(provider) {
-  const override = (process.env.AI_MODEL || "").trim();
+  const override = getConfig().llm.model;
   if (override) return override;
   return provider === "gemini" ? GEMINI_DEFAULT_MODEL : OPENROUTER_DEFAULT_MODEL;
 }
 
 async function generateWithGemini(prompt) {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = getConfig().llm.geminiApiKey;
   if (!apiKey) return null;
 
   const timeoutMs = resolveLlmTimeoutMs();
@@ -153,7 +122,7 @@ async function generateWithGemini(prompt) {
 }
 
 async function generateWithOpenRouter(prompt) {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = getConfig().llm.openrouterApiKey;
   if (!apiKey) return null;
 
   const timeoutMs = resolveLlmTimeoutMs();
