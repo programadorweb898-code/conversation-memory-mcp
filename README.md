@@ -291,6 +291,14 @@ En modo HTTP, el `owner` se obtiene del token autenticado y nunca se acepta como
 
 En modo local/stdio, `MCP_DEFAULT_OWNER` identifica el propietario local por defecto.
 
+## Configuración centralizada
+
+La configuración de runtime se interpreta en un único módulo: `src/config.js`. Ahí se concentran los defaults, la conversión de tipos y las validaciones de las variables utilizadas por el servidor, PostgreSQL, embeddings y LLM.
+
+Los módulos de runtime consumen esa configuración en lugar de interpretar directamente `process.env`. Esto evita defaults diferentes entre componentes y hace que una configuración inválida falle de forma explícita.
+
+> Las rutas especiales del instalador y las variables propias de cada agente (por ejemplo OpenCode/Copilot) siguen siendo responsabilidad de sus respectivos módulos.
+
 ## Desarrollo
 
 Scripts principales:
