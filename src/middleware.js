@@ -20,6 +20,51 @@ function rateLimitKeyGenerator(req) {
   return `ip:${ipKeyGenerator(req.ip)}`;
 }
 
+/**
+ * Valida Host/Origin en los transportes HTTP de MCP.
+ *
+ * MCP_ALLOWED_HOSTS y MCP_ALLOWED_ORIGINS son listas separadas por comas.
+ * Si una lista está vacía, esa validación queda deshabilitada para mantener
+ * compatibilidad con instalaciones existentes.
+ *
+ * La validación se ejecuta antes de autenticación para rechazar requests no
+ * confiables sin consultar la base de datos.
+ */
+function validateMcpHostOrigin(req, res, next) {
+  if (!["/mcp", "/sse", "/messages"].includes(req.path)) {
+    return next();
+  }
+
+  const allowedHosts = (process.env.MCP_ALLOWED_HOSTS || "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+
+  const allowedOrigins = (process.env.MCP_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((value) => value.trim().replace(/\\/$/, "").toLowerCase())
+    .filter(Boolean);
+
+  if (allowedHosts.length > 0) {
+    const host = (req.get("host") || "").trim().toLowerCase();
+    if (!host || !allowedHosts.includes(host)) {
+      return res.status(403).json({ error: "Host no autorizado." });
+    }
+  }
+
+  if (allowedOrigins.length > 0) {
+    const origin = req.get("origin");
+    if (origin) {
+      const normalizedOrigin = origin.trim().replace(/\\/$/, "").toLowerCase();
+      if (!allowedOrigins.includes(normalizedOrigin)) {
+        return res.status(403).json({ error: "Origin no autorizado." });
+      }
+    }
+  }
+
+  return next();
+}
+
 // límite para conexiones SSE: máximo 10 por usuario por minuto
 // límite previo a autenticación: máximo 100 requests por IP por minuto.
 // Este limiter se ejecuta antes de consultar la base para validar el token.
@@ -173,6 +218,7 @@ function requireJson(req, res, next) {
 
 function applyMiddleware(app) {
   app.use(helmet());
+  app.use(validateMcpHostOrigin);
   app.use(authLimiter);
   app.use(requireBearerToken);
   app.use("/sse", sseLimiter);
@@ -183,6 +229,7 @@ function applyMiddleware(app) {
 
 module.exports = {
   authLimiter,
+  validateMcpHostOrigin,
   sseLimiter,
   messagesLimiter,
   requireBearerToken,
