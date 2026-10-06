@@ -143,6 +143,49 @@ async function runQuery(sql, params) {
   }
 }
 
+async function withTransaction(work) {
+  const client = await acquire();
+  let transactionActive = false;
+  let poisoned = null;
+
+  const tx = {
+    query: (sql, params) => client.query(sql, params),
+    runAsync: async (sql, params = []) => {
+      const result = await client.query(sql, params);
+      return { changes: result.rowCount };
+    },
+    getAsync: async (sql, params = []) => {
+      const result = await client.query(sql, params);
+      return result.rows[0];
+    },
+    allAsync: async (sql, params = []) => {
+      const result = await client.query(sql, params);
+      return result.rows;
+    },
+  };
+
+  try {
+    await client.query("BEGIN");
+    transactionActive = true;
+    const result = await work(tx);
+    await client.query("COMMIT");
+    transactionActive = false;
+    return result;
+  } catch (err) {
+    poisoned = poisonedByClientTimeout(err) ? err : null;
+    throw err;
+  } finally {
+    if (transactionActive && !poisoned) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (err) {
+        console.error("Error haciendo ROLLBACK de la transacción:", err.message);
+      }
+    }
+    client.release(poisoned);
+  }
+}
+
 async function withAdvisoryLock(key, work) {
   const client = await acquire();
   const lockValue = hashtext(`advisory:${key}`);
@@ -202,4 +245,4 @@ const db = {
   }
 };
 
-module.exports = { db, withAdvisoryLock };
+module.exports = { db, withAdvisoryLock, withTransaction };
