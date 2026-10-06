@@ -4,11 +4,13 @@ const embeddingQueue = require("./embeddingQueue");
 const embeddingService = require("./embeddingService");
 const { isEmbeddingsEnabled, prepareForEmbedding, MIN_EMBEDDING_CHARS } = require("./embeddingService");
 const { db } = require("../database");
+const { getConfig } = require("../config");
 
-const initialPollIntervalMs = positiveInteger(process.env.EMBEDDING_POLL_INTERVAL_MS, 5000);
-const maxPollIntervalMs = positiveInteger(process.env.EMBEDDING_MAX_POLL_INTERVAL_MS, 900000);
+const embeddingConfig = getConfig().embeddings;
+const initialPollIntervalMs = embeddingConfig.pollIntervalMs;
+const maxPollIntervalMs = embeddingConfig.maxPollIntervalMs;
 const maxEmbeddingAttempts = 3;
-const batchSize = Number(process.env.EMBEDDING_BATCH_SIZE || 10);
+const batchSize = embeddingConfig.batchSize;
 // Violación de clave foránea: el mensaje fue borrado mientras esperaba.
 const FK_VIOLATION = "23503";
 
