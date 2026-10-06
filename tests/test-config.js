@@ -1,4 +1,8 @@
 const { expect } = require("chai");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { spawnSync } = require("node:child_process");
 const { getConfig } = require("../src/config");
 
 describe("centralized runtime configuration", () => {
@@ -43,6 +47,30 @@ describe("centralized runtime configuration", () => {
     }
   });
 
+  it("carga .env antes de que otro módulo consulte la configuración", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "conversation-memory-config-"));
+    const configPath = path.resolve(__dirname, "../src/config.js");
+
+    try {
+      fs.writeFileSync(path.join(tempDir, ".env"), "PORT=4567\nMCP_DEFAULT_OWNER=bootstrap-owner\n");
+
+      const childEnv = { ...process.env };
+      delete childEnv.PORT;
+      delete childEnv.MCP_DEFAULT_OWNER;
+
+      const script = `const { getConfig } = require(${JSON.stringify(configPath)}); process.stdout.write(JSON.stringify(getConfig().server.port) + "|" + getConfig().database.defaultOwner);`;
+      const result = spawnSync(process.execPath, ["-e", script], {
+        cwd: tempDir,
+        env: childEnv,
+        encoding: "utf8",
+      });
+
+      expect(result.status).to.equal(0, result.stderr);
+      expect(result.stdout).to.equal("4567|bootstrap-owner");
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
   it("aplica defaults consistentes", () => {
     const config = getConfig();
 
