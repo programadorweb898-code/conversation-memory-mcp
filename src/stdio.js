@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-const dotenv = require("dotenv");
 const logger = require("./logger");
 const { getConfig } = require("./config");
 
@@ -15,7 +14,6 @@ const { startWorker, stopWorker } = require("./services/embeddingWorker");
 const { db } = require("./database");
 const { getDatabaseUrl } = require("./databaseConfig");
 
-dotenv.config();
 
 async function startStdioServer({ processRef = process } = {}) {
   if (!getDatabaseUrl()) {
