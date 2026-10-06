@@ -1,4 +1,4 @@
-const { db } = require("../database");
+const { withTransaction } = require("../database");
 
 /**
  * Elimina todos los mensajes, embeddings y el resumen
@@ -8,32 +8,37 @@ const { db } = require("../database");
  * @param {string} [owner] - Propietario autenticado; si se omite, aplica al proyecto completo.
  * @returns {Promise<void>}
  */
-// Orden obligatorio: message_embeddings depende de conversations.
 async function deleteSession({ sessionId, project, owner }) {
   if (!project) throw new Error("El parámetro 'project' es obligatorio.");
+
   try {
-    const embeddingResult = await db.runAsync(
-      "DELETE FROM message_embeddings WHERE message_id IN (SELECT id FROM conversations WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3))",
-      [sessionId, project, owner ?? null]
-    );
-    console.log(`Embeddings for session ${sessionId} deleted (if existed). Rows affected: ${embeddingResult.changes}`);
+    const result = await withTransaction(async (tx) => {
+      const embeddingResult = await tx.runAsync(
+        "DELETE FROM message_embeddings WHERE message_id IN (SELECT id FROM conversations WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3))",
+        [sessionId, project, owner ?? null]
+      );
 
-    const messageResult = await db.runAsync(
-      "DELETE FROM conversations WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)",
-      [sessionId, project, owner ?? null]
-    );
-    console.log(`Messages for session ${sessionId} deleted (if existed). Rows affected: ${messageResult.changes}`);
+      const messageResult = await tx.runAsync(
+        "DELETE FROM conversations WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)",
+        [sessionId, project, owner ?? null]
+      );
 
-    const summaryResult = await db.runAsync(
-      "DELETE FROM session_summaries WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)",
-      [sessionId, project, owner ?? null]
-    );
+      const summaryResult = await tx.runAsync(
+        "DELETE FROM session_summaries WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)",
+        [sessionId, project, owner ?? null]
+      );
 
+      return {
+        embeddings: embeddingResult.changes,
+        messages: messageResult.changes,
+        summaries: summaryResult.changes,
+      };
+    });
 
-    if (messageResult.changes > 0 || summaryResult.changes > 0) {
+    if (result.messages > 0 || result.summaries > 0) {
       console.log(
         `Session ${sessionId} and its associated data deleted successfully. ` +
-        `Rows affected: messages=${messageResult.changes}, summaries=${summaryResult.changes}`
+        `Rows affected: messages=${result.messages}, summaries=${result.summaries}, embeddings=${result.embeddings}`
       );
     } else {
       console.log(`Session ${sessionId} not found or had no associated data.`);
