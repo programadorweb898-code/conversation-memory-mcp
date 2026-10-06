@@ -71,8 +71,6 @@ async function startStdioServer({ processRef = process } = {}) {
   return { server, transport, shutdown };
 }
 
-process.on("SIGINT", () => stopWorker());
-process.on("SIGTERM", () => stopWorker());
 
 // Un rechazo suelto no debe derribar el servidor: se registra en stderr, que es
 // el único stream permitido para esto, y se sigue sirviendo.
