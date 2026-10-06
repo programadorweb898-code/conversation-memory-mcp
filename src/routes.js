@@ -37,6 +37,8 @@ function setupMcpRoutes(app, { createMcpServer }) {
     const transport = new sseSdk.SSEServerTransport("/messages", res);
     const sessionId = transport.sessionId || createSessionId();
     transport.sessionId = sessionId;
+    const server = createMcpServer();
+
     transports.set(sessionId, {
       transport,
       apiKeyId: req.auth?.apiKeyId ?? null,
@@ -53,7 +55,7 @@ function setupMcpRoutes(app, { createMcpServer }) {
     // una reconexión forzada.
     const keepAliveInterval = setInterval(() => {
       try {
-        res.write(":ping\n\n");
+        res.write(":ping\\n\\n");
       } catch (err) {
         console.error("Error enviando keep-alive SSE:", err.message);
         clearInterval(keepAliveInterval);
@@ -63,16 +65,13 @@ function setupMcpRoutes(app, { createMcpServer }) {
     res.on("close", () => {
       clearInterval(keepAliveInterval);
       transports.delete(sessionId);
+      server.close();
       console.log(`Sesion ${sessionId} desconectada. Transports activos: ${transports.size}`);
     });
-    const server= createMcpServer();
+
     console.log("Connecting MCP server to transport...");
     await server.connect(transport);
     console.log("MCP server connected to transport");
-    res.on("close",()=>{
-      server.close();
-    })
-  });
 
   app.post("/messages", async (req, res) => {
     console.log("Recibido POST en /messages");
