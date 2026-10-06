@@ -4,6 +4,7 @@ const { setupMcpRoutes } = require("./routes");
 const { checkDatabase, getHealth } = require("./services/healthCheck");
 const errorHandler = require("./errorHandler");
 const { createMcpServer } = require("./createMcpServer");
+const { getAuth } = require("./context");
 
 console.time("⏱️ App initialization");
 
@@ -31,7 +32,9 @@ app.get("/health", async (req, res) => {
 // Las métricas son más costosas y requieren autenticación Bearer.
 app.get("/health/details", async (req, res) => {
   try {
-    res.status(200).json(await getHealth());
+    const auth = getAuth();
+    const owner = auth?.master ? null : auth?.owner;
+    res.status(200).json(await getHealth(owner));
   } catch (error) {
     console.error("Health details failed:", error.message);
     res.status(503).json({ status: "degraded", details: "unavailable" });
