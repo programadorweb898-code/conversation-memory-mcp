@@ -1,9 +1,34 @@
+const { z } = require("zod");
 const llmClient = require("../services/llmClient");
+
+const sessionSummarySchema = z.object({
+  goal: z.string(),
+  discoveries: z.array(z.string()),
+  accomplished: z.array(z.string()),
+  next_steps: z.array(z.string()),
+}).strict();
+
+function parseSessionSummary(text) {
+  const jsonString = text.replace(/\`\`\`json\\n?|\\n?\`\`\`/g, "").trim();
+
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonString);
+  } catch {
+    return null;
+  }
+
+  const validation = sessionSummarySchema.safeParse(parsed);
+  if (!validation.success) return null;
+
+  return JSON.stringify(validation.data);
+}
 
 /**
  * Genera un resumen incremental de una sesión utilizando LLM.
- * Si no hay proveedor configurado o el LLM falla, devuelve null para que
- * finalizeSession no marque los mensajes como resumidos.
+ * Si no hay proveedor configurado, el LLM falla o el resumen no cumple el
+ * contrato estructural esperado, devuelve null para que finalizeSession no
+ * marque los mensajes como resumidos.
  */
 async function generateSessionSummary({ sessionId, previousSummary, newMessages }) {
   if (!newMessages || newMessages.length === 0) return previousSummary;
@@ -48,9 +73,13 @@ async function generateSessionSummary({ sessionId, previousSummary, newMessages 
     const text = await llmClient.generateText(prompt);
     if (!text) return null;
 
-    const jsonString = text.replace(/```json\n?|\n?```/g, '').trim();
-    JSON.parse(jsonString);
-    return jsonString;
+    const validatedSummary = parseSessionSummary(text);
+    if (!validatedSummary) {
+      console.error("El LLM devolvió un resumen con estructura inválida.");
+      return null;
+    }
+
+    return validatedSummary;
   } catch (err) {
     console.error("Error generating incremental summary with LLM:", err.message);
     return null;
@@ -58,3 +87,5 @@ async function generateSessionSummary({ sessionId, previousSummary, newMessages 
 }
 
 module.exports = generateSessionSummary;
+module.exports.parseSessionSummary = parseSessionSummary;
+module.exports.sessionSummarySchema = sessionSummarySchema;
