@@ -1,4 +1,5 @@
 const { Pool } = require("pg");
+const { getConfig } = require("./config");
 const dotenv = require("dotenv");
 const { getDatabaseUrl, getPgSslOptions } = require("./databaseConfig");
 dotenv.config();
@@ -18,21 +19,8 @@ const KEEPALIVE_DELAY_MS = 30000;
 // para el socket muerto, donde el servidor no puede cancelar nada, y por eso va
 // por encima del del servidor: siempre cancela primero el que puede hacerlo
 // bien.
-const DEFAULT_STATEMENT_TIMEOUT_MS = 60000;
 const CLIENT_QUERY_TIMEOUT_MARGIN_MS = 5000;
-
-function resolveStatementTimeoutMs() {
-  const raw = process.env.CONVERSATION_MEMORY_QUERY_TIMEOUT_MS;
-  if (raw === undefined || raw === "") return DEFAULT_STATEMENT_TIMEOUT_MS;
-
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`CONVERSATION_MEMORY_QUERY_TIMEOUT_MS inválido: "${raw}"`);
-  }
-  return parsed;
-}
-
-const STATEMENT_TIMEOUT_MS = resolveStatementTimeoutMs();
+const STATEMENT_TIMEOUT_MS = getConfig().database.queryTimeoutMs;
 
 const poolOptions = {
   connectionString: getDatabaseUrl(),
@@ -93,10 +81,7 @@ pool.on("error", (err) => {
 // tocar el schema de producción (los tests usan `cm_test`). `public` queda
 // siempre en el path porque ahí viven los tipos de las extensiones (pgvector).
 // No se puede pasar por el startup packet: el endpoint pooled de Neon lo rechaza.
-const searchPath = process.env.PG_SEARCH_PATH;
-if (searchPath && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(searchPath)) {
-  throw new Error(`PG_SEARCH_PATH inválido: "${searchPath}"`);
-}
+const searchPath = getConfig().database.searchPath;
 
 // Los `SET` van al adquirir la conexión, no en el evento "connect": pg-pool no
 // espera al handler del evento, así que ahí el SET compite con la primera
