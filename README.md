@@ -236,8 +236,13 @@ Variables disponibles:
 - `AI_PROVIDER`
 - `AI_MODEL`
 - `CONVERSATION_MEMORY_LLM_TIMEOUT_MS` (opcional; por defecto 30000 ms)
+- `CONVERSATION_MEMORY_LLM_MAX_RETRIES` (opcional; por defecto 2 reintentos)
+- `CONVERSATION_MEMORY_LLM_RETRY_BASE_DELAY_MS` (opcional; por defecto 250 ms)
+- `CONVERSATION_MEMORY_LLM_RETRY_MAX_DELAY_MS` (opcional; por defecto 2000 ms)
 
 Las llamadas al LLM tienen un timeout explícito para no quedar esperando indefinidamente ante un proveedor externo sin respuesta. En OpenRouter el timeout aborta la petición HTTP; en Gemini se envía como timeout de la petición del SDK.
+
+Ante fallos transitorios se realizan como máximo 2 reintentos adicionales por defecto, con backoff exponencial y límite de espera. Se consideran reintentables los `429`, los `5xx` y los timeouts. Errores permanentes como `400` o `401` fallan inmediatamente.
 
 La ausencia de un LLM no impide guardar ni recuperar el historial.
 
