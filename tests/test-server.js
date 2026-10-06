@@ -9,7 +9,7 @@ const streamableHttpSdk = require('@modelcontextprotocol/sdk/server/streamableHt
 const embeddingService = require('../src/services/embeddingService');
 const { db } = require('../src/database');
 const { createApiKey } = require('../src/services/apiKeyService');
-const { sseLimiter, messagesLimiter } = require('../src/middleware');
+const { authLimiter, sseLimiter, messagesLimiter } = require('../src/middleware');
 
 function resetServerModule() {
   delete require.cache[require.resolve('../src/server')];
@@ -299,6 +299,45 @@ describe('Server HTTP layer', () => {
     const { app } = require('../src/server');
     const response = await request(app).get('/mcp');
     expect(response.status).to.equal(401);
+  });
+
+  it('should rate limit invalid-token requests before querying the database', async function () {
+    this.timeout(30000);
+    const { app } = require('../src/server');
+    const clientIp = '198.51.100.79';
+    const originalGetAsync = db.getAsync;
+    let lookupCount = 0;
+
+    authLimiter.resetKey(clientIp);
+
+    db.getAsync = async (...args) => {
+      lookupCount += 1;
+      return originalGetAsync(...args);
+    };
+
+    try {
+      for (let requestNumber = 0; requestNumber < 100; requestNumber += 1) {
+        const response = await request(app)
+          .get('/mcp')
+          .set('authorization', 'Bearer invalid-token')
+          .set('x-forwarded-for', clientIp);
+
+        expect(response.status).to.equal(401);
+      }
+
+      expect(lookupCount).to.equal(100);
+
+      const limitedResponse = await request(app)
+        .get('/mcp')
+        .set('authorization', 'Bearer invalid-token')
+        .set('x-forwarded-for', clientIp);
+
+      expect(limitedResponse.status).to.equal(429);
+      expect(lookupCount).to.equal(100);
+    } finally {
+      db.getAsync = originalGetAsync;
+      authLimiter.resetKey(clientIp);
+    }
   });
 
   it('should allow /health without token', async () => {
