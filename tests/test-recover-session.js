@@ -37,6 +37,32 @@ describe('Recover Session Tool', () => {
     expect(messages[1].content).to.equal("Mensaje 2");
   });
 
+  it('debería continuar una sesión desde el cursor sequence_id indicado', async () => {
+    const sessionId = `test-session-cursor-${Date.now()}`;
+    sessionIds.push(sessionId);
+
+    await saveMessage({ sessionId, project, role: "user", content: "Mensaje 1" });
+    await saveMessage({ sessionId, project, role: "assistant", content: "Mensaje 2" });
+    await saveMessage({ sessionId, project, role: "user", content: "Mensaje 3" });
+
+    const first = await db.getAsync(
+      'SELECT sequence_id FROM conversations WHERE session_id = $1 AND project = $2 ORDER BY sequence_id ASC LIMIT 1',
+      [sessionId, project]
+    );
+
+    const messages = await recoverSession({
+      sessionId,
+      project,
+      afterSequenceId: first.sequence_id,
+      limit: 10,
+    });
+
+    expect(messages).to.have.lengthOf(2);
+    expect(messages[0].content).to.equal("Mensaje 2");
+    expect(messages[1].content).to.equal("Mensaje 3");
+    expect(String(messages[0].sequence_id) > String(first.sequence_id)).to.equal(true);
+  });
+
   it('debería recuperar mensajes filtrados por agentId', async () => {
     const sessionId = `test-session-agent-${Date.now()}`;
     sessionIds.push(sessionId);
