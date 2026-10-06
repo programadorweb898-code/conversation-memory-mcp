@@ -1,22 +1,23 @@
 const { startWorker, stopWorker } = require("./services/embeddingWorker");
+const { getConfig } = require("./config");
 const app = require("./app");
 const dotenv = require("dotenv");
 dotenv.config();
 let httpServer;
 
 function shouldStartEmbeddingWorker() {
-  return process.env.ENABLE_EMBEDDING_WORKER === "true";
+  return getConfig().server.enableEmbeddingWorkerHttp;
 }
 
 async function startServer() {
   console.time("Startup total");
 
-  if (!process.env.MCP_BEARER_TOKEN) {
+  if (!getConfig().server.bearerToken) {
     console.error("Fatal error: MCP_BEARER_TOKEN environment variable is required.");
     process.exit(1);
   }
 
-  const PORT = process.env.PORT || 3000;
+  const PORT = getConfig().server.port;
 
   console.time("Listening on port");
   httpServer = app.listen(PORT, () => {
