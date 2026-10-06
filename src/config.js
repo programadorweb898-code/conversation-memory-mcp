@@ -86,6 +86,7 @@ function getConfig() {
       port: readPositiveInteger("PORT", DEFAULT_PORT),
       bearerToken: readOptionalString("MCP_BEARER_TOKEN", ""),
       enableEmbeddingWorkerHttp: readBoolean("ENABLE_EMBEDDING_WORKER", false),
+      enableEmbeddingWorkerStdio: readBoolean("ENABLE_EMBEDDING_WORKER", true),
     },
     database: {
       defaultOwner: readOptionalString("MCP_DEFAULT_OWNER", DEFAULT_OWNER) || DEFAULT_OWNER,
