@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { Pool } = require("pg");
 const dotenv = require("dotenv");
+const { getConfig } = require("../src/config");
 const readline = require("node:readline/promises");
 const { stdin, stdout } = require("node:process");
 const { describeDatabaseTarget, getDatabaseUrl } = require("../src/databaseConfig");
@@ -16,7 +17,7 @@ async function confirmMigrationTarget(connectionString, input = stdin, output = 
   output.write("Destino de migración:\n");
   output.write(`  Host: ${target.host}\n`);
   output.write(`  Base: ${target.database}\n`);
-  output.write(`  Schema: ${process.env.PG_SEARCH_PATH || "public"}\n`);
+  output.write(`  Schema: ${getConfig().database.searchPath || "public"}\n`);
   output.write("Confirmá que esta base está dedicada exclusivamente a Conversation Memory y autorizás las migraciones [s/N]: ");
 
   const prompt = readline.createInterface({ input, output });
@@ -29,7 +30,7 @@ async function confirmMigrationTarget(connectionString, input = stdin, output = 
 }
 
 function getDefaultOwner() {
-  return process.env.MCP_DEFAULT_OWNER || "local-user";
+  return getConfig().database.defaultOwner;
 }
 
 function escapeSqlLiteral(value) {
