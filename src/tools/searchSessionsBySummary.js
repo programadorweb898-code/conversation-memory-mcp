@@ -1,4 +1,5 @@
 const { db } = require("../database");
+const logger = require("../logger");
 const { generateEmbedding, isEmbeddingsEnabled } = require("../services/embeddingService");
 
 /**
@@ -24,7 +25,14 @@ async function searchSessionsBySummary({ query, project, owner }) {
       ORDER BY sse.embedding <=> $1::vector ASC
       LIMIT 1
     `;
-    results.push(...await db.allAsync(sql, [queryEmbeddingJson, project, owner ?? null]));
+    try {
+      results.push(...await db.allAsync(sql, [queryEmbeddingJson, project, owner ?? null]));
+    } catch (err) {
+      // La búsqueda vectorial es una optimización: si falla (esquema desactualizado,
+      // dimensión distinta, embeddings corruptos) se degrada al fallback textual en
+      // lugar de hacer fallar la tool.
+      logger.error("Búsqueda semántica de resúmenes fallida, se usa el fallback textual:", err.message);
+    }
   }
 
   if (results.length === 0) {
@@ -49,7 +57,7 @@ async function searchSessionsBySummary({ query, project, owner }) {
   }
 
   const bestSessionId = results[0].session_id;
-  console.log(
+  logger.log(
     `Sesión encontrada mediante resumen: ${bestSessionId}` +
       (results[0].similarity === null
         ? " (coincidencia textual)"
@@ -58,7 +66,7 @@ async function searchSessionsBySummary({ query, project, owner }) {
 
   // 3. Recuperar todo el historial de la sesión identificada
   const historySql = `
-    SELECT id, session_id, timestamp, project, role, content
+    SELECT id, session_id, timestamp, project, role, content, agent_id
     FROM conversations
     WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)
     ORDER BY timestamp ASC

@@ -163,6 +163,70 @@ describe("Search Sessions By Summary", function () {
     expect(history[0].session_id).to.equal(sessionId);
   });
 
+  it("incluye agent_id en el historial devuelto", async () => {
+    const sessionId = "summary-search-agent-id";
+    await createSession({
+      sessionId,
+      owner: ownerA,
+      summary: "Resumen con agent_id",
+      summaryEmbedding: fakeEmbedding(0.1),
+      content: "Mensaje etiquetado",
+    });
+    await db.runAsync(
+      `UPDATE conversations SET agent_id = 'opencode' WHERE session_id = $1`,
+      [sessionId]
+    );
+
+    const history = await searchSessionsBySummary({
+      query: "agent_id",
+      project,
+      owner: ownerA,
+    });
+
+    expect(history).to.have.lengthOf(1);
+    expect(history[0].agent_id).to.equal("opencode");
+  });
+
+  it("cae al fallback textual cuando la búsqueda vectorial falla", async () => {
+    const sessionId = "summary-search-vector-failure";
+    sessionIds.push(sessionId);
+
+    await saveMessage({
+      sessionId,
+      project,
+      owner: ownerA,
+      role: "user",
+      content: "Mensaje de respaldo",
+    });
+    await db.runAsync(
+      `INSERT INTO session_summaries (session_id, project, owner, summary)
+       VALUES ($1, $2, $3, $4)`,
+      [sessionId, project, ownerA, "Resumen de respaldo recuperable"],
+    );
+
+    const originalAllAsync = db.allAsync.bind(db);
+    const stub = sinon.stub(db, "allAsync").callsFake(async (sql, params) => {
+      if (sql.includes("session_summary_embeddings")) {
+        throw new Error('column "sse.owner" does not exist');
+      }
+      return originalAllAsync(sql, params);
+    });
+
+    try {
+      const history = await searchSessionsBySummary({
+        query: "resumen de respaldo recuperable",
+        project,
+        owner: ownerA,
+      });
+
+      expect(history).to.have.lengthOf(1);
+      expect(history[0].session_id).to.equal(sessionId);
+      expect(stub.called).to.equal(true);
+    } finally {
+      stub.restore();
+    }
+  });
+
   it("devuelve vacío cuando no existe ningún resumen elegible", async () => {
     const history = await searchSessionsBySummary({
       query: "consulta sin resultados",
