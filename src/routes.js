@@ -7,6 +7,20 @@ function createSessionId() {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+async function closeMcpRoutes() {
+  const sessions = Array.from(transports.values());
+
+  await Promise.allSettled(
+    sessions.map(async ({ transport }) => {
+      try {
+        await transport.close();
+      } catch (error) {
+        console.error("Error closing MCP SSE transport:", error.message);
+      }
+    }),
+  );
+}
+
 function setupMcpRoutes(app, { createMcpServer }) {
   app.all("/mcp", async (req, res, next) => {
     // Modo stateless: el SDK de MCP no permite reutilizar un StreamableHTTPServerTransport
@@ -46,6 +60,8 @@ function setupMcpRoutes(app, { createMcpServer }) {
 
     console.log("SSE transport created for session:", sessionId);
 
+    const server = createMcpServer();
+
     // Workaround para un bug conocido del SDK de MCP: el stream SSE se corta
     // solo a los ~5 minutos de inactividad de mensajes reales, aunque la conexión
     // TCP siga abierta. Mandamos un comentario SSE (":ping") cada 2 minutos para
@@ -53,7 +69,7 @@ function setupMcpRoutes(app, { createMcpServer }) {
     // una reconexión forzada.
     const keepAliveInterval = setInterval(() => {
       try {
-        res.write(":ping\n\n");
+        res.write(":ping\\n\\n");
       } catch (err) {
         console.error("Error enviando keep-alive SSE:", err.message);
         clearInterval(keepAliveInterval);
@@ -64,14 +80,14 @@ function setupMcpRoutes(app, { createMcpServer }) {
       clearInterval(keepAliveInterval);
       transports.delete(sessionId);
       console.log(`Sesion ${sessionId} desconectada. Transports activos: ${transports.size}`);
+      void server.close().catch((error) => {
+        console.error("Error closing MCP SSE server:", error.message);
+      });
     });
-    const server= createMcpServer();
+
     console.log("Connecting MCP server to transport...");
     await server.connect(transport);
     console.log("MCP server connected to transport");
-    res.on("close",()=>{
-      server.close();
-    })
   });
 
   app.post("/messages", async (req, res) => {
@@ -95,6 +111,8 @@ function setupMcpRoutes(app, { createMcpServer }) {
 
     await transportSession.transport.handlePostMessage(req, res, req.body);
   });
+
+  return { close: closeMcpRoutes };
 }
 
-module.exports = { setupMcpRoutes };
+module.exports = { setupMcpRoutes, closeMcpRoutes };
