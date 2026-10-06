@@ -3,6 +3,7 @@ const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 const helmet = require("helmet");
 const { hashToken, findByTokenHash, touchApiKey } = require("./services/apiKeyService");
 const { runWithAuth } = require("./context");
+const { getConfig } = require("./config");
 
 function rateLimitKeyGenerator(req) {
   if (req.auth?.owner) {
@@ -110,7 +111,7 @@ async function requireBearerToken(req, res, next) {
   }
 
   try {
-    const expectedToken = process.env.MCP_BEARER_TOKEN || "";
+    const expectedToken = getConfig().server.bearerToken;
     if (expectedToken && tokensMatch(Buffer.from(expectedToken), Buffer.from(token))) {
       // token master: acceso total, sin scope ni owner
       req.auth = { scope: null, master: true, owner: null, apiKeyId: null };
