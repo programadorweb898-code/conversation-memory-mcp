@@ -31,7 +31,7 @@ async function startStdioServer({ processRef = process } = {}) {
   // En modo stdio el worker de embeddings no corría (solo estaba en server.js con
   // ENABLE_EMBEDDING_WORKER=true). Ahora arranca por defecto para que la búsqueda
   // semántica tenga vectores; se desactiva explícitamente con ENABLE_EMBEDDING_WORKER=false.
-  if (getConfig().server.enableEmbeddingWorkerHttp || process.env.ENABLE_EMBEDDING_WORKER !== "false") {
+  if (getConfig().server.enableEmbeddingWorkerStdio) {
     startWorker();
   }
 
