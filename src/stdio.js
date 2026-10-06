@@ -2,6 +2,7 @@
 
 const dotenv = require("dotenv");
 const logger = require("./logger");
+const { getConfig } = require("./config");
 
 // stdout queda reservado exclusivamente para los mensajes JSON-RPC de MCP.
 console.log = logger.log;
@@ -30,7 +31,7 @@ async function startStdioServer({ processRef = process } = {}) {
   // En modo stdio el worker de embeddings no corría (solo estaba en server.js con
   // ENABLE_EMBEDDING_WORKER=true). Ahora arranca por defecto para que la búsqueda
   // semántica tenga vectores; se desactiva explícitamente con ENABLE_EMBEDDING_WORKER=false.
-  if (process.env.ENABLE_EMBEDDING_WORKER !== "false") {
+  if (getConfig().server.enableEmbeddingWorkerHttp || process.env.ENABLE_EMBEDDING_WORKER !== "false") {
     startWorker();
   }
 
