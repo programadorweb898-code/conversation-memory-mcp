@@ -60,7 +60,7 @@ describe('Recover Session Tool', () => {
     expect(messages).to.have.lengthOf(2);
     expect(messages[0].content).to.equal("Mensaje 2");
     expect(messages[1].content).to.equal("Mensaje 3");
-    expect(String(messages[0].sequence_id) > String(first.sequence_id)).to.equal(true);
+    expect(BigInt(messages[0].sequence_id) > BigInt(first.sequence_id)).to.equal(true);
   });
 
   it('debería recuperar mensajes filtrados por agentId', async () => {
