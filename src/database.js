@@ -1,8 +1,6 @@
 const { Pool } = require("pg");
 const { getConfig } = require("./config");
-const dotenv = require("dotenv");
 const { getDatabaseUrl, getPgSslOptions } = require("./databaseConfig");
-dotenv.config();
 
 // Sin estos límites, una query contra un endpoint que acepta el TCP pero no
 // responde queda pendiente para siempre: sin `connectionTimeoutMillis` el
