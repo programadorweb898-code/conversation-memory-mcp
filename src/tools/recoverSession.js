@@ -24,7 +24,7 @@ async function recoverSession({ sessionId, project, agentId, owner }) {
       where.push(`owner = $${params.length + 1}`);
       params.push(owner);
     }
-    const sql = `SELECT * FROM conversations WHERE ${where.join(" AND ")} ORDER BY timestamp ASC`;
+    const sql = `SELECT * FROM conversations WHERE ${where.join(" AND ")} ORDER BY sequence_id ASC`;
     return await db.allAsync(sql, params);
   } catch (err) { 
     console.error("Error recovering session:", err.message);
