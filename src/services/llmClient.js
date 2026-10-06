@@ -23,6 +23,9 @@ const GEMINI_DEFAULT_MODEL = "gemini-2.5-flash-lite";
 const OPENROUTER_DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const DEFAULT_LLM_TIMEOUT_MS = 30000;
+const DEFAULT_LLM_MAX_RETRIES = 2;
+const DEFAULT_LLM_RETRY_BASE_DELAY_MS = 250;
+const DEFAULT_LLM_RETRY_MAX_DELAY_MS = 2000;
 
 function resolveLlmTimeoutMs() {
   const raw = process.env.CONVERSATION_MEMORY_LLM_TIMEOUT_MS;
@@ -40,6 +43,77 @@ function createLlmTimeoutError(provider, timeoutMs, cause) {
   error.code = "LLM_TIMEOUT";
   error.cause = cause;
   return error;
+}
+
+function resolveLlmRetries() {
+  const raw = process.env.CONVERSATION_MEMORY_LLM_MAX_RETRIES;
+  if (raw === undefined || raw === "") return DEFAULT_LLM_MAX_RETRIES;
+
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`CONVERSATION_MEMORY_LLM_MAX_RETRIES inválido: "${raw}"`);
+  }
+  return parsed;
+}
+
+function resolveRetryBaseDelayMs() {
+  const raw = process.env.CONVERSATION_MEMORY_LLM_RETRY_BASE_DELAY_MS;
+  if (raw === undefined || raw === "") return DEFAULT_LLM_RETRY_BASE_DELAY_MS;
+
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`CONVERSATION_MEMORY_LLM_RETRY_BASE_DELAY_MS inválido: "${raw}"`);
+  }
+  return parsed;
+}
+
+function resolveRetryMaxDelayMs() {
+  const raw = process.env.CONVERSATION_MEMORY_LLM_RETRY_MAX_DELAY_MS;
+  if (raw === undefined || raw === "") return DEFAULT_LLM_RETRY_MAX_DELAY_MS;
+
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`CONVERSATION_MEMORY_LLM_RETRY_MAX_DELAY_MS inválido: "${raw}"`);
+  }
+  return parsed;
+}
+
+function getErrorStatus(error) {
+  return Number(error?.status ?? error?.statusCode ?? error?.cause?.status ?? 0);
+}
+
+function isRetryableLlmError(error) {
+  if (!error) return false;
+  if (error.code === "LLM_TIMEOUT") return true;
+
+  const status = getErrorStatus(error);
+  return status === 429 || (status >= 500 && status <= 599);
+}
+
+function retryDelayMs(attempt) {
+  const base = resolveRetryBaseDelayMs();
+  const max = resolveRetryMaxDelayMs();
+  return Math.min(max, base * (2 ** Math.max(0, attempt - 1)));
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withLlmRetries(operation) {
+  const maxRetries = resolveLlmRetries();
+
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isRetryableLlmError(error) || attempt >= maxRetries) {
+        throw error;
+      }
+
+      await sleep(retryDelayMs(attempt + 1));
+    }
+  }
 }
 
 function detectProvider() {
@@ -65,15 +139,17 @@ async function generateWithGemini(prompt) {
   const genAI = new GoogleGenerativeAI(apiKey);
   const generativeModel = genAI.getGenerativeModel({ model: resolveModel("gemini") });
 
-  try {
-    const result = await generativeModel.generateContent(prompt, { timeout: timeoutMs });
-    return result.response.text();
-  } catch (error) {
-    if (error?.name === "GoogleGenerativeAIAbortError") {
-      throw createLlmTimeoutError("Gemini", timeoutMs, error);
+  return withLlmRetries(async () => {
+    try {
+      const result = await generativeModel.generateContent(prompt, { timeout: timeoutMs });
+      return result.response.text();
+    } catch (error) {
+      if (error?.name === "GoogleGenerativeAIAbortError") {
+        throw createLlmTimeoutError("Gemini", timeoutMs, error);
+      }
+      throw error;
     }
-    throw error;
-  }
+  });
 }
 
 async function generateWithOpenRouter(prompt) {
@@ -82,31 +158,35 @@ async function generateWithOpenRouter(prompt) {
 
   const timeoutMs = resolveLlmTimeoutMs();
 
-  try {
-    const res = await fetch(OPENROUTER_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: resolveModel("openrouter"),
-        messages: [{ role: "user", content: prompt }],
-      }),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      throw new Error(`OpenRouter ${res.status}: ${detail.slice(0, 300)}`);
+  return withLlmRetries(async () => {
+    try {
+      const res = await fetch(OPENROUTER_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: resolveModel("openrouter"),
+          messages: [{ role: "user", content: prompt }],
+        }),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        const error = new Error(`OpenRouter ${res.status}: ${detail.slice(0, 300)}`);
+        error.status = res.status;
+        throw error;
+      }
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content ?? null;
+    } catch (error) {
+      if (error?.name === "TimeoutError" || error?.name === "AbortError") {
+        throw createLlmTimeoutError("OpenRouter", timeoutMs, error);
+      }
+      throw error;
     }
-    const data = await res.json();
-    return data.choices?.[0]?.message?.content ?? null;
-  } catch (error) {
-    if (error?.name === "TimeoutError" || error?.name === "AbortError") {
-      throw createLlmTimeoutError("OpenRouter", timeoutMs, error);
-    }
-    throw error;
-  }
+  });
 }
 
 /**
@@ -127,9 +207,17 @@ module.exports = {
   detectProvider,
   resolveModel,
   resolveLlmTimeoutMs,
+  resolveLlmRetries,
+  resolveRetryBaseDelayMs,
+  resolveRetryMaxDelayMs,
+  isRetryableLlmError,
+  retryDelayMs,
   generateWithGemini,
   generateWithOpenRouter,
   OPENROUTER_DEFAULT_MODEL,
   GEMINI_DEFAULT_MODEL,
   DEFAULT_LLM_TIMEOUT_MS,
+  DEFAULT_LLM_MAX_RETRIES,
+  DEFAULT_LLM_RETRY_BASE_DELAY_MS,
+  DEFAULT_LLM_RETRY_MAX_DELAY_MS,
 };
