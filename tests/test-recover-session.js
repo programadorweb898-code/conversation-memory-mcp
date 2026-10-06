@@ -2,6 +2,8 @@ const { expect } = require('chai');
 const recoverSession = require("../src/tools/recoverSession");
 const saveMessage = require("../src/tools/saveMessage");
 const { db } = require('./test-helper');
+const sinon = require('sinon');
+const { config } = require('../src/config');
 
 describe('Recover Session Tool', () => {
   const project = `recover-session-${Date.now()}`;
@@ -49,5 +51,27 @@ describe('Recover Session Tool', () => {
     expect(messages).to.have.lengthOf(1);
     expect(messages[0].content).to.equal("Mensaje A1");
     expect(messages[0].agent_id).to.equal(agentId);
+  });
+
+  it('debería limitar la cantidad de mensajes recuperados y respetar el máximo configurado', async () => {
+    const allAsyncStub = sinon.stub(db, 'allAsync').resolves([]);
+    const originalLimit = config.recoverSessionLimit;
+    config.recoverSessionLimit = 3;
+
+    try {
+      await recoverSession({
+        sessionId: 'test-limited-session',
+        project,
+        limit: 1000,
+      });
+
+      expect(allAsyncStub.calledOnce).to.equal(true);
+      const [sql, params] = allAsyncStub.firstCall.args;
+      expect(sql).to.include('ORDER BY sequence_id ASC LIMIT $3');
+      expect(params).to.deep.equal(['test-limited-session', project, 3]);
+    } finally {
+      config.recoverSessionLimit = originalLimit;
+      allAsyncStub.restore();
+    }
   });
 });
