@@ -55,7 +55,7 @@ function setupMcpRoutes(app, { createMcpServer }) {
     // una reconexión forzada.
     const keepAliveInterval = setInterval(() => {
       try {
-        res.write(":ping\\n\\n");
+        res.write(":ping\n\n");
       } catch (err) {
         console.error("Error enviando keep-alive SSE:", err.message);
         clearInterval(keepAliveInterval);
@@ -72,6 +72,7 @@ function setupMcpRoutes(app, { createMcpServer }) {
     console.log("Connecting MCP server to transport...");
     await server.connect(transport);
     console.log("MCP server connected to transport");
+  });
 
   app.post("/messages", async (req, res) => {
     console.log("Recibido POST en /messages");
