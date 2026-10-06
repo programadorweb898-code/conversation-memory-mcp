@@ -15,16 +15,22 @@ describe('Database transactions', () => {
     );
 
     try {
-      await expect(
-        withTransaction(async (tx) => {
+      let error;
+      try {
+        await withTransaction(async (tx) => {
           await tx.runAsync(
             'UPDATE conversations SET content = $1 WHERE id = $2',
             ['changed-inside-transaction', id]
           );
 
           throw new Error('forced rollback');
-        })
-      ).to.be.rejectedWith('forced rollback');
+        });
+      } catch (err) {
+        error = err;
+      }
+
+      expect(error).to.be.an('Error');
+      expect(error.message).to.equal('forced rollback');
 
       const row = await db.getAsync(
         'SELECT content FROM conversations WHERE id = $1',
