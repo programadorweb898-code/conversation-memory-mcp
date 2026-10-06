@@ -209,6 +209,8 @@ owner — pensado para administración, no para uso normal de un agente.
 
 `finalizeSession` genera un resumen incremental utilizando solo los mensajes posteriores a `last_processed_seq_id`.
 
+El resumen generado por el LLM se valida con un esquema estructural antes de guardarlo: `goal` debe ser string y `discoveries`, `accomplished` y `next_steps` deben ser arrays de strings. Los campos inesperados también se rechazan.
+
 No existe finalización automática: el resumen se genera solo cuando el agente llama a `finalizeSession`. No hay ningún proceso que revise sesiones inactivas ni las cierre por su cuenta.
 
 Si el LLM no está disponible, el historial sigue siendo utilizable y el resumen queda pendiente. El almacenamiento y la recuperación normales no dependen de un LLM.
