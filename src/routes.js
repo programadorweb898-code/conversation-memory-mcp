@@ -2,6 +2,7 @@ const sseSdk = require("@modelcontextprotocol/sdk/server/sse.js");
 const { StreamableHTTPServerTransport } = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
 
 const transports = new Map();
+const MCP_TRANSPORT_HEADER = "x-mcp-transport-mode";
 
 function createSessionId() {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -22,6 +23,11 @@ async function closeMcpRoutes() {
 
 function setupMcpRoutes(app, { createMcpServer }) {
   app.all("/mcp", async (req, res, next) => {
+    // CONTRATO MULTI-INSTANCIA: /mcp es stateless. No hay sesión ni transporte
+    // persistido entre requests; cualquier instancia detrás de un balanceador
+    // puede procesar cualquier request.
+    res.setHeader(MCP_TRANSPORT_HEADER, "stateless-streamable-http");
+
     // Modo stateless: el SDK de MCP no permite reutilizar un StreamableHTTPServerTransport
     // sin sessionIdGenerator ("Stateless transport cannot be reused across requests") y un
     // McpServer solo admite un transporte a la vez. Siguiendo el ejemplo oficial del SDK,
@@ -45,6 +51,13 @@ function setupMcpRoutes(app, { createMcpServer }) {
   });
 
   app.get("/sse", async (req, res) => {
+    // COMPATIBILIDAD LEGACY: /sse mantiene estado en memoria de esta instancia.
+    // Detrás de varias instancias necesita session affinity (sticky sessions)
+    // o un enrutamiento externo de mensajes; no se presenta como transporte
+    // multi-instancia por sí mismo.
+    res.setHeader(MCP_TRANSPORT_HEADER, "legacy-sse-instance-local");
+    res.setHeader("x-mcp-session-affinity", "required");
+
     console.log("Client connecting to SSE...");
 
     const transport = new sseSdk.SSEServerTransport("/messages", res);
