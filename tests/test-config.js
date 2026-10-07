@@ -81,8 +81,8 @@ describe("centralized runtime configuration", () => {
     expect(config.server.port).to.equal(3000);
     expect(config.server.tenantMaxConcurrentRequests).to.equal(10);
     expect(config.server.tenantMaxSseSessions).to.equal(10);
-    expect(config.server.searchLimit).to.equal(50);
-    expect(config.server.recoverSessionLimit).to.equal(100);
+    expect(config.searchLimit).to.equal(50);
+    expect(config.recoverSessionLimit).to.equal(100);
     expect(config.database.defaultOwner).to.equal("local-user");
     expect(config.database.queryTimeoutMs).to.equal(60000);
     expect(config.database.connectTimeoutMs).to.equal(10000);
@@ -136,8 +136,8 @@ describe("centralized runtime configuration", () => {
     expect(config.server.port).to.equal(4100);
     expect(config.server.tenantMaxConcurrentRequests).to.equal(7);
     expect(config.server.tenantMaxSseSessions).to.equal(4);
-    expect(config.server.searchLimit).to.equal(25);
-    expect(config.server.recoverSessionLimit).to.equal(75);
+    expect(config.searchLimit).to.equal(25);
+    expect(config.recoverSessionLimit).to.equal(75);
     expect(config.server.bearerToken).to.equal("");
     expect(config.server.enableEmbeddingWorkerHttp).to.equal(true);
     expect(config.server.enableEmbeddingWorkerStdio).to.equal(true);
