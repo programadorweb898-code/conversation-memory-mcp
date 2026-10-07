@@ -15,6 +15,8 @@ const DEFAULT_LLM_RETRY_BASE_DELAY_MS = 250;
 const DEFAULT_LLM_RETRY_MAX_DELAY_MS = 2000;
 const DEFAULT_TENANT_MAX_CONCURRENT_REQUESTS = 10;
 const DEFAULT_TENANT_MAX_SSE_SESSIONS = 10;
+const DEFAULT_SEARCH_LIMIT = 50;
+const DEFAULT_RECOVER_SESSION_LIMIT = 100;
 const DEFAULT_MIN_EMBEDDING_CHARS = 10;
 const DEFAULT_MAX_EMBEDDING_CHARS = 2000;
 const DEFAULT_EMBEDDING_BATCH_SIZE = 10;
@@ -23,14 +25,6 @@ const DEFAULT_EMBEDDING_POLL_INTERVAL_MS = 5000;
 const DEFAULT_EMBEDDING_MAX_POLL_INTERVAL_MS = 900000;
 
 const SUPPORTED_AI_PROVIDERS = new Set(["openrouter", "gemini", "google"]);
-
-function readRequiredString(name) {
-  const value = process.env[name];
-  if (!value || !value.trim()) {
-    throw new Error(`${name} environment variable is required.`);
-  }
-  return value.trim();
-}
 
 function readOptionalString(name, fallback = "") {
   const value = process.env[name];
@@ -104,7 +98,11 @@ function getConfig() {
       tenantMaxSseSessions: readPositiveInteger(
         "MCP_TENANT_MAX_SSE_SESSIONS",
         DEFAULT_TENANT_MAX_SSE_SESSIONS,
+  DEFAULT_SEARCH_LIMIT,
+  DEFAULT_RECOVER_SESSION_LIMIT,
       ),
+      searchLimit: readPositiveInteger("SEARCH_MESSAGES_LIMIT", DEFAULT_SEARCH_LIMIT),
+      recoverSessionLimit: readPositiveInteger("RECOVER_SESSION_LIMIT", DEFAULT_RECOVER_SESSION_LIMIT),
       enableEmbeddingWorkerHttp: readBoolean("ENABLE_EMBEDDING_WORKER", false),
       enableEmbeddingWorkerStdio: readBoolean("ENABLE_EMBEDDING_WORKER", true),
     },
@@ -138,8 +136,11 @@ function getConfig() {
   };
 }
 
+const config = getConfig();
+
 module.exports = {
   getConfig,
+  config,
   SUPPORTED_AI_PROVIDERS,
   DEFAULT_PORT,
   DEFAULT_OWNER,
