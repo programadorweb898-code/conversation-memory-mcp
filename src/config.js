@@ -13,6 +13,8 @@ const DEFAULT_LLM_TIMEOUT_MS = 30000;
 const DEFAULT_LLM_MAX_RETRIES = 2;
 const DEFAULT_LLM_RETRY_BASE_DELAY_MS = 250;
 const DEFAULT_LLM_RETRY_MAX_DELAY_MS = 2000;
+const DEFAULT_TENANT_MAX_CONCURRENT_REQUESTS = 10;
+const DEFAULT_TENANT_MAX_SSE_SESSIONS = 10;
 const DEFAULT_MIN_EMBEDDING_CHARS = 10;
 const DEFAULT_MAX_EMBEDDING_CHARS = 2000;
 const DEFAULT_EMBEDDING_BATCH_SIZE = 10;
@@ -95,6 +97,14 @@ function getConfig() {
       allowedHosts: readOptionalString("MCP_ALLOWED_HOSTS", "").split(",").map((value) => value.trim().toLowerCase()).filter(Boolean),
       allowedOrigins: readOptionalString("MCP_ALLOWED_ORIGINS", "").split(",").map((value) => value.trim().replace(/\/$/, "").toLowerCase()).filter(Boolean),
       bearerToken: readOptionalString("MCP_BEARER_TOKEN", ""),
+      tenantMaxConcurrentRequests: readPositiveInteger(
+        "MCP_TENANT_MAX_CONCURRENT_REQUESTS",
+        DEFAULT_TENANT_MAX_CONCURRENT_REQUESTS,
+      ),
+      tenantMaxSseSessions: readPositiveInteger(
+        "MCP_TENANT_MAX_SSE_SESSIONS",
+        DEFAULT_TENANT_MAX_SSE_SESSIONS,
+      ),
       enableEmbeddingWorkerHttp: readBoolean("ENABLE_EMBEDDING_WORKER", false),
       enableEmbeddingWorkerStdio: readBoolean("ENABLE_EMBEDDING_WORKER", true),
     },
@@ -138,6 +148,8 @@ module.exports = {
   DEFAULT_LLM_MAX_RETRIES,
   DEFAULT_LLM_RETRY_BASE_DELAY_MS,
   DEFAULT_LLM_RETRY_MAX_DELAY_MS,
+  DEFAULT_TENANT_MAX_CONCURRENT_REQUESTS,
+  DEFAULT_TENANT_MAX_SSE_SESSIONS,
   DEFAULT_MIN_EMBEDDING_CHARS,
   DEFAULT_MAX_EMBEDDING_CHARS,
   DEFAULT_EMBEDDING_BATCH_SIZE,
