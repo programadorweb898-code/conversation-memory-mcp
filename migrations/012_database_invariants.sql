@@ -175,6 +175,8 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $fn$
 BEGIN
+  PERFORM pg_advisory_xact_lock(hashtext('session-project:' || NEW.owner || ':' || NEW.session_id));
+
   IF TG_TABLE_NAME = 'conversations' THEN
     IF EXISTS (
       SELECT 1
