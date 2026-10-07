@@ -101,8 +101,6 @@ function getConfig() {
   DEFAULT_SEARCH_LIMIT,
   DEFAULT_RECOVER_SESSION_LIMIT,
       ),
-      searchLimit: readPositiveInteger("SEARCH_MESSAGES_LIMIT", DEFAULT_SEARCH_LIMIT),
-      recoverSessionLimit: readPositiveInteger("RECOVER_SESSION_LIMIT", DEFAULT_RECOVER_SESSION_LIMIT),
       enableEmbeddingWorkerHttp: readBoolean("ENABLE_EMBEDDING_WORKER", false),
       enableEmbeddingWorkerStdio: readBoolean("ENABLE_EMBEDDING_WORKER", true),
     },
@@ -123,6 +121,8 @@ function getConfig() {
       pollIntervalMs: readPositiveInteger("EMBEDDING_POLL_INTERVAL_MS", DEFAULT_EMBEDDING_POLL_INTERVAL_MS),
       maxPollIntervalMs: readPositiveInteger("EMBEDDING_MAX_POLL_INTERVAL_MS", DEFAULT_EMBEDDING_MAX_POLL_INTERVAL_MS),
     },
+    searchLimit: readPositiveInteger("SEARCH_MESSAGES_LIMIT", DEFAULT_SEARCH_LIMIT),
+    recoverSessionLimit: readPositiveInteger("RECOVER_SESSION_LIMIT", DEFAULT_RECOVER_SESSION_LIMIT),
     llm: {
       provider: readAiProvider(),
       model: readOptionalString("AI_MODEL", ""),
