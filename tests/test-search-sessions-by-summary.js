@@ -227,6 +227,64 @@ describe("Search Sessions By Summary", function () {
     expect(history[0].session_id).to.equal(sessionId);
   });
 
+  it("usa fallback léxico cuando falla la generación del embedding", async () => {
+    const sessionId = "summary-search-generation-fallback";
+    sessionIds.push(sessionId);
+
+    await saveMessage({
+      sessionId,
+      project,
+      owner: ownerA,
+      role: "user",
+      content: "Decidimos usar pgvector para búsquedas semánticas",
+    });
+    await db.runAsync(
+      `INSERT INTO session_summaries (session_id, project, owner, summary)
+       VALUES ($1, $2, $3, $4)`,
+      [sessionId, project, ownerA, "Elegimos pgvector para búsquedas semánticas"],
+    );
+
+    embeddingService.generateEmbedding.rejects(new Error("modelo de embeddings no disponible"));
+
+    const history = await searchSessionsBySummary({
+      query: "¿Qué decidimos usar para búsquedas?",
+      project,
+      owner: ownerA,
+    });
+
+    expect(history).to.have.lengthOf(1);
+    expect(history[0].session_id).to.equal(sessionId);
+  });
+
+  it("el fallback léxico puntúa términos relevantes aunque la frase completa no aparezca en el resumen", async () => {
+    const sessionId = "summary-search-token-fallback";
+    sessionIds.push(sessionId);
+
+    await saveMessage({
+      sessionId,
+      project,
+      owner: ownerA,
+      role: "user",
+      content: "La decisión fue migrar a pgvector",
+    });
+    await db.runAsync(
+      `INSERT INTO session_summaries (session_id, project, owner, summary)
+       VALUES ($1, $2, $3, $4)`,
+      [sessionId, project, ownerA, "Migramos las búsquedas semánticas a pgvector"],
+    );
+
+    embeddingService.generateEmbedding.rejects(new Error("modelo no disponible"));
+
+    const history = await searchSessionsBySummary({
+      query: "¿Qué decisión tomamos sobre pgvector?",
+      project,
+      owner: ownerA,
+    });
+
+    expect(history).to.have.lengthOf(1);
+    expect(history[0].session_id).to.equal(sessionId);
+  });
+
   it("incluye agent_id en el historial devuelto", async () => {
     const sessionId = "summary-search-agent-id";
     await createSession({
