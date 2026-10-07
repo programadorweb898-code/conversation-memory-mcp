@@ -5,38 +5,12 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 import { createMcpClientManager } from "./mcp-client.js"
 import { extractConfirmedMessageId } from "./save-confirmation.js"
+import { baseName, resolveProjectIdentity, resolveProjectName } from "./projectIdentity.mjs"
 
 const MCP_PREFIXES = ["conversation-memory-local_", "conversation-memory_"]
 
-const PROJECT_ALIASES: Record<string, string> = {
-  "Authentication-system": "authentication-system",
-  "Authentication-System": "authentication-system",
-  "mi-portafolio": "portafolio",
-  "conversation-memory-mcp": "conversation-memory-mcp",
-}
-
 const CONFIG_DIR = process.env.OPENCODE_CONFIG_DIR || join(homedir(), ".config", "opencode")
 const CACHE_FILE = join(CONFIG_DIR, "conversation-memory-cache.json")
-
-function baseName(path: string): string {
-  const parts = path.split(/[\\/]/).filter(Boolean)
-  return parts[parts.length - 1] ?? path
-}
-
-// Un proyecto se aisla por nombre. Si el worktree termina en separador (o es la
-// raíz), baseName devuelve "" o "/" y todos los repositorios terminarían bajo
-// la misma clave, mezclando memoria de proyectos distintos. Preferimos no
-// guardar antes que guardar bajo una clave que después no se puede recuperar.
-const INVALID_PROJECT = /[\\/]|^[.]{1,2}$/
-
-function resolveProjectName(raw: string): string {
-  const name = PROJECT_ALIASES[raw] ?? raw.trim().toLowerCase()
-  if (!name || INVALID_PROJECT.test(name)) {
-    console.error(`[conversation-memory] nombre de proyecto inválido: ${JSON.stringify(raw)}`)
-    return ""
-  }
-  return name
-}
 
 function stripJsoncComments(src: string): string {
   let out = ""
@@ -248,8 +222,9 @@ async function log(client: any, level: string, message: string, extra?: unknown)
 }
 
 export const ConversationMemory: Plugin = async ({ client, project, directory }) => {
-  const fallbackProjectName = resolveProjectName(
-    baseName(project?.worktree || directory || project?.id || "")
+  const fallbackProjectName = resolveProjectIdentity(
+    typeof project?.id === "string" ? project.id : "",
+    project?.worktree || directory || "",
   )
   const mcpConfig = findMcpConfig(directory || "")
 
@@ -267,17 +242,20 @@ export const ConversationMemory: Plugin = async ({ client, project, directory })
     })
   }
 
-  // El proyecto se resuelve POR SESIÓN, no una sola vez al arrancar. El plugin se
-  // instancia una vez por worktree, pero opencode puede tener sesiones de
-  // directorios distintos bajo el mismo proceso (worktree "global"), y guardar
-  // esas sesiones con el nombre del worktree del arranque las mezclaba bajo una
-  // clave ajena. La sesión manda: su `directory` es el directorio donde se
-  // trabajó. Si no se puede resolver, no se guarda.
+  // El proyecto se resuelve por identidad estable. OpenCode expone project.id y
+  // session.projectID como identificadores del proyecto, mientras directory/worktree
+  // son ubicaciones que pueden cambiar. Para sesiones de otros proyectos bajo el
+  // mismo proceso, session.projectID tiene prioridad; el path queda como fallback
+  // de compatibilidad cuando el ID no está disponible.
   async function resolveProjectForSession(sessionID: string): Promise<string> {
     try {
       const res: any = await client.session.get({ path: { id: sessionID } })
       const sessionDirectory = res?.data?.directory
-      const resolved = resolveProjectName(baseName(sessionDirectory || ""))
+      const sessionProjectId = res?.data?.projectID ?? res?.data?.projectId
+      const resolved = resolveProjectIdentity(
+        typeof sessionProjectId === "string" ? sessionProjectId : "",
+        sessionDirectory || "",
+      )
       if (resolved) return resolved
       if (sessionDirectory) {
         console.error(
