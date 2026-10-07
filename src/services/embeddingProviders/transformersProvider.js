@@ -100,8 +100,11 @@ function createTransformersEmbeddingProvider({
       const expectedValues = inputTexts.length * dimensions;
 
       if (flattened.length !== expectedValues) {
+        const actualDimensions = inputTexts.length > 0 && flattened.length % inputTexts.length === 0
+          ? flattened.length / inputTexts.length
+          : flattened.length;
         throw new Error(
-          `El proveedor devolvió ${flattened.length} valores para ${inputTexts.length} texto(s); se esperaban ${expectedValues}.`,
+          `El proveedor devolvió un vector de ${actualDimensions} dimensiones para ${inputTexts.length} texto(s); se esperaban ${dimensions} dimensiones por texto.`,
         );
       }
 
