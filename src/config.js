@@ -87,7 +87,7 @@ function getConfig() {
 
   return {
     server: {
-      port: readPositiveInteger("PORT", DEFAULT_PORT),
+      port: readNonNegativeInteger("PORT", DEFAULT_PORT),
       allowedHosts: readOptionalString("MCP_ALLOWED_HOSTS", "").split(",").map((value) => value.trim().toLowerCase()).filter(Boolean),
       allowedOrigins: readOptionalString("MCP_ALLOWED_ORIGINS", "").split(",").map((value) => value.trim().replace(/\/$/, "").toLowerCase()).filter(Boolean),
       bearerToken: readOptionalString("MCP_BEARER_TOKEN", ""),
