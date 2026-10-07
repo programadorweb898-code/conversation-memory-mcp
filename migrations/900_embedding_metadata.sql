@@ -18,19 +18,19 @@ ON CONFLICT (id) DO NOTHING;
 
 DO $embedding_dimension$
 DECLARE
-  actual_dimensions INTEGER;
+  actual_type TEXT;
 BEGIN
-  SELECT atttypmod INTO actual_dimensions
-  FROM pg_attribute
-  WHERE attrelid = 'message_embeddings'::regclass
-    AND attname = 'embedding'
-    AND NOT attisdropped;
+  SELECT format_type(a.atttypid, a.atttypmod)
+    INTO actual_type
+  FROM pg_attribute a
+  WHERE a.attrelid = 'message_embeddings'::regclass
+    AND a.attname = 'embedding'
+    AND NOT a.attisdropped;
 
-  -- pgvector stores vector(N) typmod as N + 4.
-  IF actual_dimensions IS NOT NULL AND actual_dimensions <> 388 THEN
+  IF actual_type IS NOT NULL AND actual_type <> 'vector(384)' THEN
     RAISE EXCEPTION
-      'message_embeddings.embedding has incompatible dimensions (typmod=%); expected vector(384)',
-      actual_dimensions - 4;
+      'message_embeddings.embedding has incompatible type (%); expected vector(384)',
+      actual_type;
   END IF;
 END
 $embedding_dimension$;
