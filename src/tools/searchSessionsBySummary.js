@@ -1,80 +1,129 @@
 const { db } = require("../database");
 const logger = require("../logger");
-const { generateEmbedding, isEmbeddingsEnabled } = require("../services/embeddingService");
+const embeddingService = require("../services/embeddingService");
+
+function tokenizeQuery(query) {
+  return [...new Set(
+    String(query)
+      .toLowerCase()
+      .split(/\W+/u)
+      .map((token) => token.trim())
+      .filter((token) => token.length > 2)
+  )];
+}
+
+function escapeLikePattern(value) {
+  return value.replace(/[\\%_]/g, "\\$&");
+}
+
+async function searchSummaryLexically({ query, project, owner }) {
+  const tokens = tokenizeQuery(query);
+  if (tokens.length === 0) return [];
+
+  const params = [project, owner ?? null];
+  const likeClauses = [];
+  const scoreClauses = [];
+
+  for (const token of tokens) {
+    params.push("%" + escapeLikePattern(token) + "%");
+    const placeholder = "$" + params.length;
+    likeClauses.push("summary ILIKE " + placeholder + " ESCAPE '\\'");
+    scoreClauses.push("(summary ILIKE " + placeholder + " ESCAPE '\\')::int");
+  }
+
+  const limitPlaceholder = "$" + (params.length + 1);
+  params.push(1);
+
+  const sql = [
+    "SELECT session_id, (" + scoreClauses.join(" + ") + ")::int AS lexical_score",
+    "FROM session_summaries",
+    "WHERE project = $1",
+    "  AND ($2::text IS NULL OR owner = $2)",
+    "  AND (" + likeClauses.join(" OR ") + ")",
+    "ORDER BY lexical_score DESC, timestamp DESC, session_id ASC",
+    "LIMIT " + limitPlaceholder,
+  ].join("\n");
+
+  return db.allAsync(sql, params);
+}
 
 /**
- * Busca sesiones relevantes basándose en un resumen semántico y recupera su historial completo.
+ * Busca sesiones relevantes basándose en un resumen semántico y recupera su historial.
+ * La búsqueda semántica es la vía principal; si no puede ejecutarse o no encuentra
+ * ninguna sesión elegible, se degrada a una búsqueda léxica por términos relevantes.
+ *
  * @param {Object} params
  * @param {string} params.query - La pregunta del usuario.
- * @returns {Promise<Array>} El historial completo de la(s) sesión(es) encontrada(s).
+ * @returns {Promise<Array>} El historial de la sesión encontrada.
  */
 async function searchSessionsBySummary({ query, project, owner }) {
   if (!query) throw new Error("La consulta no puede estar vacía.");
   if (!project) throw new Error("El parámetro 'project' es obligatorio.");
 
   const results = [];
-  if (isEmbeddingsEnabled()) {
-    const queryEmbeddingJson = await generateEmbedding({ role: "search", content: query });
-    const sql = `
-      SELECT
-        sse.session_id,
-        (1 - (sse.embedding <=> $1::vector)) AS similarity
-      FROM session_summary_embeddings AS sse
-      JOIN session_summaries AS ss ON ss.session_id = sse.session_id AND ss.owner = sse.owner
-      WHERE ss.project = $2 AND ($3::text IS NULL OR ss.owner = $3)
-      ORDER BY sse.embedding <=> $1::vector ASC
-      LIMIT 1
-    `;
+
+  if (embeddingService.isEmbeddingsEnabled()) {
     try {
+      const queryEmbeddingJson = await embeddingService.generateEmbedding({
+        role: "search",
+        content: query,
+      });
+
+      const sql = `
+        SELECT
+          sse.session_id,
+          (1 - (sse.embedding <=> $1::vector)) AS similarity
+        FROM session_summary_embeddings AS sse
+        JOIN session_summaries AS ss
+          ON ss.session_id = sse.session_id
+         AND ss.owner = sse.owner
+        WHERE ss.project = $2 AND ($3::text IS NULL OR ss.owner = $3)
+        ORDER BY sse.embedding <=> $1::vector ASC
+        LIMIT 1
+      `;
+
       results.push(...await db.allAsync(sql, [queryEmbeddingJson, project, owner ?? null]));
     } catch (err) {
-      // La búsqueda vectorial es una optimización: si falla (esquema desactualizado,
-      // dimensión distinta, embeddings corruptos) se degrada al fallback textual en
-      // lugar de hacer fallar la tool.
-      logger.error("Búsqueda semántica de resúmenes fallida, se usa el fallback textual:", err.message);
+      // Los embeddings son una optimización. Una falla al generar el embedding
+      // o al consultar pgvector no debe dejar la recuperación sin respuesta.
+      logger.error(
+        "Búsqueda semántica de resúmenes fallida, se usa el fallback textual:",
+        err.message,
+      );
     }
   }
 
   if (results.length === 0) {
-    const lexicalResults = await db.allAsync(
-      `
-        SELECT session_id
-        FROM session_summaries
-        WHERE project = $1
-          AND ($2::text IS NULL OR owner = $2)
-          AND summary ILIKE $3
-        ORDER BY timestamp DESC
-        LIMIT 1
-      `,
-      [project, owner ?? null, `%${query}%`],
-    );
+    const lexicalResults = await searchSummaryLexically({ query, project, owner });
 
     if (lexicalResults.length === 0) {
       return [];
     }
 
-    results.push({ session_id: lexicalResults[0].session_id, similarity: null });
+    results.push({
+      session_id: lexicalResults[0].session_id,
+      similarity: null,
+    });
   }
 
   const bestSessionId = results[0].session_id;
   logger.log(
-    `Sesión encontrada mediante resumen: ${bestSessionId}` +
+    "Sesión encontrada mediante resumen: " + bestSessionId +
       (results[0].similarity === null
         ? " (coincidencia textual)"
-        : ` (Similitud: ${results[0].similarity})`),
+        : " (Similitud: " + results[0].similarity + ")"),
   );
 
-  // 3. Recuperar todo el historial de la sesión identificada
   const historySql = `
     SELECT id, session_id, sequence_id, timestamp, project, role, content, agent_id
     FROM conversations
     WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)
     ORDER BY sequence_id ASC
   `;
-  
-  const history = await db.allAsync(historySql, [bestSessionId, project, owner ?? null]);
 
-  return history;
+  return db.allAsync(historySql, [bestSessionId, project, owner ?? null]);
 }
 
 module.exports = searchSessionsBySummary;
+module.exports.tokenizeQuery = tokenizeQuery;
+module.exports.searchSummaryLexically = searchSummaryLexically;
