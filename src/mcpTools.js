@@ -150,7 +150,8 @@ REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícit
   // 4. recoverSession
   registerTool(
     "recoverSession",
-    `Recupera todos los mensajes de una sesión, ordenados cronológicamente.
+    `Recupera los mensajes de una sesión, ordenados cronológicamente. Por defecto devuelve hasta 100 mensajes; el límite máximo se configura con RECOVER_SESSION_LIMIT.
+Para paginar, pasá afterSequenceId con el sequence_id del último mensaje de la página anterior; el cursor es exclusivo.
 Cada mensaje incluye agent_id para saber qué agente lo escribió (turno, plan o acción).
 Sin agentId devuelve los mensajes de todos los agentes de la sesión.
 REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícitamente filtrar por agente (p. ej. "la última charla con copilot"). Un agentId no pedido puede devolver vacío aunque la sesión tenga mensajes de otros agentes.`,
@@ -158,9 +159,11 @@ REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícit
       sessionId: z.string().describe("ID de la sesión a recuperar"),
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
       agentId: z.string().optional().describe("Filtrar por ID de agente (SOLO si el usuario lo pidió explícitamente; no lo uses en lecturas base)"),
+      limit: z.number().int().positive().optional().describe("Número máximo de mensajes a recuperar (por defecto: 100; sujeto al máximo configurado)"),
+      afterSequenceId: z.string().regex(/^\d+$/).optional().describe("Cursor exclusivo: devuelve solo mensajes posteriores a este sequence_id"),
     },
-    async ({ sessionId, project, agentId }) => {
-      const messages = await recoverSession(withScope({ sessionId, project, agentId }));
+    async ({ sessionId, project, agentId, limit, afterSequenceId }) => {
+      const messages = await recoverSession(withScope({ sessionId, project, agentId, limit, afterSequenceId }));
       return { content: [{ type: "text", text: JSON.stringify({ messages }, null, 2) }], structuredContent: { messages } };
     }
   );

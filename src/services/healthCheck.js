@@ -3,9 +3,9 @@
 // Métricas agregadas del almacén. El objetivo es responder una sola pregunta:
 // ¿la memoria conversacional está sirviendo lo que debería?
 //
-// Son agregados globales a propósito. /health es público (no exige token), así
-// que no puede revelar nombres de proyecto ni de owner. El detalle por proyecto
-// se consulta a mano contra la base cuando hace falta.
+// /health es público y solo expone el estado básico del servicio. /health/details
+// se encuentra autenticado y devuelve métricas globales solo para el token master;
+// para API keys se limita estrictamente al owner autenticado.
 
 const { db } = require("../database");
 const embeddingQueue = require("./embeddingQueue");
@@ -15,14 +15,18 @@ async function checkDatabase() {
   await db.query("SELECT 1");
 }
 
-async function getHealth() {
+async function getHealth(owner = null) {
+  const ownerFilter = owner ? "WHERE owner = $1" : "";
+  const ownerParam = owner ? [owner] : [];
+
   const messages = await db.getAsync(`
     SELECT
       count(*)::int AS total,
       count(*) FILTER (WHERE agent_id IS NULL)::int AS sin_agent,
       max(timestamp) AS last_message_at
     FROM conversations
-  `);
+    ${ownerFilter}
+  `, ownerParam);
 
   // `skipped` son los mensajes demasiado cortos para embeber: no son un
   // backlog, se descartan por diseño y van a aparecer así para siempre. Contarlos
@@ -37,7 +41,8 @@ async function getHealth() {
       )::int AS skipped
     FROM conversations c
     LEFT JOIN message_embeddings m ON m.message_id = c.id
-  `, [MIN_EMBEDDING_CHARS]);
+    ${owner ? "WHERE c.owner = $2" : ""}
+  `, owner ? [MIN_EMBEDDING_CHARS, owner] : [MIN_EMBEDDING_CHARS]);
 
   // Sin_generador no es un modo: si queda gente afuera del embedding, es backlog
   // real y el origen está en conversations, no en message_embeddings.
@@ -45,12 +50,17 @@ async function getHealth() {
     SELECT
       count(*) FILTER (WHERE attempts > 0)::int AS with_failures,
       count(*) FILTER (WHERE attempts >= 3)::int AS sin_generador
-    FROM embedding_failures
-  `);
+    FROM embedding_failures ef
+    JOIN conversations c ON c.id = ef.message_id
+    ${owner ? "WHERE c.owner = $1" : ""}
+  `, ownerParam);
 
   const indexed = await db.getAsync(`
-    SELECT count(*)::int AS total FROM message_embeddings
-  `);
+    SELECT count(*)::int AS total
+    FROM message_embeddings e
+    JOIN conversations c ON c.id = e.message_id
+    ${owner ? "WHERE c.owner = $1" : ""}
+  `, ownerParam);
 
   const sessions = await db.getAsync(`
     SELECT
@@ -58,7 +68,8 @@ async function getHealth() {
       count(DISTINCT (c.owner, c.session_id)) FILTER (WHERE ss.session_id IS NULL)::int AS sin_resumen
     FROM conversations c
     LEFT JOIN session_summaries ss ON ss.session_id = c.session_id AND ss.owner = c.owner
-  `);
+    ${owner ? "WHERE c.owner = $1" : ""}
+  `, ownerParam);
 
   const summaries = await db.getAsync(`
     SELECT
@@ -66,7 +77,8 @@ async function getHealth() {
       count(*) FILTER (WHERE e.session_id IS NULL)::int AS sin_embedding
     FROM session_summaries ss
     LEFT JOIN session_summary_embeddings e ON e.session_id = ss.session_id AND e.owner = ss.owner
-  `);
+    ${owner ? "WHERE ss.owner = $1" : ""}
+  `, ownerParam);
 
   const total = messages?.total ?? 0;
   const indexedCount = indexed?.total ?? 0;
@@ -92,7 +104,7 @@ async function getHealth() {
     },
     embeddingFailures: embeddingFailures?.with_failures ?? 0,
     embeddingsDescartados: embeddingFailures?.sin_generador ?? 0,
-    embeddingQueueSize: embeddingQueue.size(),
+    embeddingQueueSize: owner ? null : embeddingQueue.size(),
   };
 }
 

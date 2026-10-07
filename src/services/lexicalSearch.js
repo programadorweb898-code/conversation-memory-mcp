@@ -6,6 +6,7 @@
 // embeddings nunca haya indexado los mensajes.
 
 const { db } = require("../database");
+const { config } = require("../config");
 
 /**
  * Cuenta cuántos mensajes del proyecto (y opcionalmente del agente/owner) tienen
@@ -53,7 +54,9 @@ async function countEmbeddings(project, agentId, owner) {
  * @param {number} [params.limit]
  * @returns {Promise<Array>} Filas con campos de conversations + lexical_score.
  */
-async function lexicalSearch({ searchTerm, project, agentId, owner, limit = 50 }) {
+async function lexicalSearch({ searchTerm, project, agentId, owner, limit = config.searchLimit }) {
+  const requestedLimit = Number.isInteger(limit) && limit > 0 ? limit : config.searchLimit;
+  const effectiveLimit = Math.min(requestedLimit, config.searchLimit);
   const tokens = (searchTerm || "")
     .toLowerCase()
     .split(/\W+/)
@@ -93,7 +96,7 @@ async function lexicalSearch({ searchTerm, project, agentId, owner, limit = 50 }
       ORDER BY lexical_score DESC, c.timestamp DESC
       LIMIT $${dbParams.length + 1}
     `;
-    dbParams.push(limit);
+    dbParams.push(effectiveLimit);
 
     return await db.allAsync(sql, dbParams);
   } catch (err) {

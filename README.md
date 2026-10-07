@@ -188,6 +188,10 @@ mande el cliente.
 El token maestro (`MCP_BEARER_TOKEN`) tiene acceso total sin restricción de
 owner — pensado para administración, no para uso normal de un agente.
 
+Además de limitar la tasa de requests, el modo HTTP aplica límites de concurrencia por tenant para evitar que un owner monopolice el pool de conexiones con operaciones simultáneas lentas. Por defecto cada owner puede tener hasta 10 requests MCP simultáneas en `/mcp` y `/messages`, y hasta 10 sesiones SSE activas. Varias API keys del mismo owner comparten el mismo límite. El token maestro queda fuera de estas cuotas para tareas administrativas.
+
+Se pueden ajustar con `MCP_TENANT_MAX_CONCURRENT_REQUESTS` y `MCP_TENANT_MAX_SSE_SESSIONS`.
+
 ## Herramientas principales
 
 ### Historial
@@ -208,6 +212,8 @@ owner — pensado para administración, no para uso normal de un agente.
 - `finalizeSession`
 
 `finalizeSession` genera un resumen incremental utilizando solo los mensajes posteriores a `last_processed_seq_id`.
+
+El resumen generado por el LLM se valida con un esquema estructural antes de guardarlo: `goal` debe ser string y `discoveries`, `accomplished` y `next_steps` deben ser arrays de strings. Los campos inesperados también se rechazan.
 
 No existe finalización automática: el resumen se genera solo cuando el agente llama a `finalizeSession`. No hay ningún proceso que revise sesiones inactivas ni las cierre por su cuenta.
 
@@ -235,6 +241,14 @@ Variables disponibles:
 - `GEMINI_API_KEY`
 - `AI_PROVIDER`
 - `AI_MODEL`
+- `CONVERSATION_MEMORY_LLM_TIMEOUT_MS` (opcional; por defecto 30000 ms)
+- `CONVERSATION_MEMORY_LLM_MAX_RETRIES` (opcional; por defecto 2 reintentos)
+- `CONVERSATION_MEMORY_LLM_RETRY_BASE_DELAY_MS` (opcional; por defecto 250 ms)
+- `CONVERSATION_MEMORY_LLM_RETRY_MAX_DELAY_MS` (opcional; por defecto 2000 ms)
+
+Las llamadas al LLM tienen un timeout explícito para no quedar esperando indefinidamente ante un proveedor externo sin respuesta. En OpenRouter el timeout aborta la petición HTTP; en Gemini se envía como timeout de la petición del SDK.
+
+Ante fallos transitorios se realizan como máximo 2 reintentos adicionales por defecto, con backoff exponencial y límite de espera. Se consideran reintentables los `429`, los `5xx` y los timeouts. Errores permanentes como `400` o `401` fallan inmediatamente.
 
 La ausencia de un LLM no impide guardar ni recuperar el historial.
 
@@ -280,6 +294,14 @@ El parámetro `project` es obligatorio en las operaciones que trabajan con datos
 En modo HTTP, el `owner` se obtiene del token autenticado y nunca se acepta como dato controlable por el cliente.
 
 En modo local/stdio, `MCP_DEFAULT_OWNER` identifica el propietario local por defecto.
+
+## Configuración centralizada
+
+La configuración de runtime se interpreta en un único módulo: `src/config.js`. Ahí se concentran los defaults, la conversión de tipos y las validaciones de las variables utilizadas por el servidor, PostgreSQL, embeddings y LLM.
+
+Los módulos de runtime consumen esa configuración en lugar de interpretar directamente `process.env`. Esto evita defaults diferentes entre componentes y hace que una configuración inválida falle de forma explícita.
+
+> Las rutas especiales del instalador y las variables propias de cada agente (por ejemplo OpenCode/Copilot) siguen siendo responsabilidad de sus respectivos módulos.
 
 ## Desarrollo
 

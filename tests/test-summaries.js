@@ -84,6 +84,60 @@ describe('Session Summaries Tool', () => {
     expect(parsedSummary).to.have.property('next_steps');
   });
 
+  it('rechaza JSON válido con tipos de resumen incorrectos', async function() {
+    const generateSessionSummary = require("../src/tools/generateSessionSummary");
+    llmClient.generateText.resolves(JSON.stringify({
+      goal: "Objetivo válido",
+      discoveries: "esto debería ser un array",
+      accomplished: [],
+      next_steps: [],
+    }));
+
+    const result = await generateSessionSummary({
+      sessionId: testSessionId,
+      previousSummary: null,
+      newMessages: [{ timestamp: new Date().toISOString(), role: "user", content: "Mensaje de prueba." }],
+    });
+
+    expect(result).to.equal(null);
+  });
+
+  it('rechaza campos inesperados y normaliza JSON válido recibido en code fence', async function() {
+    const generateSessionSummary = require("../src/tools/generateSessionSummary");
+
+    const valid = {
+      goal: "Objetivo válido",
+      discoveries: ["Descubrimiento"],
+      accomplished: ["Logro"],
+      next_steps: ["Siguiente paso"],
+    };
+
+    llmClient.generateText.resolves(`\`\`json
+${JSON.stringify(valid, null, 2)}
+\`\`\`);
+
+    const result = await generateSessionSummary({
+      sessionId: testSessionId,
+      previousSummary: null,
+      newMessages: [{ timestamp: new Date().toISOString(), role: "user", content: "Mensaje de prueba." }],
+    });
+
+    expect(result).to.equal(JSON.stringify(valid));
+
+    llmClient.generateText.resolves(JSON.stringify({
+      ...valid,
+      unexpected: "no permitido",
+    }));
+
+    const invalid = await generateSessionSummary({
+      sessionId: testSessionId,
+      previousSummary: null,
+      newMessages: [{ timestamp: new Date().toISOString(), role: "user", content: "Otro mensaje." }],
+    });
+
+    expect(invalid).to.equal(null);
+  });
+
   it('no llama nuevamente al LLM cuando no hay mensajes nuevos', async function() {
     await finalizeSession({ sessionId: testSessionId, project: "test" });
     const callsAfterFirstFinalize = llmClient.generateText.callCount;

@@ -9,7 +9,7 @@ const streamableHttpSdk = require('@modelcontextprotocol/sdk/server/streamableHt
 const embeddingService = require('../src/services/embeddingService');
 const { db } = require('../src/database');
 const { createApiKey } = require('../src/services/apiKeyService');
-const { sseLimiter, messagesLimiter } = require('../src/middleware');
+const { authLimiter, sseLimiter, messagesLimiter } = require('../src/middleware');
 
 function resetServerModule() {
   delete require.cache[require.resolve('../src/server')];
@@ -70,6 +70,7 @@ describe('Server HTTP layer', () => {
   let connectStub;
   let transportConstructorStub;
   let streamableTransportConstructorStub;
+  let serverCloseStub;
   let transportInstance;
   let httpServer;
   let sseConnection;
@@ -101,11 +102,12 @@ describe('Server HTTP layer', () => {
       return transportInstance;
     });
     streamableTransportConstructorStub = sinon.stub().callsFake(() => transportInstance);
+    serverCloseStub = sinon.stub();
 
     sinon.stub(mcpSdk, 'McpServer').callsFake(() => ({
       tool: sinon.stub(),
       connect: connectStub,
-      close: sinon.stub(),
+      close: serverCloseStub,
     }));
     sinon.stub(sseSdk, 'SSEServerTransport').callsFake(transportConstructorStub);
     sinon.stub(streamableHttpSdk, 'StreamableHTTPServerTransport').callsFake(streamableTransportConstructorStub);
@@ -132,6 +134,60 @@ describe('Server HTTP layer', () => {
 
     sinon.restore();
     resetServerModule();
+  });
+
+  it('should shut down HTTP, worker and database in order and be idempotent', async function () {
+    this.timeout(10000);
+    const previousPort = process.env.PORT;
+    const previousWorkerSetting = process.env.ENABLE_EMBEDDING_WORKER;
+    process.env.PORT = '0';
+    process.env.ENABLE_EMBEDDING_WORKER = 'false';
+    const order = [];
+    const stopWorkerStub = sinon.stub(embeddingWorker, 'stopWorker').callsFake(async () => order.push('worker'));
+    const dbCloseStub = sinon.stub(db, 'close').callsFake(async () => order.push('db'));
+    const exitStub = sinon.stub(process, 'exit');
+    try {
+      const { startServer, shutdown } = require('../src/server');
+      httpServer = await startServer();
+      const realClose = httpServer.close.bind(httpServer);
+      sinon.stub(httpServer, 'close').callsFake((callback) => { order.push('http'); return realClose(callback); });
+      const firstShutdown = shutdown('SIGTERM');
+      const secondShutdown = shutdown('SIGTERM');
+      expect(secondShutdown).to.equal(firstShutdown);
+      await firstShutdown;
+      expect(order).to.deep.equal(['http', 'worker', 'db']);
+      expect(stopWorkerStub.calledOnce).to.be.true;
+      expect(dbCloseStub.calledOnce).to.be.true;
+      expect(exitStub.calledOnceWithExactly(143)).to.be.true;
+    } finally {
+      if (previousPort === undefined) delete process.env.PORT; else process.env.PORT = previousPort;
+      if (previousWorkerSetting === undefined) delete process.env.ENABLE_EMBEDDING_WORKER; else process.env.ENABLE_EMBEDDING_WORKER = previousWorkerSetting;
+    }
+  });
+
+  it('should close active SSE transports before completing HTTP shutdown', async function () {
+    this.timeout(10000);
+    const previousPort = process.env.PORT;
+    const previousWorkerSetting = process.env.ENABLE_EMBEDDING_WORKER;
+    process.env.PORT = '0';
+    process.env.ENABLE_EMBEDDING_WORKER = 'false';
+    const stopWorkerStub = sinon.stub(embeddingWorker, 'stopWorker').resolves();
+    const dbCloseStub = sinon.stub(db, 'close').resolves();
+    const exitStub = sinon.stub(process, 'exit');
+    transportInstance.close.callsFake(async () => { transportInstance.response?.end(); });
+    try {
+      const { startServer, shutdown } = require('../src/server');
+      httpServer = await startServer();
+      sseConnection = await openSse(httpServer);
+      await shutdown('SIGTERM');
+      expect(transportInstance.close.calledOnce).to.be.true;
+      expect(stopWorkerStub.calledOnce).to.be.true;
+      expect(dbCloseStub.calledOnce).to.be.true;
+      expect(exitStub.calledOnceWithExactly(143)).to.be.true;
+    } finally {
+      if (previousPort === undefined) delete process.env.PORT; else process.env.PORT = previousPort;
+      if (previousWorkerSetting === undefined) delete process.env.ENABLE_EMBEDDING_WORKER; else process.env.ENABLE_EMBEDDING_WORKER = previousWorkerSetting;
+    }
   });
 
   it('should expose a working Express app and accept GET /sse', async () => {
@@ -175,6 +231,20 @@ describe('Server HTTP layer', () => {
 
     expect(response.status).to.equal(200);
     expect(transportInstance.handlePostMessage.calledOnce).to.be.true;
+  });
+
+  it('should close the SSE MCP server exactly once when the client disconnects', async () => {
+    const { app } = require('../src/server');
+
+    httpServer = await listen(app);
+    sseConnection = await openSse(httpServer);
+
+    sseConnection.req.destroy();
+    sseConnection.res.destroy();
+
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(serverCloseStub.calledOnce).to.be.true;
   });
 
   it('should reject an SSE session used with a different API key', async function () {
@@ -301,6 +371,135 @@ describe('Server HTTP layer', () => {
     expect(response.status).to.equal(401);
   });
 
+  it('should reject a disallowed MCP host before authentication', async () => {
+    const { app } = require('../src/server');
+    const previousHosts = process.env.MCP_ALLOWED_HOSTS;
+
+    process.env.MCP_ALLOWED_HOSTS = 'allowed.example';
+
+    try {
+      const response = await request(app)
+        .get('/mcp')
+        .set('host', 'attacker.example')
+        .set('authorization', 'Bearer test-token');
+
+      expect(response.status).to.equal(403);
+      expect(response.body).to.deep.equal({ error: 'Host no autorizado.' });
+    } finally {
+      if (previousHosts === undefined) {
+        delete process.env.MCP_ALLOWED_HOSTS;
+      } else {
+        process.env.MCP_ALLOWED_HOSTS = previousHosts;
+      }
+    }
+  });
+
+  it('should accept an allowed MCP host and origin', async () => {
+    const { app } = require('../src/server');
+    const previousHosts = process.env.MCP_ALLOWED_HOSTS;
+    const previousOrigins = process.env.MCP_ALLOWED_ORIGINS;
+
+    process.env.MCP_ALLOWED_HOSTS = 'allowed.example';
+    process.env.MCP_ALLOWED_ORIGINS = 'https://allowed.example';
+
+    try {
+      const response = await request(app)
+        .post('/mcp')
+        .set('host', 'allowed.example')
+        .set('origin', 'https://allowed.example/')
+        .set('content-type', 'application/json')
+        .set('authorization', 'Bearer test-token')
+        .send({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+
+      expect(response.status).to.equal(200);
+    } finally {
+      if (previousHosts === undefined) {
+        delete process.env.MCP_ALLOWED_HOSTS;
+      } else {
+        process.env.MCP_ALLOWED_HOSTS = previousHosts;
+      }
+
+      if (previousOrigins === undefined) {
+        delete process.env.MCP_ALLOWED_ORIGINS;
+      } else {
+        process.env.MCP_ALLOWED_ORIGINS = previousOrigins;
+      }
+    }
+  });
+
+  it('should reject a disallowed MCP origin', async () => {
+    const { app } = require('../src/server');
+    const previousHosts = process.env.MCP_ALLOWED_HOSTS;
+    const previousOrigins = process.env.MCP_ALLOWED_ORIGINS;
+
+    process.env.MCP_ALLOWED_HOSTS = 'allowed.example';
+    process.env.MCP_ALLOWED_ORIGINS = 'https://allowed.example';
+
+    try {
+      const response = await request(app)
+        .post('/mcp')
+        .set('host', 'allowed.example')
+        .set('origin', 'https://attacker.example')
+        .set('content-type', 'application/json')
+        .set('authorization', 'Bearer test-token')
+        .send({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+
+      expect(response.status).to.equal(403);
+      expect(response.body).to.deep.equal({ error: 'Origin no autorizado.' });
+    } finally {
+      if (previousHosts === undefined) {
+        delete process.env.MCP_ALLOWED_HOSTS;
+      } else {
+        process.env.MCP_ALLOWED_HOSTS = previousHosts;
+      }
+
+      if (previousOrigins === undefined) {
+        delete process.env.MCP_ALLOWED_ORIGINS;
+      } else {
+        process.env.MCP_ALLOWED_ORIGINS = previousOrigins;
+      }
+    }
+  });
+
+  it('should rate limit invalid-token requests before querying the database', async function () {
+    this.timeout(30000);
+    const { app } = require('../src/server');
+    const clientIp = '198.51.100.79';
+    const originalGetAsync = db.getAsync;
+    let lookupCount = 0;
+
+    authLimiter.resetKey(clientIp);
+
+    db.getAsync = async (...args) => {
+      lookupCount += 1;
+      return originalGetAsync(...args);
+    };
+
+    try {
+      for (let requestNumber = 0; requestNumber < 100; requestNumber += 1) {
+        const response = await request(app)
+          .get('/mcp')
+          .set('authorization', 'Bearer invalid-token')
+          .set('x-forwarded-for', clientIp);
+
+        expect(response.status).to.equal(401);
+      }
+
+      expect(lookupCount).to.equal(100);
+
+      const limitedResponse = await request(app)
+        .get('/mcp')
+        .set('authorization', 'Bearer invalid-token')
+        .set('x-forwarded-for', clientIp);
+
+      expect(limitedResponse.status).to.equal(429);
+      expect(lookupCount).to.equal(100);
+    } finally {
+      db.getAsync = originalGetAsync;
+      authLimiter.resetKey(clientIp);
+    }
+  });
+
   it('should allow /health without token', async () => {
     const { app } = require('../src/server');
     const response = await request(app).get('/health');
@@ -328,6 +527,50 @@ describe('Server HTTP layer', () => {
     const { app } = require('../src/server');
     const response = await request(app).get('/health/details');
     expect(response.status).to.equal(401);
+  });
+
+  it('should scope detailed health metrics to the authenticated owner', async function () {
+    this.timeout(30000);
+    const { app } = require('../src/server');
+    const ownerA = `health-owner-a-${Date.now()}`;
+    const ownerB = `health-owner-b-${Date.now()}`;
+    const firstKey = await createApiKey({ name: `health-key-a-${Date.now()}`, owner: ownerA });
+    const secondKey = await createApiKey({ name: `health-key-b-${Date.now()}`, owner: ownerB });
+    const messageA = `health-message-a-${Date.now()}`;
+    const messageB = `health-message-b-${Date.now()}`;
+
+    await db.runAsync(
+      `INSERT INTO conversations (id, session_id, project, role, content, owner)
+       VALUES ($1, $2, 'health-test', 'user', $3, $4)`,
+      [messageA, `health-session-a-${Date.now()}`, 'This message belongs only to owner A and must not be visible to owner B.', ownerA]
+    );
+    await db.runAsync(
+      `INSERT INTO conversations (id, session_id, project, role, content, owner)
+       VALUES ($1, $2, 'health-test', 'user', $3, $4)`,
+      [messageB, `health-session-b-${Date.now()}`, 'This message belongs only to owner B and must not be visible to owner A.', ownerB]
+    );
+
+    try {
+      const firstResponse = await request(app)
+        .get('/health/details')
+        .set('authorization', `Bearer ${firstKey.token}`);
+
+      const secondResponse = await request(app)
+        .get('/health/details')
+        .set('authorization', `Bearer ${secondKey.token}`);
+
+      expect(firstResponse.status).to.equal(200);
+      expect(secondResponse.status).to.equal(200);
+      expect(firstResponse.body.messages.total).to.equal(1);
+      expect(secondResponse.body.messages.total).to.equal(1);
+      expect(firstResponse.body.sessions.total).to.equal(1);
+      expect(secondResponse.body.sessions.total).to.equal(1);
+      expect(firstResponse.body.embeddingQueueSize).to.equal(null);
+      expect(secondResponse.body.embeddingQueueSize).to.equal(null);
+    } finally {
+      await db.runAsync('DELETE FROM conversations WHERE id = ANY($1)', [[messageA, messageB]]);
+      await db.runAsync('DELETE FROM api_keys WHERE id = ANY($1)', [[firstKey.key.id, secondKey.key.id]]);
+    }
   });
 
   it('should return 503 when the public health database ping fails', async () => {

@@ -1,8 +1,9 @@
 const { db } = require("../database");
 const { z } = require("zod");
-const { generateEmbedding, isEmbeddingsEnabled } = require("../services/embeddingService");
+const embeddingService = require("../services/embeddingService");
 const removeStopwords = require("../services/stopwords");
 const { lexicalSearch, countEmbeddings } = require("../services/lexicalSearch");
+const { config } = require("../config");
 
 const SearchMessagesSchema = z.object({
   searchTerm: z.string().optional(),
@@ -16,8 +17,8 @@ const SearchMessagesSchema = z.object({
 /**
  * Busca mensajes en la base de datos usando un enfoque híbrido.
  * La búsqueda semántica (pgvector) se usa cuando existen embeddings indexados;
- * si no los hay (o no producen coincidencias), cae a una búsqueda léxica
- * (ILIKE) para que el conocimiento siempre sea recuperable por cualquier agente.
+ * si no los hay (o el embedding de consulta falla), cae a una búsqueda léxica
+ * (ILIKE) para que el conocimiento siempre sea recuperable.
  */
 async function searchMessages(params) {
   const validatedParams = SearchMessagesSchema.parse(params);
@@ -50,6 +51,8 @@ async function searchMessages(params) {
         sql += ` WHERE ` + whereClauses.join(` AND `);
       }
 
+      sql += ` ORDER BY c.sequence_id DESC LIMIT ${dbParams.length + 1}`;
+      dbParams.push(config.searchLimit);
       return await db.allAsync(sql, dbParams);
     }
 
@@ -60,7 +63,7 @@ async function searchMessages(params) {
       .filter((token) => token.length > 2);
 
     const fallbackToLexical = async () => {
-      const rows = await lexicalSearch({ searchTerm, project, agentId, owner });
+      const rows = await lexicalSearch({ searchTerm, project, agentId, owner, limit: config.searchLimit });
       return rows.map((row) => {
         const lexicalScore = Number(row.lexical_score) || 0;
         const normalized = queryTokens.length > 0 ? lexicalScore / queryTokens.length : lexicalScore;
@@ -71,11 +74,11 @@ async function searchMessages(params) {
           similarity: normalized,
         };
       });
-
-      if (!isEmbeddingsEnabled()) {
-        return await fallbackToLexical();
-      }
     };
+
+    if (!embeddingService.isEmbeddingsEnabled()) {
+      return await fallbackToLexical();
+    }
 
     // Sin embeddings indexados no hay vía semántica posible: respondemos con
     // búsqueda léxica sin cargar el modelo (rápida y siempre disponible).
@@ -84,12 +87,19 @@ async function searchMessages(params) {
       return await fallbackToLexical();
     }
 
-    // --- RERANKING HÍBRIDO ---
-    // Pasamos un objeto mensaje simulado para que coincida con el formato enriquecido
-    const queryEmbeddingJson = await generateEmbedding({ role: "query", content: semanticSearchTerm });
+    // Generar embedding de la consulta. Si el modelo no está disponible o falla
+    // durante la generación, la búsqueda léxica mantiene el servicio operativo.
+    let queryEmbeddingJson;
+    try {
+      queryEmbeddingJson = await embeddingService.generateEmbedding({
+        role: "query",
+        content: semanticSearchTerm,
+      });
+    } catch (error) {
+      console.warn("Semantic embedding failed; falling back to lexical search:", error.message);
+      return await fallbackToLexical();
+    }
 
-    // pgvector: el operador <=> calcula la distancia de coseno.
-    // La similitud de coseno se obtiene con: 1 - distancia_coseno
     let sql = `
       SELECT c.*, (1 - (me.embedding <=> $1::vector)) AS semantic_score
       FROM conversations c
@@ -118,21 +128,20 @@ async function searchMessages(params) {
       sql += ` WHERE ` + whereClauses.join(` AND `);
     }
 
-    // Ordenamos por distancia de coseno ascendente (mayor similitud primero) y limitamos a los top 100
-    sql += ` ORDER BY me.embedding <=> $1::vector ASC LIMIT 100`;
+    // Ordenamos por distancia de coseno ascendente (mayor similitud primero)
+    // y limitamos los resultados para mantener acotada la respuesta.
+    sql += ` ORDER BY me.embedding <=> $1::vector ASC LIMIT ${dbParams.length + 1}`;
+    dbParams.push(config.searchLimit);
 
     const rows = await db.allAsync(sql, dbParams);
 
     const scoredResults = rows.map((row) => {
-      // 1. Score Semántico viene ya calculado de Postgres
       const semanticScore = parseFloat(row.semantic_score) || 0;
 
-      // 2. Score Léxico (0 o 1)
       const contentLower = row.content.toLowerCase();
       const matchedTokens = queryTokens.filter((token) => contentLower.includes(token));
       const lexicalScore = queryTokens.length > 0 ? matchedTokens.length / queryTokens.length : 0;
 
-      // 3. Score Compuesto (Pesos: 70% semántico, 30% léxico)
       const finalScore = (semanticScore * 0.7) + (lexicalScore * 0.3);
 
       return { ...row, similarity: finalScore, lexicalScore, semanticScore };
@@ -142,17 +151,15 @@ async function searchMessages(params) {
       .filter((result) => result.lexicalScore > 0 || result.semanticScore >= threshold)
       .sort((a, b) => b.similarity - a.similarity);
 
-    // Los embeddings existen pero no aportaron coincidencias: igual respondemos
-    // con coincidencias léxicas antes de devolver vacío.
     if (filteredResults.length > 0) {
       return filteredResults;
     }
+
     return await fallbackToLexical();
   } catch (err) {
     console.error("Error searching messages:", err.message);
     throw err;
   }
 }
-
 
 module.exports = searchMessages;

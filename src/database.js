@@ -1,15 +1,13 @@
 const { Pool } = require("pg");
-const dotenv = require("dotenv");
+const { getConfig } = require("./config");
 const { getDatabaseUrl, getPgSslOptions } = require("./databaseConfig");
-dotenv.config();
 
 // Sin estos límites, una query contra un endpoint que acepta el TCP pero no
 // responde queda pendiente para siempre: sin `connectionTimeoutMillis` el
 // `pool.query()` no llega a resolver ni a rechazar. El keepalive cubre el otro
 // caso, una conexión ya establecida cuyo peer se cierra sin FIN, que los
 // keepalive del sistema por defecto no detectarían a tiempo.
-const CONNECT_TIMEOUT_MS = 10000;
-const KEEPALIVE_DELAY_MS = 30000;
+const { connectTimeoutMs: CONNECT_TIMEOUT_MS, keepaliveDelayMs: KEEPALIVE_DELAY_MS } = getConfig().database;
 
 // Tope de duración de cada statement. Hay dos mecanismos y el orden importa:
 // `statement_timeout` (el que se le manda al servidor en `acquire()`) es el
@@ -18,21 +16,8 @@ const KEEPALIVE_DELAY_MS = 30000;
 // para el socket muerto, donde el servidor no puede cancelar nada, y por eso va
 // por encima del del servidor: siempre cancela primero el que puede hacerlo
 // bien.
-const DEFAULT_STATEMENT_TIMEOUT_MS = 60000;
 const CLIENT_QUERY_TIMEOUT_MARGIN_MS = 5000;
-
-function resolveStatementTimeoutMs() {
-  const raw = process.env.CONVERSATION_MEMORY_QUERY_TIMEOUT_MS;
-  if (raw === undefined || raw === "") return DEFAULT_STATEMENT_TIMEOUT_MS;
-
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`CONVERSATION_MEMORY_QUERY_TIMEOUT_MS inválido: "${raw}"`);
-  }
-  return parsed;
-}
-
-const STATEMENT_TIMEOUT_MS = resolveStatementTimeoutMs();
+const STATEMENT_TIMEOUT_MS = getConfig().database.queryTimeoutMs;
 
 const poolOptions = {
   connectionString: getDatabaseUrl(),
@@ -93,10 +78,7 @@ pool.on("error", (err) => {
 // tocar el schema de producción (los tests usan `cm_test`). `public` queda
 // siempre en el path porque ahí viven los tipos de las extensiones (pgvector).
 // No se puede pasar por el startup packet: el endpoint pooled de Neon lo rechaza.
-const searchPath = process.env.PG_SEARCH_PATH;
-if (searchPath && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(searchPath)) {
-  throw new Error(`PG_SEARCH_PATH inválido: "${searchPath}"`);
-}
+const searchPath = getConfig().database.searchPath;
 
 // Los `SET` van al adquirir la conexión, no en el evento "connect": pg-pool no
 // espera al handler del evento, así que ahí el SET compite con la primera
@@ -139,6 +121,49 @@ async function runQuery(sql, params) {
     poisoned = poisonedByClientTimeout(err) ? err : null;
     throw err;
   } finally {
+    client.release(poisoned);
+  }
+}
+
+async function withTransaction(work) {
+  const client = await acquire();
+  let transactionActive = false;
+  let poisoned = null;
+
+  const tx = {
+    query: (sql, params) => client.query(sql, params),
+    runAsync: async (sql, params = []) => {
+      const result = await client.query(sql, params);
+      return { changes: result.rowCount };
+    },
+    getAsync: async (sql, params = []) => {
+      const result = await client.query(sql, params);
+      return result.rows[0];
+    },
+    allAsync: async (sql, params = []) => {
+      const result = await client.query(sql, params);
+      return result.rows;
+    },
+  };
+
+  try {
+    await client.query("BEGIN");
+    transactionActive = true;
+    const result = await work(tx);
+    await client.query("COMMIT");
+    transactionActive = false;
+    return result;
+  } catch (err) {
+    poisoned = poisonedByClientTimeout(err) ? err : null;
+    throw err;
+  } finally {
+    if (transactionActive && !poisoned) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (err) {
+        console.error("Error haciendo ROLLBACK de la transacción:", err.message);
+      }
+    }
     client.release(poisoned);
   }
 }
@@ -202,4 +227,4 @@ const db = {
   }
 };
 
-module.exports = { db, withAdvisoryLock };
+module.exports = { db, withAdvisoryLock, withTransaction };

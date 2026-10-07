@@ -1,11 +1,10 @@
 // src/services/embeddingQueue.js
 
+const { getConfig } = require("../config");
+
 const embeddingQueue = [];
 let processing = false; // Flag to prevent multiple workers processing the queue
-const configuredMaxQueueSize = Number(process.env.EMBEDDING_QUEUE_MAX_SIZE || 1000);
-const maxQueueSize = Number.isInteger(configuredMaxQueueSize) && configuredMaxQueueSize > 0
-  ? configuredMaxQueueSize
-  : 1000;
+const maxQueueSize = getConfig().embeddings.queueMaxSize;
 
 /**
  * Adds a task to the embedding queue.

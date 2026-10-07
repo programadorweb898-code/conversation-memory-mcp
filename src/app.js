@@ -4,6 +4,7 @@ const { setupMcpRoutes } = require("./routes");
 const { checkDatabase, getHealth } = require("./services/healthCheck");
 const errorHandler = require("./errorHandler");
 const { createMcpServer } = require("./createMcpServer");
+const { getAuth } = require("./context");
 
 console.time("⏱️ App initialization");
 
@@ -31,7 +32,9 @@ app.get("/health", async (req, res) => {
 // Las métricas son más costosas y requieren autenticación Bearer.
 app.get("/health/details", async (req, res) => {
   try {
-    res.status(200).json(await getHealth());
+    const auth = getAuth();
+    const owner = auth?.master ? null : auth?.owner;
+    res.status(200).json(await getHealth(owner));
   } catch (error) {
     console.error("Health details failed:", error.message);
     res.status(503).json({ status: "degraded", details: "unavailable" });
@@ -40,9 +43,7 @@ app.get("/health/details", async (req, res) => {
 
 // Create servers for the modern HTTP transport and the legacy SSE transport.
 // El /mcp crea un McpServer nuevo por request (stateless); el /sse reutiliza sseServer.
-const sseServer = createMcpServer();
-
-setupMcpRoutes(app, { createMcpServer, sseServer });
+const { close: closeMcpRoutes } = setupMcpRoutes(app, { createMcpServer });
 
 // Coloca el middleware de errores después de todas las rutas y middleware para que capture los errores.
 app.use(errorHandler);
@@ -50,3 +51,4 @@ app.use(errorHandler);
 console.timeEnd("⏱️ App initialization");
 
 module.exports = app;
+module.exports.closeMcpRoutes = closeMcpRoutes;

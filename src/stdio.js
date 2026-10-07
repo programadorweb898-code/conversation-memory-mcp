@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-const dotenv = require("dotenv");
 const logger = require("./logger");
+const { getConfig } = require("./config");
 
 // stdout queda reservado exclusivamente para los mensajes JSON-RPC de MCP.
 console.log = logger.log;
@@ -14,7 +14,6 @@ const { startWorker, stopWorker } = require("./services/embeddingWorker");
 const { db } = require("./database");
 const { getDatabaseUrl } = require("./databaseConfig");
 
-dotenv.config();
 
 async function startStdioServer({ processRef = process } = {}) {
   if (!getDatabaseUrl()) {
@@ -30,7 +29,7 @@ async function startStdioServer({ processRef = process } = {}) {
   // En modo stdio el worker de embeddings no corría (solo estaba en server.js con
   // ENABLE_EMBEDDING_WORKER=true). Ahora arranca por defecto para que la búsqueda
   // semántica tenga vectores; se desactiva explícitamente con ENABLE_EMBEDDING_WORKER=false.
-  if (process.env.ENABLE_EMBEDDING_WORKER !== "false") {
+  if (getConfig().server.enableEmbeddingWorkerStdio) {
     startWorker();
   }
 
@@ -72,8 +71,6 @@ async function startStdioServer({ processRef = process } = {}) {
   return { server, transport, shutdown };
 }
 
-process.on("SIGINT", () => stopWorker());
-process.on("SIGTERM", () => stopWorker());
 
 // Un rechazo suelto no debe derribar el servidor: se registra en stderr, que es
 // el único stream permitido para esto, y se sigue sirviendo.

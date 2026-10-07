@@ -3,6 +3,7 @@ const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 const helmet = require("helmet");
 const { hashToken, findByTokenHash, touchApiKey } = require("./services/apiKeyService");
 const { runWithAuth } = require("./context");
+const { getConfig } = require("./config");
 
 function rateLimitKeyGenerator(req) {
   if (req.auth?.owner) {
@@ -19,6 +20,59 @@ function rateLimitKeyGenerator(req) {
 
   return `ip:${ipKeyGenerator(req.ip)}`;
 }
+
+/**
+ * Valida Host/Origin en los transportes HTTP de MCP.
+ *
+ * MCP_ALLOWED_HOSTS y MCP_ALLOWED_ORIGINS son listas separadas por comas.
+ * Si una lista está vacía, esa validación queda deshabilitada para mantener
+ * compatibilidad con instalaciones existentes.
+ *
+ * La validación se ejecuta antes de autenticación para rechazar requests no
+ * confiables sin consultar la base de datos.
+ */
+function validateMcpHostOrigin(req, res, next) {
+  if (!["/mcp", "/sse", "/messages"].includes(req.path)) {
+    return next();
+  }
+
+  const allowedHosts = getConfig().server.allowedHosts;
+
+  const allowedOrigins = getConfig().server.allowedOrigins;
+
+  if (allowedHosts.length > 0) {
+    const host = (req.get("host") || "").trim().toLowerCase();
+    if (!host || !allowedHosts.includes(host)) {
+      return res.status(403).json({ error: "Host no autorizado." });
+    }
+  }
+
+  if (allowedOrigins.length > 0) {
+    const origin = req.get("origin");
+    if (origin) {
+      const normalizedOrigin = origin.trim().replace(/\/$/, "").toLowerCase();
+      if (!allowedOrigins.includes(normalizedOrigin)) {
+        return res.status(403).json({ error: "Origin no autorizado." });
+      }
+    }
+  }
+
+  return next();
+}
+
+// límite para conexiones SSE: máximo 10 por usuario por minuto
+// límite previo a autenticación: máximo 100 requests por IP por minuto.
+// Este limiter se ejecuta antes de consultar la base para validar el token.
+// Se excluye /health para no interferir con health checks del balanceador.
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  message: { error: "Demasiadas solicitudes de autenticación. Intentá en un minuto." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
+  skip: (req) => req.path === "/health",
+});
 
 // límite para conexiones SSE: máximo 10 por usuario por minuto
 const sseLimiter = rateLimit({
@@ -38,6 +92,65 @@ const messagesLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: rateLimitKeyGenerator,
+});
+
+function createConcurrencyLimiter({ getLimit, keyGenerator, message }) {
+  const active = new Map();
+
+  function release(key) {
+    const current = active.get(key);
+    if (!current) return;
+    if (current <= 1) active.delete(key);
+    else active.set(key, current - 1);
+  }
+
+  return function concurrencyLimiter(req, res, next) {
+    const auth = req.auth;
+    // El token master es administración y no consume la cuota de un tenant.
+    // Los requests protegidos siempre tienen owner; el apiKeyId queda como
+    // fallback defensivo para keys antiguas o datos incompletos.
+    if (auth?.master) return next();
+
+    const key = keyGenerator(req);
+    const limit = getLimit();
+
+    if (!key || active.has(key) && active.get(key) >= limit) {
+      res.setHeader("Retry-After", "1");
+      return res.status(429).json({ error: message });
+    }
+
+    active.set(key, (active.get(key) || 0) + 1);
+    let released = false;
+
+    const releaseOnce = () => {
+      if (released) return;
+      released = true;
+      release(key);
+    };
+
+    res.once("finish", releaseOnce);
+    res.once("close", releaseOnce);
+    return next();
+  };
+}
+
+const tenantKeyGenerator = (req) =>
+  req.auth?.owner
+    ? `owner:${req.auth.owner}`
+    : req.auth?.apiKeyId
+      ? `api-key:${req.auth.apiKeyId}`
+      : null;
+
+const tenantRequestConcurrencyLimiter = createConcurrencyLimiter({
+  getLimit: () => getConfig().server.tenantMaxConcurrentRequests,
+  keyGenerator: tenantKeyGenerator,
+  message: "Límite de solicitudes simultáneas para este tenant alcanzado.",
+});
+
+const tenantSseConcurrencyLimiter = createConcurrencyLimiter({
+  getLimit: () => getConfig().server.tenantMaxSseSessions,
+  keyGenerator: tenantKeyGenerator,
+  message: "Límite de sesiones SSE simultáneas para este tenant alcanzado.",
 });
 
 // comparación constante para mitigar ataques de temporización
@@ -110,7 +223,7 @@ async function requireBearerToken(req, res, next) {
   }
 
   try {
-    const expectedToken = process.env.MCP_BEARER_TOKEN || "";
+    const expectedToken = getConfig().server.bearerToken;
     if (expectedToken && tokensMatch(Buffer.from(expectedToken), Buffer.from(token))) {
       // token master: acceso total, sin scope ni owner
       req.auth = { scope: null, master: true, owner: null, apiKeyId: null };
@@ -159,16 +272,26 @@ function requireJson(req, res, next) {
 
 function applyMiddleware(app) {
   app.use(helmet());
+  app.use(validateMcpHostOrigin);
+  app.use(authLimiter);
   app.use(requireBearerToken);
   app.use("/sse", sseLimiter);
+  app.use("/sse", tenantSseConcurrencyLimiter);
   app.use("/messages", messagesLimiter);
+  app.use("/messages", tenantRequestConcurrencyLimiter);
   app.use("/mcp", messagesLimiter);
+  app.use("/mcp", tenantRequestConcurrencyLimiter);
   app.use(requireJson);
 }
 
 module.exports = {
+  authLimiter,
+  validateMcpHostOrigin,
   sseLimiter,
   messagesLimiter,
+  tenantRequestConcurrencyLimiter,
+  tenantSseConcurrencyLimiter,
+  createConcurrencyLimiter,
   requireBearerToken,
   requireJson,
   applyMiddleware,
