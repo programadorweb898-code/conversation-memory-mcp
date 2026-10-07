@@ -471,6 +471,8 @@ describe("Search Sessions By Summary", function () {
         owner: ownerA,
       });
 
+      const history = result.history;
+
       expect(history).to.have.lengthOf(1);
       expect(history[0].session_id).to.equal(sessionId);
       expect(stub.called).to.equal(true);
