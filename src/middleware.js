@@ -94,6 +94,65 @@ const messagesLimiter = rateLimit({
   keyGenerator: rateLimitKeyGenerator,
 });
 
+function createConcurrencyLimiter({ getLimit, keyGenerator, message }) {
+  const active = new Map();
+
+  function release(key) {
+    const current = active.get(key);
+    if (!current) return;
+    if (current <= 1) active.delete(key);
+    else active.set(key, current - 1);
+  }
+
+  return function concurrencyLimiter(req, res, next) {
+    const auth = req.auth;
+    // El token master es administración y no consume la cuota de un tenant.
+    // Los requests protegidos siempre tienen owner; el apiKeyId queda como
+    // fallback defensivo para keys antiguas o datos incompletos.
+    if (auth?.master) return next();
+
+    const key = keyGenerator(req);
+    const limit = getLimit();
+
+    if (!key || active.has(key) && active.get(key) >= limit) {
+      res.setHeader("Retry-After", "1");
+      return res.status(429).json({ error: message });
+    }
+
+    active.set(key, (active.get(key) || 0) + 1);
+    let released = false;
+
+    const releaseOnce = () => {
+      if (released) return;
+      released = true;
+      release(key);
+    };
+
+    res.once("finish", releaseOnce);
+    res.once("close", releaseOnce);
+    return next();
+  };
+}
+
+const tenantKeyGenerator = (req) =>
+  req.auth?.owner
+    ? `owner:${req.auth.owner}`
+    : req.auth?.apiKeyId
+      ? `api-key:${req.auth.apiKeyId}`
+      : null;
+
+const tenantRequestConcurrencyLimiter = createConcurrencyLimiter({
+  getLimit: () => getConfig().server.tenantMaxConcurrentRequests,
+  keyGenerator: tenantKeyGenerator,
+  message: "Límite de solicitudes simultáneas para este tenant alcanzado.",
+});
+
+const tenantSseConcurrencyLimiter = createConcurrencyLimiter({
+  getLimit: () => getConfig().server.tenantMaxSseSessions,
+  keyGenerator: tenantKeyGenerator,
+  message: "Límite de sesiones SSE simultáneas para este tenant alcanzado.",
+});
+
 // comparación constante para mitigar ataques de temporización
 function tokensMatch(expectedBuffer, tokenBuffer) {
   if (tokenBuffer.length !== expectedBuffer.length) {
@@ -217,8 +276,11 @@ function applyMiddleware(app) {
   app.use(authLimiter);
   app.use(requireBearerToken);
   app.use("/sse", sseLimiter);
+  app.use("/sse", tenantSseConcurrencyLimiter);
   app.use("/messages", messagesLimiter);
+  app.use("/messages", tenantRequestConcurrencyLimiter);
   app.use("/mcp", messagesLimiter);
+  app.use("/mcp", tenantRequestConcurrencyLimiter);
   app.use(requireJson);
 }
 
@@ -227,6 +289,9 @@ module.exports = {
   validateMcpHostOrigin,
   sseLimiter,
   messagesLimiter,
+  tenantRequestConcurrencyLimiter,
+  tenantSseConcurrencyLimiter,
+  createConcurrencyLimiter,
   requireBearerToken,
   requireJson,
   applyMiddleware,
