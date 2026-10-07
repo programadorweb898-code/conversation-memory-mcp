@@ -245,6 +245,10 @@ Si el LLM no está disponible, el historial sigue siendo utilizable y el resumen
 
 ## Búsqueda semántica
 
+Los mensajes reciben embeddings con `Xenova/multilingual-e5-small`, un modelo E5 multilingüe de 384 dimensiones preparado para Transformers.js. El proveedor usa `query: ` para consultas y `passage: ` para contenido almacenado, que es la convención con la que fue entrenado el modelo. 
+
+**Importante:** cambiar el modelo de embeddings requiere reindexar los embeddings existentes antes de confiar en la búsqueda semántica sobre datos ya almacenados. El punto siguiente de esta hoja de mejoras define esa estrategia de reindexado.
+
 Los mensajes pueden recibir embeddings mediante el worker interno. PostgreSQL + pgvector permite recuperar mensajes semánticamente relacionados.
 
 Si los embeddings no están disponibles, las herramientas de búsqueda disponen de mecanismos de recuperación textual cuando corresponde.
