@@ -75,12 +75,21 @@ function setupMcpRoutes(app, { createMcpServer }) {
       }
     }, 2 * 60 * 1000);
 
-    res.on("close", () => {
+    let sessionClosed = false;
+    const closeSession = () => {
+      if (sessionClosed) return;
+      sessionClosed = true;
       clearInterval(keepAliveInterval);
       transports.delete(sessionId);
-      server.close();
+      void server.close();
       console.log(`Sesion ${sessionId} desconectada. Transports activos: ${transports.size}`);
-    });
+    };
+
+    // Dependiendo de cómo se cierre el cliente, Node puede emitir "close" en
+    // el request o en la response. Escuchamos ambos y hacemos el cleanup una
+    // sola vez para que la sesión no quede viva ni se cierre dos veces.
+    req.on("close", closeSession);
+    res.on("close", closeSession);
 
     console.log("Connecting MCP server to transport...");
     await server.connect(transport);

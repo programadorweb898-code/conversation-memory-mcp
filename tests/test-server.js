@@ -7,6 +7,7 @@ const mcpSdk = require('@modelcontextprotocol/sdk/server/mcp.js');
 const sseSdk = require('@modelcontextprotocol/sdk/server/sse.js');
 const streamableHttpSdk = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const embeddingService = require('../src/services/embeddingService');
+const embeddingWorker = require('../src/services/embeddingWorker');
 const { db } = require('../src/database');
 const { createApiKey } = require('../src/services/apiKeyService');
 const { authLimiter, sseLimiter, messagesLimiter } = require('../src/middleware');
@@ -121,10 +122,10 @@ describe('Server HTTP layer', () => {
       sseConnection = null;
     }
 
-    if (httpServer) {
+    if (httpServer?.listening) {
       await close(httpServer);
-      httpServer = null;
     }
+    httpServer = null;
 
     if (previousBearerToken === undefined) {
       delete process.env.MCP_BEARER_TOKEN;
@@ -177,8 +178,7 @@ describe('Server HTTP layer', () => {
     transportInstance.close.callsFake(async () => { transportInstance.response?.end(); });
     try {
       const { startServer, shutdown } = require('../src/server');
-      httpServer = await startServer();
-      sseConnection = await openSse(httpServer);
+      httpServer = await startServer();      sseConnection = await openSse(httpServer);
       await shutdown('SIGTERM');
       expect(transportInstance.close.calledOnce).to.be.true;
       expect(stopWorkerStub.calledOnce).to.be.true;
@@ -233,16 +233,21 @@ describe('Server HTTP layer', () => {
     expect(transportInstance.handlePostMessage.calledOnce).to.be.true;
   });
 
-  it('should close the SSE MCP server exactly once when the client disconnects', async () => {
+  it('should close the SSE MCP server exactly once when the client disconnects', async function () {
+    this.timeout(5000);
     const { app } = require('../src/server');
 
     httpServer = await listen(app);
     sseConnection = await openSse(httpServer);
 
+    const closeObserved = new Promise((resolve) => {
+      serverCloseStub.callsFake(resolve);
+    });
+
     sseConnection.req.destroy();
     sseConnection.res.destroy();
 
-    await new Promise((resolve) => setImmediate(resolve));
+    await closeObserved;
 
     expect(serverCloseStub.calledOnce).to.be.true;
   });
@@ -377,8 +382,7 @@ describe('Server HTTP layer', () => {
 
     process.env.MCP_ALLOWED_HOSTS = 'allowed.example';
 
-    try {
-      const response = await request(app)
+    try {      const response = await request(app)
         .get('/mcp')
         .set('host', 'attacker.example')
         .set('authorization', 'Bearer test-token');

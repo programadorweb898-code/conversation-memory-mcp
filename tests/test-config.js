@@ -11,6 +11,8 @@ describe("centralized runtime configuration", () => {
     "MCP_DEFAULT_OWNER",
     "MCP_TENANT_MAX_CONCURRENT_REQUESTS",
     "MCP_TENANT_MAX_SSE_SESSIONS",
+    "SEARCH_MESSAGES_LIMIT",
+    "RECOVER_SESSION_LIMIT",
     "CONVERSATION_MEMORY_QUERY_TIMEOUT_MS",
     "CONVERSATION_MEMORY_CONNECT_TIMEOUT_MS",
     "CONVERSATION_MEMORY_KEEPALIVE_DELAY_MS",
@@ -32,6 +34,9 @@ describe("centralized runtime configuration", () => {
     "CONVERSATION_MEMORY_LLM_RETRY_MAX_DELAY_MS",
     "PG_SEARCH_PATH",
     "PGSSL_REJECT_UNAUTHORIZED",
+    "MCP_ALLOWED_HOSTS",
+    "MCP_ALLOWED_ORIGINS",
+    "MCP_BEARER_TOKEN",
   ];
   const original = {};
 
@@ -63,7 +68,7 @@ describe("centralized runtime configuration", () => {
       const script = `const { getConfig } = require(${JSON.stringify(configPath)}); process.stdout.write(JSON.stringify(getConfig().server.port) + "|" + getConfig().database.defaultOwner);`;
       const result = spawnSync(process.execPath, ["-e", script], {
         cwd: tempDir,
-        env: childEnv,
+        env: { ...childEnv, DOTENV_CONFIG_QUIET: "true" },
         encoding: "utf8",
       });
 
@@ -79,6 +84,8 @@ describe("centralized runtime configuration", () => {
     expect(config.server.port).to.equal(3000);
     expect(config.server.tenantMaxConcurrentRequests).to.equal(10);
     expect(config.server.tenantMaxSseSessions).to.equal(10);
+    expect(config.searchLimit).to.equal(50);
+    expect(config.recoverSessionLimit).to.equal(100);
     expect(config.database.defaultOwner).to.equal("local-user");
     expect(config.database.queryTimeoutMs).to.equal(60000);
     expect(config.database.connectTimeoutMs).to.equal(10000);
@@ -102,6 +109,8 @@ describe("centralized runtime configuration", () => {
       MCP_DEFAULT_OWNER: "owner-a",
       MCP_TENANT_MAX_CONCURRENT_REQUESTS: "7",
       MCP_TENANT_MAX_SSE_SESSIONS: "4",
+      SEARCH_MESSAGES_LIMIT: "25",
+      RECOVER_SESSION_LIMIT: "75",
       CONVERSATION_MEMORY_QUERY_TIMEOUT_MS: "70000",
       CONVERSATION_MEMORY_CONNECT_TIMEOUT_MS: "1200",
       CONVERSATION_MEMORY_KEEPALIVE_DELAY_MS: "5000",
@@ -130,6 +139,8 @@ describe("centralized runtime configuration", () => {
     expect(config.server.port).to.equal(4100);
     expect(config.server.tenantMaxConcurrentRequests).to.equal(7);
     expect(config.server.tenantMaxSseSessions).to.equal(4);
+    expect(config.searchLimit).to.equal(25);
+    expect(config.recoverSessionLimit).to.equal(75);
     expect(config.server.bearerToken).to.equal("");
     expect(config.server.enableEmbeddingWorkerHttp).to.equal(true);
     expect(config.server.enableEmbeddingWorkerStdio).to.equal(true);
@@ -172,10 +183,17 @@ describe("centralized runtime configuration", () => {
   });
 
   it("falla rápido ante configuración inválida", () => {
-    process.env.PORT = "0";
+    process.env.PORT = "-1";
     expect(() => getConfig()).to.throw("PORT inválido");
 
+    process.env.PORT = "0";
+    expect(getConfig().server.port).to.equal(0);
+
     delete process.env.PORT;
+    process.env.SEARCH_MESSAGES_LIMIT = "0";
+    expect(() => getConfig()).to.throw("SEARCH_MESSAGES_LIMIT inválido");
+
+    delete process.env.SEARCH_MESSAGES_LIMIT;
     process.env.ENABLE_EMBEDDINGS = "yes";
     expect(() => getConfig()).to.throw("ENABLE_EMBEDDINGS inválido");
 

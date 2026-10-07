@@ -213,6 +213,7 @@ describe("LLM client retries", () => {
     process.env.CONVERSATION_MEMORY_LLM_MAX_RETRIES = "abc";
     expect(() => llmClient.resolveLlmRetries()).to.throw("CONVERSATION_MEMORY_LLM_MAX_RETRIES inválido");
 
+    delete process.env.CONVERSATION_MEMORY_LLM_MAX_RETRIES;
     process.env.CONVERSATION_MEMORY_LLM_RETRY_BASE_DELAY_MS = "-1";
     expect(() => llmClient.resolveRetryBaseDelayMs()).to.throw("CONVERSATION_MEMORY_LLM_RETRY_BASE_DELAY_MS inválido");
   });
