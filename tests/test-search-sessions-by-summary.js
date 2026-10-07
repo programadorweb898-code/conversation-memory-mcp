@@ -75,6 +75,70 @@ describe("Search Sessions By Summary", function () {
     expect(history[0].content).to.equal("Decidimos usar PostgreSQL.");
   });
 
+  it("recupera el historial por sequence_id aunque timestamp no respete el orden de inserción", async () => {
+    const sessionId = "summary-search-sequence-order";
+    sessionIds.push(sessionId);
+
+    const first = await saveMessage({
+      sessionId,
+      project,
+      owner: ownerA,
+      role: "user",
+      content: "Mensaje 1",
+    });
+    const second = await saveMessage({
+      sessionId,
+      project,
+      owner: ownerA,
+      role: "assistant",
+      content: "Mensaje 2",
+    });
+    const third = await saveMessage({
+      sessionId,
+      project,
+      owner: ownerA,
+      role: "user",
+      content: "Mensaje 3",
+    });
+
+    await db.runAsync(
+      `UPDATE conversations
+       SET timestamp = CASE id
+         WHEN $1 THEN CURRENT_TIMESTAMP + INTERVAL '2 hours'
+         WHEN $2 THEN CURRENT_TIMESTAMP + INTERVAL '1 hour'
+         WHEN $3 THEN CURRENT_TIMESTAMP
+       END
+       WHERE session_id = $4`,
+      [first.messageId, second.messageId, third.messageId, sessionId]
+    );
+
+    await db.runAsync(
+      `INSERT INTO session_summaries (session_id, project, owner, summary)
+       VALUES ($1, $2, $3, $4)`,
+      [sessionId, project, ownerA, "Resumen del orden de mensajes"],
+    );
+    await db.runAsync(
+      `INSERT INTO session_summary_embeddings (session_id, owner, embedding)
+       VALUES ($1, $2, $3)`,
+      [sessionId, ownerA, fakeEmbedding(0.1)]
+    );
+
+    const history = await searchSessionsBySummary({
+      query: "orden de mensajes",
+      project,
+      owner: ownerA,
+    });
+
+    expect(history.map((message) => message.content)).to.deep.equal([
+      "Mensaje 1",
+      "Mensaje 2",
+      "Mensaje 3",
+    ]);
+    expect(history.map((message) => message.sequence_id)).to.deep.equal(
+      [...history.map((message) => message.sequence_id)].sort((a, b) => Number(a) - Number(b))
+    );
+  });
+
   it("respeta el aislamiento por owner aunque exista un resumen muy similar de otro owner", async () => {
     const ownerASession = "summary-search-owner-a";
     const ownerBSession = "summary-search-owner-b";
