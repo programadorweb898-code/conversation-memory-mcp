@@ -273,7 +273,7 @@ describe("Embedding Reindex", function () {
     }
 
     expect(error).to.be.an("error");
-    expect(error.message).to.include("cantidad");
+    expect(error.message).to.include("Cantidad de embeddings inválida");
     expect(db.writes).to.deep.equal([]);
   });
 });
