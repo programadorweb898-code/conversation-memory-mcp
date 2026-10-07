@@ -363,11 +363,22 @@ npx conversation-memory-mcp migrate
 
 ### Scripts de `scripts/`
 
-El campo `files` de `package.json` publica cuatro scripts: `migrate.js`,
-`create-api-key.js`, `reindex-embeddings.js` e `install-plugin.js`. El
-reindexador forma parte del paquete porque es una operación de mantenimiento
-que puede necesitarse sobre una instalación ya desplegada. El resto de scripts
-queda en el repo y **no viaja en el paquete**.
+El campo `files` de `package.json` publica `migrate.js`,
+`create-api-key.js` y `reindex-embeddings.js`. El reindexador forma parte
+del paquete porque es una operación de mantenimiento que puede necesitarse
+sobre una instalación ya desplegada. Los demás scripts internos del repo no
+viajan en el paquete.
+
+El único flujo público de instalación es:
+
+```bash
+npx conversation-memory-mcp install
+```
+
+El instalador moderno configura la base de datos, el MCP y la política del
+agente desde un único punto de entrada. No se publica ni se mantiene un
+segundo instalador de plugin para evitar dos mecanismos con comportamientos
+distintos o destinos de configuración diferentes.
 
 `npx conversation-memory-mcp migrate` muestra host, base y schema, y exige confirmación explícita antes de aplicar migraciones. `npm run migrate` es el runner de desarrollo; sus callers programáticos deben pasar autorización.
 

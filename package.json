@@ -24,7 +24,6 @@
     "lint": "eslint .",
     "migrate": "node scripts/migrate.js",
     "reindex:embeddings": "node scripts/reindex-embeddings.js",
-    "install:plugin": "node scripts/install-plugin.js",
     "check": "npm run lint && npm test"
   },
   "type": "commonjs",
@@ -36,7 +35,6 @@
     "scripts/migrate.js",
     "scripts/create-api-key.js",
     "scripts/reindex-embeddings.js",
-    "scripts/install-plugin.js",
     "migrations/",
     "plugins/",
     "docs/",
