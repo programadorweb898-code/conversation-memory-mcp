@@ -122,10 +122,10 @@ describe('Server HTTP layer', () => {
       sseConnection = null;
     }
 
-    if (httpServer) {
+    if (httpServer?.listening) {
       await close(httpServer);
-      httpServer = null;
     }
+    httpServer = null;
 
     if (previousBearerToken === undefined) {
       delete process.env.MCP_BEARER_TOKEN;
