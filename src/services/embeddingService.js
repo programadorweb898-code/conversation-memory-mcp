@@ -75,6 +75,8 @@ async function generateEmbedding(message) {
 
 /**
  * Genera embeddings enriquecidos por lote.
+ * Los mensajes se agrupan por tipo de entrada para no mezclar query y passage
+ * dentro de una misma llamada al proveedor, preservando el orden original.
  * @param {Array<Object>} messages
  * @returns {Promise<string[]>} JSON strings, uno por mensaje.
  */
@@ -85,11 +87,31 @@ async function generateEmbeddings(messages) {
     throw error;
   }
 
-  const inputType = messages.some((message) => getEmbeddingInputType(message.role) === "query")
-    ? "query"
-    : "passage";
-  const enrichedTexts = messages.map((message) => `${message.role}: ${message.content}`);
-  const embeddings = await embeddingProvider.embed(enrichedTexts, { inputType });
+  const grouped = new Map();
+
+  messages.forEach((message, index) => {
+    const inputType = getEmbeddingInputType(message.role);
+    if (!grouped.has(inputType)) grouped.set(inputType, []);
+    grouped.get(inputType).push({
+      index,
+      text: `${message.role}: ${message.content}`,
+    });
+  });
+
+  const embeddings = Array(messages.length);
+
+  await Promise.all(
+    [...grouped.entries()].map(async ([inputType, entries]) => {
+      const vectors = await embeddingProvider.embed(
+        entries.map((entry) => entry.text),
+        { inputType },
+      );
+
+      vectors.forEach((embedding, index) => {
+        embeddings[entries[index].index] = embedding;
+      });
+    }),
+  );
 
   return embeddings.map((embedding) => JSON.stringify(embedding));
 }
