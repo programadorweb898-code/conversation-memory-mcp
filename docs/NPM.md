@@ -43,7 +43,7 @@ Si en el futuro se quiere ofrecer una única base Neon multi-tenant administrada
 
 Requisitos:
 
-- Node.js 20+
+- Node.js 22+
 - una base PostgreSQL en Neon
 - `pgvector` disponible en esa base
 
