@@ -143,6 +143,24 @@ La instrucción recomendada es:
 
 El paquete incluye un instalador para agregar esta política al archivo de instrucciones del proyecto. La instalación de la política forma parte de la configuración del agente, no del servidor MCP. El servidor permanece agnóstico respecto del agente o IDE que lo utilice.
 
+## Modelo HTTP multi-instancia
+
+El transporte recomendado para despliegues remotos con varias instancias es **Streamable HTTP en `/mcp`**. Esta implementación es stateless: cada request crea su propio `McpServer` y `StreamableHTTPServerTransport`, por lo que un balanceador puede enviar requests consecutivos a distintas instancias sin compartir estado de sesión.
+
+El transporte legacy **HTTP+SSE en `/sse` + `/messages`** se conserva únicamente para clientes que todavía lo necesitan. Su mapa de sesiones vive en memoria del proceso. Por eso:
+
+- una sola instancia: funciona normalmente;
+- varias instancias: requiere **sticky sessions/session affinity** para que `GET /sse` y los `POST /messages` de esa sesión lleguen a la misma instancia;
+- sin afinidad, la sesión puede aparecer como expirada cuando el POST cae en otra instancia.
+
+No se debe resolver ese problema copiando el `Map` local entre procesos: para hacer un SSE multi-instancia real habría que introducir almacenamiento/ruteo externo de estado y mensajes. Para un despliegue nuevo, preferí `/mcp`.
+
+El servidor expone el modo seleccionado mediante `X-MCP-Transport-Mode`:
+- `stateless-streamable-http` en `/mcp`;
+- `legacy-sse-instance-local` en `/sse`.
+
+En el segundo caso también expone `X-MCP-Session-Affinity: required`.
+
 ## Despliegue remoto (modo HTTP multi-tenant)
 
 Además del modo local (`npx` / stdio), el servidor puede desplegarse como HTTP
