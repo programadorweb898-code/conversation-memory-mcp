@@ -111,7 +111,7 @@ function createEmbeddingReindexer({
 
         if (embeddings.length !== embeddable.length) {
           throw new Error(
-            `El generador devolvió ${embeddings.length} embeddings para ${embeddable.length} mensajes.`,
+            `Cantidad de embeddings inválida: el generador devolvió ${embeddings.length} embeddings para ${embeddable.length} mensajes.`,
           );
         }
 
@@ -216,7 +216,7 @@ function createEmbeddingReindexer({
 
         if (embeddings.length !== rows.length) {
           throw new Error(
-            `El generador devolvió ${embeddings.length} embeddings para ${rows.length} resúmenes.`,
+            `Cantidad de embeddings inválida: el generador devolvió ${embeddings.length} embeddings para ${rows.length} resúmenes.`,
           );
         }
 
