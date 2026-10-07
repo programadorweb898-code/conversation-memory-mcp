@@ -186,11 +186,11 @@ describe("Embedding Reindex", function () {
     const db = createDbDouble({
       summaryPages: [
         [
-          { session_id: "s1", owner: "a", timestamp: "2026-01-01T00:00:00.000Z", summary: "Resumen uno" },
-          { session_id: "s2", owner: "a", timestamp: "2026-01-01T00:00:00.000Z", summary: "Resumen dos" },
+          { session_id: "s1", owner: "a", cursor_timestamp: "2026-01-01 00:00:00.000001", summary: "Resumen uno" },
+          { session_id: "s2", owner: "a", cursor_timestamp: "2026-01-01 00:00:00.000001", summary: "Resumen dos" },
         ],
         [
-          { session_id: "s3", owner: "b", timestamp: "2026-01-02T00:00:00.000Z", summary: "Resumen tres" },
+          { session_id: "s3", owner: "b", cursor_timestamp: "2026-01-02 00:00:00.000003", summary: "Resumen tres" },
         ],
         [],
       ],
@@ -227,7 +227,7 @@ describe("Embedding Reindex", function () {
 
     expect(db.queries[0].params).to.deep.equal([2]);
     expect(db.queries[1].params).to.deep.equal([
-      "2026-01-01T00:00:00.000Z",
+      "2026-01-01 00:00:00.000002",
       "s2",
       "a",
       2,
