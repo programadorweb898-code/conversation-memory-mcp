@@ -210,7 +210,10 @@ describe("Embedding Worker", function () {
       });
       await db.runAsync(`DELETE FROM conversations WHERE id = $1`, [messageId]);
 
-      sinon.stub(embeddingService, "generateEmbeddings").resolves([JSON.stringify(fakeEmbedding(0.5))]);
+      // generateEmbeddings devuelve JSON strings. fakeEmbedding ya devuelve
+      // exactamente ese formato; volver a serializarlo produciría una cadena
+      // JSON doble y haría fallar el parser de pgvector antes de llegar a la FK.
+      sinon.stub(embeddingService, "generateEmbeddings").resolves([fakeEmbedding(0.5)]);
 
       await embeddingWorker.processNextEmbeddingTask();
 

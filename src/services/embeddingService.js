@@ -3,84 +3,38 @@
 const { db } = require("../database");
 const { getConfig } = require("../config");
 const logger = require("../logger");
+const {
+  createRetryablePromise,
+  EmbeddingInfrastructureError,
+  assertEmbeddingProvider,
+} = require("./embeddingProvider");
+const { createTransformersEmbeddingProvider } = require("./embeddingProviders/transformersProvider");
 
-// Specify the model and ensure it's quantized for efficiency
-const model = "Xenova/all-MiniLM-L6-v2";
-let extractor = null;
-
-function createRetryablePromise(factory, onFailure = () => {}) {
-  let cachedPromise;
-  return () => {
-    if (!cachedPromise) {
-      cachedPromise = Promise.resolve()
-        .then(factory)
-        .catch((error) => {
-          cachedPromise = undefined;
-          onFailure(error);
-          throw error;
-        });
-    }
-    return cachedPromise;
-  };
-}
-
-class EmbeddingInfrastructureError extends Error {
-  constructor(error) {
-    super(`No se pudo inicializar el modelo de embeddings: ${error.message}`, { cause: error });
-    this.name = "EmbeddingInfrastructureError";
-    this.code = "EMBEDDING_INFRASTRUCTURE";
-    this.retryable = true;
-  }
-}
+const embeddingProvider = assertEmbeddingProvider(
+  createTransformersEmbeddingProvider({ logger }),
+);
 
 function isEmbeddingsEnabled() {
   return getConfig().embeddings.enabled;
 }
 
-function asInfrastructureError(error) {
-  return error?.code === "EMBEDDING_INFRASTRUCTURE"
-    ? error
-    : new EmbeddingInfrastructureError(error);
-}
+const {
+  minChars: MIN_EMBEDDING_CHARS,
+  maxChars: MAX_EMBEDDING_CHARS,
+} = getConfig().embeddings;
 
 // El modelo trunca en silencio a 512 tokens (~2000 caracteres): indexar el
 // contenido completo de un mensaje largo produce un embedding que solo
 // representa su inicio. Recortamos de forma explícita para que el vector sea
 // interpretable y para no gastar cómputo de más.
-const { minChars: MIN_EMBEDDING_CHARS, maxChars: MAX_EMBEDDING_CHARS } = getConfig().embeddings;
-
-/**
- * Decide si un mensaje vale la pena ser indexado y devuelve el texto a
- * embeber. Los turnos triviales ("ok", "dale", "sí") no aportan nada al
- * Recall y solo cargan el índice y compiten en el reranking.
- * @param {string} content
- * @returns {string|null} Texto a embeber, o null si no corresponde indexar.
- */
 function prepareForEmbedding(content) {
   const text = typeof content === "string" ? content.trim() : "";
   if (text.length < MIN_EMBEDDING_CHARS) return null;
   return text.slice(0, MAX_EMBEDDING_CHARS);
 }
 
-const loadTransformers = createRetryablePromise(
-  () => import("@huggingface/transformers"),
-  () => {}
-);
-
-const initializePipeline = createRetryablePromise(async () => {
-  try {
-    const { pipeline } = await loadTransformers();
-    logger.log(`Loading embedding model: ${model}`);
-    extractor = await pipeline("feature-extraction", model, { dtype: "q8" });
-    logger.log("Embedding model loaded.");
-  } catch (error) {
-    extractor = null;
-    throw asInfrastructureError(error);
-  }
-});
-
 /**
- * Initializes the embedding pipeline.
+ * Initializes the embedding provider.
  * This should be called once at application startup.
  */
 async function initializeEmbeddingPipeline() {
@@ -90,7 +44,7 @@ async function initializeEmbeddingPipeline() {
     throw error;
   }
 
-  return initializePipeline();
+  return embeddingProvider.initialize();
 }
 
 /**
@@ -105,15 +59,17 @@ async function generateEmbedding(message) {
     throw error;
   }
 
-  if (!extractor) {
-    await initializeEmbeddingPipeline();
-  }
-
   const enrichedText = `${message.role}: ${message.content}`;
-  const output = await extractor(enrichedText, { pooling: "mean", normalize: true });
-  return JSON.stringify(Array.from(output.data));
+  const [embedding] = await embeddingProvider.embed(enrichedText);
+
+  return JSON.stringify(embedding);
 }
 
+/**
+ * Genera embeddings enriquecidos por lote.
+ * @param {Array<Object>} messages
+ * @returns {Promise<string[]>} JSON strings, uno por mensaje.
+ */
 async function generateEmbeddings(messages) {
   if (!isEmbeddingsEnabled()) {
     const error = new Error("Embeddings están deshabilitados por ENABLE_EMBEDDINGS=false.");
@@ -121,28 +77,14 @@ async function generateEmbeddings(messages) {
     throw error;
   }
 
-  if (!extractor) {
-    await initializeEmbeddingPipeline();
-  }
-
   const enrichedTexts = messages.map((message) => `${message.role}: ${message.content}`);
-  const output = await extractor(enrichedTexts, { pooling: "mean", normalize: true });
+  const embeddings = await embeddingProvider.embed(enrichedTexts);
 
-  const rows = Array.isArray(output?.data) ? output.data : Array.from(output?.data || []);
-  const batchSize = enrichedTexts.length;
-  if (rows.length === batchSize) {
-    return enrichedTexts.map((_, index) => JSON.stringify(Array.from(rows[index] || [])));
-  }
+  return embeddings.map((embedding) => JSON.stringify(embedding));
+}
 
-  const flattened = Array.from(output?.data || []);
-  const embeddings = [];
-  const embeddingSize = flattened.length / batchSize;
-  for (let index = 0; index < batchSize; index += 1) {
-    const start = index * embeddingSize;
-    const end = start + embeddingSize;
-    embeddings.push(JSON.stringify(Array.from(flattened.slice(start, end))));
-  }
-  return embeddings;
+function getEmbeddingMetadata() {
+  return embeddingProvider.getMetadata();
 }
 
 /**
@@ -159,7 +101,7 @@ async function saveEmbedding(messageId, embedding) {
     await db.runAsync(
       `INSERT INTO message_embeddings (message_id, embedding) VALUES ($1, $2)
        ON CONFLICT(message_id) DO UPDATE SET embedding = EXCLUDED.embedding`,
-      [messageId, embeddingValue]
+      [messageId, embeddingValue],
     );
     logger.log(`Embedding for message ${messageId} saved to message_embeddings.`);
   } catch (err) {
@@ -170,8 +112,8 @@ async function saveEmbedding(messageId, embedding) {
 
 async function getEmbedding(messageId) {
   const row = await db.getAsync(
-    `SELECT embedding::text AS embedding FROM message_embeddings WHERE message_id = $1`,
-    [messageId]
+    "SELECT embedding::text AS embedding FROM message_embeddings WHERE message_id = $1",
+    [messageId],
   );
   return row ? row.embedding : null;
 }
@@ -184,6 +126,7 @@ module.exports = {
   getEmbedding,
   prepareForEmbedding,
   isEmbeddingsEnabled,
+  getEmbeddingMetadata,
   EmbeddingInfrastructureError,
   createRetryablePromise,
   MIN_EMBEDDING_CHARS,
