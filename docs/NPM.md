@@ -43,7 +43,7 @@ Si en el futuro se quiere ofrecer una única base Neon multi-tenant administrada
 
 Requisitos:
 
-- Node.js 18+
+- Node.js 20+
 - una base PostgreSQL en Neon
 - `pgvector` disponible en esa base
 
@@ -79,7 +79,7 @@ El instalador muestra host, base y schema, y pide confirmar que la base está de
 
 El arranque stdio no ejecuta migraciones. Para una actualización manual, `npm run migrate` también muestra el destino y pide confirmación. Las migraciones normales son idempotentes y usan un advisory lock de PostgreSQL.
 
-Las limpiezas históricas y destructivas están en `migrations/manual/` y no forman parte de la instalación normal; revisalas y hacé un backup antes de ejecutarlas manualmente.
+Las migraciones históricas de una sola vez que ya fueron absorbidas por el esquema actual se eliminaron del repositorio. Las migraciones actuales se ejecutan mediante `npx conversation-memory-mcp migrate` con confirmación explícita del destino.
 
 ## Varios dispositivos
 
