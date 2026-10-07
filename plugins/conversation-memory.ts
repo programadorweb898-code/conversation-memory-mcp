@@ -1,9 +1,9 @@
 import type { Plugin } from "@opencode-ai/plugin"
 import { readFileSync } from "node:fs"
-import { writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { createMcpClientManager } from "./mcp-client.js"
+import { createSaveCache } from "./save-cache.js"
 import { extractConfirmedMessageId } from "./save-confirmation.js"
 import { baseName, resolveProjectIdentity, resolveProjectName } from "./projectIdentity.mjs"
 
@@ -133,32 +133,7 @@ function findMcpConfig(directory: string): McpResolved | null {
   return null
 }
 
-function loadCache(): Record<string, Record<string, boolean>> {
-  try {
-    return JSON.parse(readFileSync(CACHE_FILE, "utf8"))
-  } catch {
-    return {}
-  }
-}
-
-const cache: Record<string, Record<string, boolean>> = loadCache()
-
-function isSaved(sessionID: string, messageID: string): boolean {
-  return Boolean(cache[sessionID]?.[messageID])
-}
-
-function markSaved(sessionID: string, messageID: string): void {
-  cache[sessionID] ??= {}
-  cache[sessionID][messageID] = true
-}
-
-async function persistCache(): Promise<void> {
-  try {
-    await writeFile(CACHE_FILE, JSON.stringify(cache, null, 2))
-  } catch (error) {
-    console.error("[conversation-memory] no se pudo persistir la caché de guardado:", error)
-  }
-}
+const saveCache = createSaveCache(CACHE_FILE)
 
 function extractText(parts: any[]): string {
   return (parts ?? [])
@@ -297,7 +272,7 @@ export const ConversationMemory: Plugin = async ({ client, project, directory })
             mcpIdByOpenCodeId.set(info.id, "")
             continue
           }
-          if (isSaved(sessionID, info.id)) {
+          if (saveCache.has(sessionID, info.id)) {
             mcpIdByOpenCodeId.set(info.id, "")
             continue
           }
@@ -308,11 +283,11 @@ export const ConversationMemory: Plugin = async ({ client, project, directory })
             content: text,
             agentId: currentAgent,
           })
-          markSaved(sessionID, info.id)
+          saveCache.mark(sessionID, info.id)
           mcpIdByOpenCodeId.set(info.id, mcpId)
           savedCount++
         } else if (info.role === "assistant") {
-          if (!text || isSaved(sessionID, info.id)) continue
+          if (!text || saveCache.has(sessionID, info.id)) continue
           const related = info.parentID ? mcpIdByOpenCodeId.get(info.parentID) : undefined
           const mcpId = await callSaveMessage(mcpConfig!, {
             sessionId: sessionID,
@@ -325,14 +300,14 @@ export const ConversationMemory: Plugin = async ({ client, project, directory })
             agentId: info.agent || currentAgent,
             ...(related ? { relatedMessageId: related } : {}),
           })
-          markSaved(sessionID, info.id)
+          saveCache.mark(sessionID, info.id)
           mcpIdByOpenCodeId.set(info.id, mcpId)
           savedCount++
         }
       }
 
       if (savedCount > 0) {
-        await persistCache()
+        await saveCache.persist()
         log(client, "info", `Guardados ${savedCount} mensaje(s) de la sesión ${sessionID}`, {
           project: projectName,
         })
