@@ -112,9 +112,11 @@ describe('Session Summaries Tool', () => {
       next_steps: ["Siguiente paso"],
     };
 
-    llmClient.generateText.resolves(`\`\`json
-${JSON.stringify(valid, null, 2)}
-\`\`\`);
+    llmClient.generateText.resolves([
+      "```json",
+      JSON.stringify(valid, null, 2),
+      "```",
+    ].join("\n"));
 
     const result = await generateSessionSummary({
       sessionId: testSessionId,
