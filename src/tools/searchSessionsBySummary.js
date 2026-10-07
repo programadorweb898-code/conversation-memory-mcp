@@ -56,9 +56,29 @@ async function searchSummaryLexically({ query, project, owner }) {
  * @param {string} params.query - La pregunta del usuario.
  * @returns {Promise<Array>} El historial de la sesión encontrada.
  */
-async function searchSessionsBySummary({ query, project, owner }) {
+async function searchSessionsBySummary({
+  query,
+  project,
+  owner,
+  limit,
+  afterSequenceId,
+}) {
   if (!query) throw new Error("La consulta no puede estar vacía.");
   if (!project) throw new Error("El parámetro 'project' es obligatorio.");
+
+  const requestedLimit = Number.isInteger(limit) && limit > 0
+    ? limit
+    : require("../config").config.recoverSessionLimit;
+  const maxLimit = require("../config").config.recoverSessionLimit;
+  const effectiveLimit = Math.min(requestedLimit, maxLimit);
+
+  if (
+    afterSequenceId !== undefined &&
+    afterSequenceId !== null &&
+    !/^\d+$/.test(String(afterSequenceId))
+  ) {
+    throw new Error("El parámetro 'afterSequenceId' debe ser un sequence_id entero no negativo.");
+  }
 
   const results = [];
 
@@ -114,14 +134,37 @@ async function searchSessionsBySummary({ query, project, owner }) {
         : " (Similitud: " + results[0].similarity + ")"),
   );
 
+  const historyParams = [bestSessionId, project, owner ?? null];
+  const historyWhere = [
+    "session_id = $1",
+    "project = $2",
+    "($3::text IS NULL OR owner = $3)",
+  ];
+
+  if (afterSequenceId !== undefined && afterSequenceId !== null) {
+    historyWhere.push("sequence_id > $4::bigint");
+    historyParams.push(String(afterSequenceId));
+  }
+
+  const limitPlaceholder = "$" + (historyParams.length + 1);
+  historyParams.push(effectiveLimit + 1);
+
   const historySql = `
     SELECT id, session_id, sequence_id, timestamp, project, role, content, agent_id
     FROM conversations
-    WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)
+    WHERE ${historyWhere.join(" AND ")}
     ORDER BY sequence_id ASC
+    LIMIT ${limitPlaceholder}
   `;
 
-  return db.allAsync(historySql, [bestSessionId, project, owner ?? null]);
+  const rows = await db.allAsync(historySql, historyParams);
+  const hasMore = rows.length > effectiveLimit;
+  const history = hasMore ? rows.slice(0, effectiveLimit) : rows;
+  const nextAfterSequenceId = hasMore
+    ? String(history[history.length - 1].sequence_id)
+    : null;
+
+  return { history, hasMore, nextAfterSequenceId };
 }
 
 module.exports = searchSessionsBySummary;
