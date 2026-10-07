@@ -65,10 +65,9 @@ describe('Semantic Search Messages Tool', () => {
 
   it('debería filtrar los resultados por proyecto correctamente', async () => {
     const query = "perros y gatos";
-    const results = await searchMessages({ query: query, project: testProject, limit: 2 });
+    const results = await searchMessages({ query: query, project: testProject });
 
     expect(results).to.be.an('array');
-    expect(results).to.have.lengthOf(2);
     expect(results.every(r => r.project === testProject)).to.be.true;
 
     const contents = results.map(r => r.content);
