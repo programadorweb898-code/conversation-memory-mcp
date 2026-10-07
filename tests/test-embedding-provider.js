@@ -25,6 +25,7 @@ describe("Embedding Provider", function () {
       model: "Xenova/multilingual-e5-small",
       dimensions: 384,
       dtype: DEFAULT_DTYPE,
+      version: 1,
     });
     expect(metadata.model).to.equal(DEFAULT_MODEL);
     expect(metadata.dimensions).to.equal(DEFAULT_DIMENSIONS);
