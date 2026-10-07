@@ -5,9 +5,13 @@ const {
   EmbeddingInfrastructureError,
 } = require("../embeddingProvider");
 
-const DEFAULT_MODEL = "Xenova/all-MiniLM-L6-v2";
+const DEFAULT_MODEL = "Xenova/multilingual-e5-small";
 const DEFAULT_DIMENSIONS = 384;
 const DEFAULT_DTYPE = "q8";
+const INPUT_PREFIXES = {
+  query: "query: ",
+  passage: "passage: ",
+};
 
 function flattenEmbeddingData(data) {
   if (Array.isArray(data)) {
@@ -28,6 +32,19 @@ function validateVector(vector, dimensions) {
   }
 
   return vector;
+}
+
+function formatInputText(text, inputType = "passage") {
+  if (typeof text !== "string" || text.length === 0) {
+    throw new TypeError("El texto del embedding debe ser un string no vacío.");
+  }
+
+  const prefix = INPUT_PREFIXES[inputType];
+  if (!prefix) {
+    throw new TypeError(`Tipo de entrada de embedding no soportado: ${inputType}.`);
+  }
+
+  return `${prefix}${text}`;
 }
 
 /**
@@ -77,7 +94,7 @@ function createTransformersEmbeddingProvider({
       return initializePipeline();
     },
 
-    async embed(texts) {
+    async embed(texts, { inputType = "passage" } = {}) {
       const inputTexts = Array.isArray(texts) ? texts : [texts];
 
       if (
@@ -87,29 +104,31 @@ function createTransformersEmbeddingProvider({
         throw new TypeError("embed() requiere al menos un texto no vacío.");
       }
 
+      const formattedTexts = inputTexts.map((text) => formatInputText(text, inputType));
+
       if (!extractor) {
         await initializePipeline();
       }
 
       const output = await extractor(
-        inputTexts.length === 1 ? inputTexts[0] : inputTexts,
+        formattedTexts.length === 1 ? formattedTexts[0] : formattedTexts,
         { pooling: "mean", normalize: true },
       );
 
       const flattened = flattenEmbeddingData(output?.data);
-      const expectedValues = inputTexts.length * dimensions;
+      const expectedValues = formattedTexts.length * dimensions;
 
       if (flattened.length !== expectedValues) {
-        const actualDimensions = inputTexts.length > 0 && flattened.length % inputTexts.length === 0
-          ? flattened.length / inputTexts.length
+        const actualDimensions = formattedTexts.length > 0 && flattened.length % formattedTexts.length === 0
+          ? flattened.length / formattedTexts.length
           : flattened.length;
         throw new Error(
-          `El proveedor devolvió un vector de ${actualDimensions} dimensiones para ${inputTexts.length} texto(s); se esperaban ${dimensions} dimensiones por texto.`,
+          `El proveedor devolvió un vector de ${actualDimensions} dimensiones para ${formattedTexts.length} texto(s); se esperaban ${dimensions} dimensiones por texto.`,
         );
       }
 
       const embeddings = [];
-      for (let index = 0; index < inputTexts.length; index += 1) {
+      for (let index = 0; index < formattedTexts.length; index += 1) {
         const start = index * dimensions;
         const vector = flattened.slice(start, start + dimensions);
         embeddings.push(validateVector(vector, dimensions));
@@ -134,6 +153,8 @@ module.exports = {
   DEFAULT_MODEL,
   DEFAULT_DIMENSIONS,
   DEFAULT_DTYPE,
+  INPUT_PREFIXES,
+  formatInputText,
   flattenEmbeddingData,
   validateVector,
 };
