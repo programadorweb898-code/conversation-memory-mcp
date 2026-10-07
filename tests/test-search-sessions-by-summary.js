@@ -490,7 +490,28 @@ describe("Search Sessions By Summary", function () {
 
     const history = result.history;
 
-    expect(history).to.deep.equal([]);
+    expect(result).to.deep.equal({
+      history: [],
+      hasMore: false,
+      nextAfterSequenceId: null,
+    });
+  });
+
+  it("rechaza un afterSequenceId inválido", async () => {
+    let error;
+    try {
+      await searchSessionsBySummary({
+        query: "consulta",
+        project,
+        owner: ownerA,
+        afterSequenceId: "no-es-un-sequence-id",
+      });
+    } catch (err) {
+      error = err;
+    }
+
+    expect(error).to.be.instanceOf(Error);
+    expect(error.message).to.include("afterSequenceId");
   });
 
   it("valida los parámetros obligatorios antes de consultar", async () => {
