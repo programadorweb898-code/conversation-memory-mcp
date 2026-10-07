@@ -295,6 +295,38 @@ describe('Server HTTP layer', () => {
     expect(transportInstance.handleRequest.firstCall.args[0].method).to.equal('POST');
   });
 
+  it('should mark /mcp as stateless and create an isolated transport per request', async () => {
+    const { app } = require('../src/server');
+
+    const first = await request(app)
+      .post('/mcp')
+      .set('content-type', 'application/json')
+      .set('authorization', 'Bearer test-token')
+      .send({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+
+    const second = await request(app)
+      .post('/mcp')
+      .set('content-type', 'application/json')
+      .set('authorization', 'Bearer test-token')
+      .send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
+
+    expect(first.headers['x-mcp-transport-mode']).to.equal('stateless-streamable-http');
+    expect(second.headers['x-mcp-transport-mode']).to.equal('stateless-streamable-http');
+    expect(streamableTransportConstructorStub.callCount).to.equal(2);
+    expect(connectStub.callCount).to.equal(2);
+    expect(transportInstance.handleRequest.callCount).to.equal(2);
+  });
+
+  it('should mark legacy /sse as instance-local and require session affinity', async () => {
+    const { app } = require('../src/server');
+
+    httpServer = await listen(app);
+    sseConnection = await openSse(httpServer);
+
+    expect(sseConnection.res.headers['x-mcp-transport-mode']).to.equal('legacy-sse-instance-local');
+    expect(sseConnection.res.headers['x-mcp-session-affinity']).to.equal('required');
+  });
+
   it('should not apply the SSE limit to authenticated /mcp requests', async () => {
     const { app } = require('../src/server');
     const clientIp = '198.51.100.77';
