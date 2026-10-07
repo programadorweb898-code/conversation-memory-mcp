@@ -180,8 +180,11 @@ describe("centralized runtime configuration", () => {
   });
 
   it("falla rápido ante configuración inválida", () => {
-    process.env.PORT = "0";
+    process.env.PORT = "-1";
     expect(() => getConfig()).to.throw("PORT inválido");
+
+    process.env.PORT = "0";
+    expect(getConfig().server.port).to.equal(0);
 
     delete process.env.PORT;
     process.env.SEARCH_MESSAGES_LIMIT = "0";
