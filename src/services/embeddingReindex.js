@@ -171,7 +171,7 @@ function createEmbeddingReindexer({
       if (cursor) {
         params.push(cursor.timestamp, cursor.sessionId, cursor.owner);
         where.push(
-          `(ss.timestamp, ss.session_id, ss.owner) > ($${params.length}::timestamp, $${params.length + 1}, $${params.length + 2})`,
+          `(COALESCE(ss.timestamp, TIMESTAMP '1970-01-01 00:00:00'), ss.session_id, ss.owner) > ($${params.length}::timestamp, $${params.length + 1}, $${params.length + 2})`,
         );
       }
 
@@ -185,10 +185,17 @@ function createEmbeddingReindexer({
 
       const rows = await dbClient.allAsync(
         `
-          SELECT ss.session_id, ss.owner, ss.timestamp, ss.summary
+          SELECT
+            ss.session_id,
+            ss.owner,
+            ss.summary,
+            COALESCE(ss.timestamp, TIMESTAMP '1970-01-01 00:00:00')::text AS cursor_timestamp
           FROM session_summaries ss
           ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
-          ORDER BY ss.timestamp ASC, ss.session_id ASC, ss.owner ASC
+          ORDER BY
+            COALESCE(ss.timestamp, TIMESTAMP '1970-01-01 00:00:00') ASC,
+            ss.session_id ASC,
+            ss.owner ASC
           LIMIT ${limitPlaceholder}
         `,
         params,
@@ -229,7 +236,7 @@ function createEmbeddingReindexer({
 
       const last = rows[rows.length - 1];
       cursor = {
-        timestamp: last.timestamp,
+        timestamp: last.cursor_timestamp,
         sessionId: last.session_id,
         owner: last.owner,
       };
