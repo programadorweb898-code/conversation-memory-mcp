@@ -21,8 +21,11 @@ describe("Embedding storage contract", function () {
     await db.runAsync("UPDATE embedding_metadata SET version = 999 WHERE id = 1");
 
     try {
-      await expect(embeddingService.assertEmbeddingStorageCompatibility())
-        .to.be.rejectedWith(/EMBEDDING_STORAGE_MISMATCH|incompatible/);
+      await embeddingService.assertEmbeddingStorageCompatibility();
+      throw new Error("Expected embedding storage mismatch");
+    } catch (error) {
+      expect(error.code).to.equal("EMBEDDING_STORAGE_MISMATCH");
+      expect(error.message).to.match(/version: DB=999 runtime=1/);
     } finally {
       await db.runAsync("UPDATE embedding_metadata SET version = 1 WHERE id = 1");
     }
