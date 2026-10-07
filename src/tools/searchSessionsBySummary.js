@@ -1,6 +1,7 @@
 const { db } = require("../database");
 const logger = require("../logger");
 const embeddingService = require("../services/embeddingService");
+const { config } = require("../config");
 
 function tokenizeQuery(query) {
   return [...new Set(
@@ -68,8 +69,8 @@ async function searchSessionsBySummary({
 
   const requestedLimit = Number.isInteger(limit) && limit > 0
     ? limit
-    : require("../config").config.recoverSessionLimit;
-  const maxLimit = require("../config").config.recoverSessionLimit;
+    : config.recoverSessionLimit;
+  const maxLimit = config.recoverSessionLimit;
   const effectiveLimit = Math.min(requestedLimit, maxLimit);
 
   if (
@@ -117,7 +118,7 @@ async function searchSessionsBySummary({
     const lexicalResults = await searchSummaryLexically({ query, project, owner });
 
     if (lexicalResults.length === 0) {
-      return [];
+      return { history: [], hasMore: false, nextAfterSequenceId: null };
     }
 
     results.push({
