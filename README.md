@@ -247,9 +247,34 @@ Si el LLM no está disponible, el historial sigue siendo utilizable y el resumen
 
 Los mensajes reciben embeddings con `Xenova/multilingual-e5-small`, un modelo E5 multilingüe de 384 dimensiones preparado para Transformers.js. El proveedor usa `query: ` para consultas y `passage: ` para contenido almacenado, que es la convención con la que fue entrenado el modelo. 
 
-**Importante:** cambiar el modelo de embeddings requiere reindexar los embeddings existentes antes de confiar en la búsqueda semántica sobre datos ya almacenados. El punto siguiente de esta hoja de mejoras define esa estrategia de reindexado.
+**Importante:** cambiar el modelo de embeddings requiere reindexar los embeddings existentes antes de confiar en la búsqueda semántica sobre datos ya almacenados.
 
 Los mensajes pueden recibir embeddings mediante el worker interno. PostgreSQL + pgvector permite recuperar mensajes semánticamente relacionados.
+
+### Reindexado de embeddings
+
+El reindexado es una operación de mantenimiento explícita:
+
+```bash
+npm run reindex:embeddings
+```
+
+El comando usa el proveedor/modelo configurado actualmente y procesa por lotes tanto `conversations` como `session_summaries`. La navegación de mensajes usa `sequence_id`; la de resúmenes usa el cursor compuesto `timestamp + session_id + owner`. Esto evita cargar toda la base en memoria y permite que una ejecución interrumpida pueda repetirse sin dejar los vectores anteriores borrados.
+
+Opciones:
+
+```bash
+npm run reindex:embeddings -- --owner maxi
+npm run reindex:embeddings -- --scope messages
+npm run reindex:embeddings -- --scope summaries --batch-size 25
+npm run reindex:embeddings -- --dry-run
+```
+
+El proceso hace `UPSERT` del vector nuevo después de generarlo. No ejecuta un `DELETE` masivo previo, por lo que una falla a mitad de una corrida conserva los embeddings que todavía no fueron reemplazados. Los mensajes demasiado cortos para embedding se limpian de `message_embeddings` solo cuando se procesan y se confirma que siguen siendo demasiado cortos.
+
+Durante un cambio de modelo, hasta terminar el reindexado pueden convivir vectores del modelo anterior y del nuevo. Para una migración en producción, se recomienda ejecutar el reindexado como tarea de mantenimiento mientras el servidor tiene `ENABLE_EMBEDDINGS=false`, de modo que las búsquedas usen el fallback textual durante la ventana. Si el mismo `.env` tiene esa variable en `false`, el proceso de mantenimiento debe sobrescribirla explícitamente: `ENABLE_EMBEDDINGS=true npm run reindex:embeddings`. Una vez completado y verificado el reindexado, se vuelve a habilitar la búsqueda semántica.
+
+El reindexado es idempotente: volver a ejecutarlo recalcula los mismos registros y sobrescribe sus vectores. El próximo punto (#13) agregará metadatos de modelo/versión para poder detectar automáticamente qué vectores están desactualizados y permitir migraciones side-by-side sin mezclar versiones.
 
 Si los embeddings no están disponibles, las herramientas de búsqueda disponen de mecanismos de recuperación textual cuando corresponde.
 
@@ -338,9 +363,11 @@ npx conversation-memory-mcp migrate
 
 ### Scripts de `scripts/`
 
-El campo `files` de `package.json` publica solo tres: `migrate.js`,
-`create-api-key.js` e `install-plugin.js`. Son los que hacen falta para
-instalar el MCP. El resto queda en el repo y **no viaja en el paquete**.
+El campo `files` de `package.json` publica cuatro scripts: `migrate.js`,
+`create-api-key.js`, `reindex-embeddings.js` e `install-plugin.js`. El
+reindexador forma parte del paquete porque es una operación de mantenimiento
+que puede necesitarse sobre una instalación ya desplegada. El resto de scripts
+queda en el repo y **no viaja en el paquete**.
 
 `npx conversation-memory-mcp migrate` muestra host, base y schema, y exige confirmación explícita antes de aplicar migraciones. `npm run migrate` es el runner de desarrollo; sus callers programáticos deben pasar autorización.
 
