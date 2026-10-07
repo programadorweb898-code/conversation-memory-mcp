@@ -272,7 +272,7 @@ npm run reindex:embeddings -- --dry-run
 
 El proceso hace `UPSERT` del vector nuevo después de generarlo. No ejecuta un `DELETE` masivo previo, por lo que una falla a mitad de una corrida conserva los embeddings que todavía no fueron reemplazados. Los mensajes demasiado cortos para embedding se limpian de `message_embeddings` solo cuando se procesan y se confirma que siguen siendo demasiado cortos.
 
-Durante un cambio de modelo, hasta terminar el reindexado pueden convivir vectores del modelo anterior y del nuevo. Para una migración en producción, se recomienda ejecutar el reindexado como tarea de mantenimiento mientras el servidor tiene `ENABLE_EMBEDDINGS=false`, de modo que las búsquedas usen el fallback textual durante la ventana. Una vez completado y verificado el reindexado, se vuelve a habilitar la búsqueda semántica.
+Durante un cambio de modelo, hasta terminar el reindexado pueden convivir vectores del modelo anterior y del nuevo. Para una migración en producción, se recomienda ejecutar el reindexado como tarea de mantenimiento mientras el servidor tiene `ENABLE_EMBEDDINGS=false`, de modo que las búsquedas usen el fallback textual durante la ventana. Si el mismo `.env` tiene esa variable en `false`, el proceso de mantenimiento debe sobrescribirla explícitamente: `ENABLE_EMBEDDINGS=true npm run reindex:embeddings`. Una vez completado y verificado el reindexado, se vuelve a habilitar la búsqueda semántica.
 
 El reindexado es idempotente: volver a ejecutarlo recalcula los mismos registros y sobrescribe sus vectores. El próximo punto (#13) agregará metadatos de modelo/versión para poder detectar automáticamente qué vectores están desactualizados y permitir migraciones side-by-side sin mezclar versiones.
 
