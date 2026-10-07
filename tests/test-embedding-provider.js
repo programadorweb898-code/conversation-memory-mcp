@@ -1,5 +1,6 @@
 const { expect } = require("chai");
 const {
+  EmbeddingInfrastructureError,
   createTransformersEmbeddingProvider,
   DEFAULT_MODEL,
   DEFAULT_DIMENSIONS,
@@ -13,11 +14,11 @@ function vector(start, length = DEFAULT_DIMENSIONS) {
 describe("Embedding Provider", function () {
   this.timeout(15000);
 
-  it("expone metadatos del proveedor concreto", async () => {
+  it("expone metadatos del proveedor concreto", () => {
     const provider = createTransformersEmbeddingProvider({
       loadTransformers: async () => ({
         pipeline: async () => async () => ({
-          data: Float32Array.from(vector(0.1)),
+          data: vector(0.1),
         }),
       }),
     });
@@ -36,11 +37,11 @@ describe("Embedding Provider", function () {
 
     const provider = createTransformersEmbeddingProvider({
       loadTransformers: async () => ({
-        pipeline: async (_task, _model, options) => {
+        pipeline: async () => {
           return async (text, extractorOptions) => {
             receivedText = text;
             receivedOptions = extractorOptions;
-            return { data: Float32Array.from(vector(0.2)) };
+            return { data: vector(0.2) };
           };
         },
       }),
@@ -61,8 +62,8 @@ describe("Embedding Provider", function () {
 
     const provider = createTransformersEmbeddingProvider({
       loadTransformers: async () => ({
-        pipeline: async () => async (texts) => ({
-          data: Float32Array.from([...first, ...second]),
+        pipeline: async () => async () => ({
+          data: [...first, ...second],
         }),
       }),
     });
@@ -78,7 +79,7 @@ describe("Embedding Provider", function () {
     const provider = createTransformersEmbeddingProvider({
       loadTransformers: async () => ({
         pipeline: async () => async () => ({
-          data: Float32Array.from(vector(0.5, DEFAULT_DIMENSIONS - 1)),
+          data: vector(0.5, DEFAULT_DIMENSIONS - 1),
         }),
       }),
     });
@@ -105,7 +106,7 @@ describe("Embedding Provider", function () {
 
         return {
           pipeline: async () => async () => ({
-            data: Float32Array.from(vector(0.6)),
+            data: vector(0.6),
           }),
         };
       },
