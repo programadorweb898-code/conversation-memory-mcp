@@ -36,6 +36,7 @@ describe("centralized runtime configuration", () => {
     "PGSSL_REJECT_UNAUTHORIZED",
     "MCP_ALLOWED_HOSTS",
     "MCP_ALLOWED_ORIGINS",
+    "MCP_BEARER_TOKEN",
   ];
   const original = {};
 
