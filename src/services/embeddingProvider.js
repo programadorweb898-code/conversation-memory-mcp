@@ -9,7 +9,7 @@
  *
  * @typedef {Object} EmbeddingProvider
  * @property {() => Promise<void>} initialize
- * @property {(texts: string|string[]) => Promise<number[][]>} embed
+ * @property {(texts: string|string[], options?: {inputType?: string}) => Promise<number[][]>} embed
  * @property {() => {provider: string, model: string, dimensions: number, dtype?: string}} getMetadata
  */
 
