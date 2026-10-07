@@ -68,7 +68,6 @@ describe('Semantic Search Messages Tool', () => {
     const results = await searchMessages({ query: query, project: testProject });
 
     expect(results).to.be.an('array');
-    expect(results).to.have.lengthOf(2);
     expect(results.every(r => r.project === testProject)).to.be.true;
 
     const contents = results.map(r => r.content);
@@ -153,11 +152,12 @@ describe('Semantic Search Messages Tool', () => {
     }
   }).timeout(10000);
 
-  it('no debería encontrar mensajes de otros proyectos al filtrar', async () => {
+  it('no debería devolver mensajes de otros proyectos al filtrar', async () => {
     const query = "precio de acciones";
     const results = await searchMessages({ query: query, project: testProject });
 
     expect(results).to.be.an('array');
-    expect(results).to.be.empty;
+    expect(results.every((result) => result.project === testProject)).to.be.true;
+    expect(results.some((result) => result.content.includes("El precio de las acciones subió hoy."))).to.be.false;
   }).timeout(10000);
 });

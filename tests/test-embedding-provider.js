@@ -5,6 +5,8 @@ const {
   DEFAULT_MODEL,
   DEFAULT_DIMENSIONS,
   DEFAULT_DTYPE,
+  INPUT_PREFIXES,
+  formatInputText,
 } = require("../src/services/embeddingProviders/transformersProvider");
 
 function vector(start, length = DEFAULT_DIMENSIONS) {
@@ -14,26 +16,38 @@ function vector(start, length = DEFAULT_DIMENSIONS) {
 describe("Embedding Provider", function () {
   this.timeout(15000);
 
-  it("expone metadatos del proveedor concreto", () => {
-    const provider = createTransformersEmbeddingProvider({
-      loadTransformers: async () => ({
-        pipeline: async () => async () => ({
-          data: vector(0.1),
-        }),
-      }),
-    });
+  it("usa el modelo multilingüe E5 de 384 dimensiones", () => {
+    const provider = createTransformersEmbeddingProvider();
+    const metadata = provider.getMetadata();
 
-    expect(provider.getMetadata()).to.deep.equal({
+    expect(metadata).to.deep.equal({
       provider: "transformers.js",
-      model: DEFAULT_MODEL,
-      dimensions: DEFAULT_DIMENSIONS,
+      model: "Xenova/multilingual-e5-small",
+      dimensions: 384,
       dtype: DEFAULT_DTYPE,
     });
+    expect(metadata.model).to.equal(DEFAULT_MODEL);
+    expect(metadata.dimensions).to.equal(DEFAULT_DIMENSIONS);
   });
 
-  it("genera un embedding y mantiene el contrato de dimensiones", async () => {
-    let receivedOptions;
+  it("expone los prefijos E5 para queries y passages", () => {
+    expect(formatInputText("¿Qué decidimos?", "query")).to.equal(
+      INPUT_PREFIXES.query + "¿Qué decidimos?",
+    );
+    expect(formatInputText("Decidimos usar PostgreSQL.", "passage")).to.equal(
+      INPUT_PREFIXES.passage + "Decidimos usar PostgreSQL.",
+    );
+  });
+
+  it("rechaza un tipo de entrada desconocido", () => {
+    expect(() => formatInputText("texto", "unknown")).to.throw(
+      "Tipo de entrada de embedding no soportado",
+    );
+  });
+
+  it("genera un embedding y aplica el prefijo query sin exponer Transformers.js", async () => {
     let receivedText;
+    let receivedOptions;
 
     const provider = createTransformersEmbeddingProvider({
       loadTransformers: async () => ({
@@ -47,28 +61,28 @@ describe("Embedding Provider", function () {
       }),
     });
 
-    const result = await provider.embed("user: mensaje de prueba");
+    const result = await provider.embed("¿Qué decidimos?", { inputType: "query" });
 
     expect(result).to.have.lengthOf(1);
     expect(result[0]).to.have.lengthOf(DEFAULT_DIMENSIONS);
     expect(result[0].every((value) => Number.isFinite(value))).to.equal(true);
-    expect(receivedText).to.equal("user: mensaje de prueba");
+    expect(receivedText).to.equal(INPUT_PREFIXES.query + "¿Qué decidimos?");
     expect(receivedOptions).to.deep.equal({ pooling: "mean", normalize: true });
   });
 
-  it("genera un lote como vectores separados sin exponer el formato interno de Transformers.js", async () => {
+  it("genera un lote como passages separados", async () => {
     const first = vector(0.3);
     const second = vector(0.4);
 
     const provider = createTransformersEmbeddingProvider({
       loadTransformers: async () => ({
-        pipeline: async () => async () => ({
+        pipeline: async () => async (texts) => ({
           data: [...first, ...second],
         }),
       }),
     });
 
-    const result = await provider.embed(["uno", "dos"]);
+    const result = await provider.embed(["uno", "dos"], { inputType: "passage" });
 
     expect(result).to.have.lengthOf(2);
     expect(result[0]).to.deep.equal(first);

@@ -33,6 +33,10 @@ function prepareForEmbedding(content) {
   return text.slice(0, MAX_EMBEDDING_CHARS);
 }
 
+function getEmbeddingInputType(role) {
+  return role === "search" ? "query" : "passage";
+}
+
 /**
  * Initializes the embedding provider.
  * This should be called once at application startup.
@@ -48,7 +52,9 @@ async function initializeEmbeddingPipeline() {
 }
 
 /**
- * Genera un embedding enriquecido para un objeto de mensaje dado.
+ * Genera un embedding para un objeto de mensaje dado.
+ * El proveedor decide cómo representar el tipo de entrada requerido por su
+ * modelo (por ejemplo, query vs passage en E5).
  * @param {Object} message - El objeto de mensaje que contiene 'role' y 'content'.
  * @returns {Promise<string>} A JSON string representation of the embedding vector.
  */
@@ -60,13 +66,17 @@ async function generateEmbedding(message) {
   }
 
   const enrichedText = `${message.role}: ${message.content}`;
-  const [embedding] = await embeddingProvider.embed(enrichedText);
+  const [embedding] = await embeddingProvider.embed(enrichedText, {
+    inputType: getEmbeddingInputType(message.role),
+  });
 
   return JSON.stringify(embedding);
 }
 
 /**
  * Genera embeddings enriquecidos por lote.
+ * Los mensajes se agrupan por tipo de entrada para no mezclar query y passage
+ * dentro de una misma llamada al proveedor, preservando el orden original.
  * @param {Array<Object>} messages
  * @returns {Promise<string[]>} JSON strings, uno por mensaje.
  */
@@ -77,8 +87,31 @@ async function generateEmbeddings(messages) {
     throw error;
   }
 
-  const enrichedTexts = messages.map((message) => `${message.role}: ${message.content}`);
-  const embeddings = await embeddingProvider.embed(enrichedTexts);
+  const grouped = new Map();
+
+  messages.forEach((message, index) => {
+    const inputType = getEmbeddingInputType(message.role);
+    if (!grouped.has(inputType)) grouped.set(inputType, []);
+    grouped.get(inputType).push({
+      index,
+      text: `${message.role}: ${message.content}`,
+    });
+  });
+
+  const embeddings = Array(messages.length);
+
+  await Promise.all(
+    [...grouped.entries()].map(async ([inputType, entries]) => {
+      const vectors = await embeddingProvider.embed(
+        entries.map((entry) => entry.text),
+        { inputType },
+      );
+
+      vectors.forEach((embedding, index) => {
+        embeddings[entries[index].index] = embedding;
+      });
+    }),
+  );
 
   return embeddings.map((embedding) => JSON.stringify(embedding));
 }
@@ -127,6 +160,7 @@ module.exports = {
   prepareForEmbedding,
   isEmbeddingsEnabled,
   getEmbeddingMetadata,
+  getEmbeddingInputType,
   EmbeddingInfrastructureError,
   createRetryablePromise,
   MIN_EMBEDDING_CHARS,
