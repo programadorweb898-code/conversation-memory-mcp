@@ -1,6 +1,6 @@
 const { expect } = require("chai");
+const { EmbeddingInfrastructureError } = require("../src/services/embeddingProvider");
 const {
-  EmbeddingInfrastructureError,
   createTransformersEmbeddingProvider,
   DEFAULT_MODEL,
   DEFAULT_DIMENSIONS,
