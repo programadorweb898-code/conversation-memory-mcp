@@ -8,6 +8,7 @@ const {
 const DEFAULT_MODEL = "Xenova/multilingual-e5-small";
 const DEFAULT_DIMENSIONS = 384;
 const DEFAULT_DTYPE = "q8";
+const DEFAULT_VERSION = 1;
 const INPUT_PREFIXES = {
   query: "query: ",
   passage: "passage: ",
@@ -57,6 +58,7 @@ function createTransformersEmbeddingProvider({
   model = DEFAULT_MODEL,
   dimensions = DEFAULT_DIMENSIONS,
   dtype = DEFAULT_DTYPE,
+  version = DEFAULT_VERSION,
   loadTransformers: loadTransformersFactory = () => import("@huggingface/transformers"),
   logger = console,
 } = {}) {
@@ -143,6 +145,7 @@ function createTransformersEmbeddingProvider({
         model,
         dimensions,
         dtype,
+        version,
       };
     },
   };
@@ -153,6 +156,7 @@ module.exports = {
   DEFAULT_MODEL,
   DEFAULT_DIMENSIONS,
   DEFAULT_DTYPE,
+  DEFAULT_VERSION,
   INPUT_PREFIXES,
   formatInputText,
   flattenEmbeddingData,

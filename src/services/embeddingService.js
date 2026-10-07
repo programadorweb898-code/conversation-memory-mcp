@@ -41,6 +41,44 @@ function getEmbeddingInputType(role) {
  * Initializes the embedding provider.
  * This should be called once at application startup.
  */
+async function assertEmbeddingStorageCompatibility() {
+  const providerMetadata = getEmbeddingMetadata();
+  const row = await db.getAsync(
+    `SELECT provider, model, dimensions, dtype, version
+     FROM embedding_metadata
+     WHERE id = 1`,
+  );
+
+  if (!row) {
+    const error = new Error(
+      "No existe embedding_metadata. Ejecutá las migraciones antes de usar embeddings.",
+    );
+    error.code = "EMBEDDING_METADATA_MISSING";
+    throw error;
+  }
+
+  const mismatches = [
+    ["provider", row.provider, providerMetadata.provider],
+    ["model", row.model, providerMetadata.model],
+    ["dimensions", Number(row.dimensions), providerMetadata.dimensions],
+    ["dtype", row.dtype ?? null, providerMetadata.dtype ?? null],
+    ["version", Number(row.version), providerMetadata.version],
+  ].filter(([, stored, current]) => stored !== current);
+
+  if (mismatches.length > 0) {
+    const details = mismatches
+      .map(([field, stored, current]) => `${field}: DB=${stored} runtime=${current}`)
+      .join(", ");
+    const error = new Error(
+      `Embedding storage incompatible con el proveedor actual (${details}). Ejecutá el reindexado/migración correspondiente antes de continuar.`,
+    );
+    error.code = "EMBEDDING_STORAGE_MISMATCH";
+    throw error;
+  }
+
+  return providerMetadata;
+}
+
 async function initializeEmbeddingPipeline() {
   if (!isEmbeddingsEnabled()) {
     const error = new Error("Embeddings están deshabilitados por ENABLE_EMBEDDINGS=false.");
@@ -48,7 +86,9 @@ async function initializeEmbeddingPipeline() {
     throw error;
   }
 
-  return embeddingProvider.initialize();
+  await embeddingProvider.initialize();
+  await assertEmbeddingStorageCompatibility();
+  return getEmbeddingMetadata();
 }
 
 /**
@@ -161,6 +201,7 @@ module.exports = {
   isEmbeddingsEnabled,
   getEmbeddingMetadata,
   getEmbeddingInputType,
+  assertEmbeddingStorageCompatibility,
   EmbeddingInfrastructureError,
   createRetryablePromise,
   MIN_EMBEDDING_CHARS,
