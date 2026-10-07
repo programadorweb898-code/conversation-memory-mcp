@@ -33,6 +33,10 @@ function prepareForEmbedding(content) {
   return text.slice(0, MAX_EMBEDDING_CHARS);
 }
 
+function getEmbeddingInputType(role) {
+  return role === "search" ? "query" : "passage";
+}
+
 /**
  * Initializes the embedding provider.
  * This should be called once at application startup.
@@ -48,7 +52,9 @@ async function initializeEmbeddingPipeline() {
 }
 
 /**
- * Genera un embedding enriquecido para un objeto de mensaje dado.
+ * Genera un embedding para un objeto de mensaje dado.
+ * El proveedor decide cómo representar el tipo de entrada requerido por su
+ * modelo (por ejemplo, query vs passage en E5).
  * @param {Object} message - El objeto de mensaje que contiene 'role' y 'content'.
  * @returns {Promise<string>} A JSON string representation of the embedding vector.
  */
@@ -60,7 +66,9 @@ async function generateEmbedding(message) {
   }
 
   const enrichedText = `${message.role}: ${message.content}`;
-  const [embedding] = await embeddingProvider.embed(enrichedText);
+  const [embedding] = await embeddingProvider.embed(enrichedText, {
+    inputType: getEmbeddingInputType(message.role),
+  });
 
   return JSON.stringify(embedding);
 }
@@ -77,8 +85,11 @@ async function generateEmbeddings(messages) {
     throw error;
   }
 
+  const inputType = messages.some((message) => getEmbeddingInputType(message.role) === "query")
+    ? "query"
+    : "passage";
   const enrichedTexts = messages.map((message) => `${message.role}: ${message.content}`);
-  const embeddings = await embeddingProvider.embed(enrichedTexts);
+  const embeddings = await embeddingProvider.embed(enrichedTexts, { inputType });
 
   return embeddings.map((embedding) => JSON.stringify(embedding));
 }
@@ -127,6 +138,7 @@ module.exports = {
   prepareForEmbedding,
   isEmbeddingsEnabled,
   getEmbeddingMetadata,
+  getEmbeddingInputType,
   EmbeddingInfrastructureError,
   createRetryablePromise,
   MIN_EMBEDDING_CHARS,
