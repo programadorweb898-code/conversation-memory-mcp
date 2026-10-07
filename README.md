@@ -389,24 +389,9 @@ distintos o destinos de configuración diferentes.
 
 `npx conversation-memory-mcp migrate` muestra host, base y schema, y exige confirmación explícita antes de aplicar migraciones. `npm run migrate` es el runner de desarrollo; sus callers programáticos deben pasar autorización.
 
-Las operaciones históricas y destructivas se mantienen fuera del loader automático en `migrations/manual/`. No se ejecutan durante `install` ni al iniciar stdio; requieren revisión del destino y backup antes de aplicarse manualmente.
+Las migraciones actuales forman parte del flujo numerado y se ejecutan mediante `npx conversation-memory-mcp migrate` tras confirmar el destino.
 
-**No ejecutar (LEGACY).** `migrate_sequence.js`, `migrate_to_pgvector.js` y
-`migrate_project_backfill.js` son migraciones de una sola vez, aplicadas sobre
-una base que ya tenía conversaciones. Cada una arregla algo que una base
-nueva no tiene: `sequence_id` porque ordenar por `timestamp` no distingue dos
-turnos del mismo milisegundo; `vector(384)` porque los embeddings se guardaban
-como texto y sin eso no hay búsqueda semántica; y el backfill de `project`
-porque la columna nació después que las filas que ya existían.
-
-`migrate_sequence.js` hace su backfill con un único `UPDATE` sobre toda la tabla
-`conversations`, así que es la única operación del repo que podría pasarse del
-tope de 60s si la tabla creciera mucho. Si eso pasara, se sube solo para esa
-corrida:
-
-```bash
-CONVERSATION_MEMORY_QUERY_TIMEOUT_MS=600000 npm run migrate
-```
+Las migraciones históricas de una sola vez que ya fueron absorbidas por el esquema actual se eliminaron del repositorio para evitar scripts obsoletos y rutas de mantenimiento peligrosas.
 
 ### Tope de duración de las queries
 
@@ -423,10 +408,6 @@ incluye `CREATE EXTENSION vector`, `ADD COLUMN IF NOT EXISTS project`,
 `sequence_id`, la secuencia y el índice HNSW, todo con `IF NOT EXISTS` e
 idempotente. Para una base ya migrada, volver a correrlos no aporta nada.
 Quedan como registro histórico de cómo esa base pasó de un estado a otro.
-
-**Mantenimiento opcional.** `finalize_sessions.js` recorre los proyectos y
-finaliza sesiones viejas invocando al LLM. No pide confirmación y no filtra
-por antigüedad: usalo solo si querés cerrar todo, y sobre una copia primero.
 
 El proyecto utiliza:
 
