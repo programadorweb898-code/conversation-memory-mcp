@@ -39,6 +39,13 @@ conversation-memory-mcp
 
 Si el agente utiliza además otro sistema de memoria técnica, ambos se configuran como servicios independientes. Este proyecto no necesita conocerlo ni comunicarse con él.
 
+## Documentación
+
+Para consultar detalles operativos y de diseño sin cargar el README con instrucciones largas:
+
+- [Arquitectura](docs/ARCHITECTURE.md): componentes, persistencia, aislamiento, transporte, embeddings e invariantes.
+- [Operaciones y troubleshooting](docs/OPERATIONS.md): instalación, migraciones, reindexado, despliegue HTTP y diagnóstico de problemas habituales.
+
 ## Inicio rápido
 
 Requisitos:
@@ -274,7 +281,7 @@ El proceso hace `UPSERT` del vector nuevo después de generarlo. No ejecuta un `
 
 Durante un cambio de modelo, hasta terminar el reindexado pueden convivir vectores del modelo anterior y del nuevo. Para una migración en producción, se recomienda ejecutar el reindexado como tarea de mantenimiento mientras el servidor tiene `ENABLE_EMBEDDINGS=false`, de modo que las búsquedas usen el fallback textual durante la ventana. Si el mismo `.env` tiene esa variable en `false`, el proceso de mantenimiento debe sobrescribirla explícitamente: `ENABLE_EMBEDDINGS=true npm run reindex:embeddings`. Una vez completado y verificado el reindexado, se vuelve a habilitar la búsqueda semántica.
 
-El reindexado es idempotente: volver a ejecutarlo recalcula los mismos registros y sobrescribe sus vectores. El próximo punto (#13) agregará metadatos de modelo/versión para poder detectar automáticamente qué vectores están desactualizados y permitir migraciones side-by-side sin mezclar versiones.
+El reindexado es idempotente: volver a ejecutarlo recalcula los mismos registros y sobrescribe sus vectores. El contrato activo de proveedor, modelo, dimensión, dtype y versión se registra en `embedding_metadata` y el runtime rechaza incompatibilidades antes de generar nuevos embeddings.
 
 Si los embeddings no están disponibles, las herramientas de búsqueda disponen de mecanismos de recuperación textual cuando corresponde.
 
