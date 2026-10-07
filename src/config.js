@@ -98,8 +98,6 @@ function getConfig() {
       tenantMaxSseSessions: readPositiveInteger(
         "MCP_TENANT_MAX_SSE_SESSIONS",
         DEFAULT_TENANT_MAX_SSE_SESSIONS,
-  DEFAULT_SEARCH_LIMIT,
-  DEFAULT_RECOVER_SESSION_LIMIT,
       ),
       enableEmbeddingWorkerHttp: readBoolean("ENABLE_EMBEDDING_WORKER", false),
       enableEmbeddingWorkerStdio: readBoolean("ENABLE_EMBEDDING_WORKER", true),
