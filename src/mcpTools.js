@@ -121,14 +121,24 @@ async ({ query, project, agentId, limit }) => {
   // 2.6. searchSessionsBySummary
   registerTool(
     "searchSessionsBySummary",
-    "Busca sesiones relevantes mediante su resumen semántico y recupera todo su historial",
+    `Busca la sesión más relevante mediante su resumen semántico y recupera una página de su historial.
+Por defecto devuelve hasta 100 mensajes; el límite máximo se configura con RECOVER_SESSION_LIMIT.
+Para continuar, pasá afterSequenceId con el sequence_id del último mensaje recibido.
+La respuesta incluye hasMore y nextAfterSequenceId para facilitar la siguiente página.`,
     {
       query: z.string().describe("La consulta de búsqueda"),
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
+      limit: z.number().int().positive().optional().describe("Número máximo de mensajes por página (por defecto: 100; sujeto a RECOVER_SESSION_LIMIT)"),
+      afterSequenceId: z.string().regex(/^\\d+$/).optional().describe("Cursor exclusivo: devuelve mensajes posteriores a este sequence_id"),
     },
-    async ({ query, project }) => {
-      const history = await searchSessionsBySummary(withScope({ query, project }));
-      return { content: [{ type: "text", text: JSON.stringify({ history }, null, 2) }], structuredContent: { history } };
+    async ({ query, project, limit, afterSequenceId }) => {
+      const result = await searchSessionsBySummary(
+        withScope({ query, project, limit, afterSequenceId })
+      );
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        structuredContent: result,
+      };
     }
   );
 

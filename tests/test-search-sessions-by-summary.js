@@ -64,11 +64,13 @@ describe("Search Sessions By Summary", function () {
       content: "Decidimos usar PostgreSQL.",
     });
 
-    const history = await searchSessionsBySummary({
+    const result = await searchSessionsBySummary({
       query: "¿Qué base de datos decidimos usar?",
       project,
       owner: ownerA,
     });
+
+    const history = result.history;
 
     expect(history).to.have.lengthOf(1);
     expect(history[0].session_id).to.equal(sessionId);
@@ -123,11 +125,13 @@ describe("Search Sessions By Summary", function () {
       [sessionId, ownerA, fakeEmbedding(0.1)]
     );
 
-    const history = await searchSessionsBySummary({
+    const result = await searchSessionsBySummary({
       query: "orden de mensajes",
       project,
       owner: ownerA,
     });
+
+    const history = result.history;
 
     expect(history.map((message) => message.content)).to.deep.equal([
       "Mensaje 1",
@@ -137,6 +141,120 @@ describe("Search Sessions By Summary", function () {
     expect(history.map((message) => message.sequence_id)).to.deep.equal(
       [...history.map((message) => message.sequence_id)].sort((a, b) => Number(a) - Number(b))
     );
+  });
+
+  it("limita el historial y permite continuar con afterSequenceId", async () => {
+    const sessionId = "summary-search-pagination";
+    sessionIds.push(sessionId);
+
+    for (let index = 1; index <= 5; index += 1) {
+      await saveMessage({
+        sessionId,
+        project,
+        owner: ownerA,
+        role: index % 2 ? "user" : "assistant",
+        content: `Mensaje ${index}`,
+      });
+    }
+
+    await db.runAsync(
+      `INSERT INTO session_summaries (session_id, project, owner, summary)
+       VALUES ($1, $2, $3, $4)`,
+      [sessionId, project, ownerA, "Resumen paginable"],
+    );
+    await db.runAsync(
+      `INSERT INTO session_summary_embeddings (session_id, owner, embedding)
+       VALUES ($1, $2, $3)`,
+      [sessionId, ownerA, fakeEmbedding(0.1)]
+    );
+
+    const firstPageResult = await searchSessionsBySummary({
+      query: "paginable",
+      project,
+      owner: ownerA,
+      limit: 2,
+    });
+
+    expect(firstPageResult.history.map((message) => message.content)).to.deep.equal([
+      "Mensaje 1",
+      "Mensaje 2",
+    ]);
+    expect(firstPageResult.hasMore).to.equal(true);
+    expect(firstPageResult.nextAfterSequenceId).to.equal(
+      String(firstPageResult.history[1].sequence_id)
+    );
+
+    const secondPageResult = await searchSessionsBySummary({
+      query: "paginable",
+      project,
+      owner: ownerA,
+      limit: 2,
+      afterSequenceId: firstPageResult.nextAfterSequenceId,
+    });
+
+    expect(secondPageResult.history.map((message) => message.content)).to.deep.equal([
+      "Mensaje 3",
+      "Mensaje 4",
+    ]);
+    expect(secondPageResult.hasMore).to.equal(true);
+
+    const thirdPageResult = await searchSessionsBySummary({
+      query: "paginable",
+      project,
+      owner: ownerA,
+      limit: 2,
+      afterSequenceId: secondPageResult.nextAfterSequenceId,
+    });
+
+    expect(thirdPageResult.history.map((message) => message.content)).to.deep.equal([
+      "Mensaje 5",
+    ]);
+    expect(thirdPageResult.hasMore).to.equal(false);
+    expect(thirdPageResult.nextAfterSequenceId).to.equal(null);
+  });
+
+  it("respeta el máximo configurado de recuperación del historial", async () => {
+    const sessionId = "summary-search-pagination-max";
+    sessionIds.push(sessionId);
+
+    for (let index = 1; index <= 4; index += 1) {
+      await saveMessage({
+        sessionId,
+        project,
+        owner: ownerA,
+        role: "user",
+        content: `Mensaje ${index}`,
+      });
+    }
+
+    await db.runAsync(
+      `INSERT INTO session_summaries (session_id, project, owner, summary)
+       VALUES ($1, $2, $3, $4)`,
+      [sessionId, project, ownerA, "Resumen con límite"],
+    );
+    await db.runAsync(
+      `INSERT INTO session_summary_embeddings (session_id, owner, embedding)
+       VALUES ($1, $2, $3)`,
+      [sessionId, ownerA, fakeEmbedding(0.1)]
+    );
+
+    const { config } = require("../src/config");
+    const originalLimit = config.recoverSessionLimit;
+    config.recoverSessionLimit = 2;
+
+    try {
+      const result = await searchSessionsBySummary({
+        query: "límite",
+        project,
+        owner: ownerA,
+        limit: 10,
+      });
+
+      expect(result.history).to.have.lengthOf(2);
+      expect(result.hasMore).to.equal(true);
+    } finally {
+      config.recoverSessionLimit = originalLimit;
+    }
   });
 
   it("respeta el aislamiento por owner aunque exista un resumen muy similar de otro owner", async () => {
@@ -158,11 +276,13 @@ describe("Search Sessions By Summary", function () {
       content: "Dato privado del owner B",
     });
 
-    const history = await searchSessionsBySummary({
+    const result = await searchSessionsBySummary({
       query: "resumen privado",
       project,
       owner: ownerA,
     });
+
+    const history = result.history;
 
     expect(history).to.have.lengthOf(1);
     expect(history[0].session_id).to.equal(ownerASession);
@@ -191,11 +311,13 @@ describe("Search Sessions By Summary", function () {
       [sessionId, ownerA, fakeEmbedding(0.1)]
     );
 
-    const history = await searchSessionsBySummary({
+    const result = await searchSessionsBySummary({
       query: "resumen de otro proyecto",
       project,
       owner: ownerA,
     });
+
+    const history = result.history;
 
     expect(history).to.deep.equal([]);
   });
@@ -217,11 +339,13 @@ describe("Search Sessions By Summary", function () {
       [sessionId, project, ownerA, "PostgreSQL para persistencia"],
     );
 
-    const history = await searchSessionsBySummary({
+    const result = await searchSessionsBySummary({
       query: "PostgreSQL para persistencia",
       project,
       owner: ownerA,
     });
+
+    const history = result.history;
 
     expect(history).to.have.lengthOf(1);
     expect(history[0].session_id).to.equal(sessionId);
@@ -246,11 +370,13 @@ describe("Search Sessions By Summary", function () {
 
     embeddingService.generateEmbedding.rejects(new Error("modelo de embeddings no disponible"));
 
-    const history = await searchSessionsBySummary({
+    const result = await searchSessionsBySummary({
       query: "¿Qué decidimos usar para búsquedas?",
       project,
       owner: ownerA,
     });
+
+    const history = result.history;
 
     expect(history).to.have.lengthOf(1);
     expect(history[0].session_id).to.equal(sessionId);
@@ -275,11 +401,13 @@ describe("Search Sessions By Summary", function () {
 
     embeddingService.generateEmbedding.rejects(new Error("modelo no disponible"));
 
-    const history = await searchSessionsBySummary({
+    const result = await searchSessionsBySummary({
       query: "¿Qué decisión tomamos sobre pgvector?",
       project,
       owner: ownerA,
     });
+
+    const history = result.history;
 
     expect(history).to.have.lengthOf(1);
     expect(history[0].session_id).to.equal(sessionId);
@@ -299,11 +427,13 @@ describe("Search Sessions By Summary", function () {
       [sessionId]
     );
 
-    const history = await searchSessionsBySummary({
+    const result = await searchSessionsBySummary({
       query: "agent_id",
       project,
       owner: ownerA,
     });
+
+    const history = result.history;
 
     expect(history).to.have.lengthOf(1);
     expect(history[0].agent_id).to.equal("opencode");
@@ -335,11 +465,13 @@ describe("Search Sessions By Summary", function () {
     });
 
     try {
-      const history = await searchSessionsBySummary({
+      const result = await searchSessionsBySummary({
         query: "resumen de respaldo recuperable",
         project,
         owner: ownerA,
       });
+
+      const history = result.history;
 
       expect(history).to.have.lengthOf(1);
       expect(history[0].session_id).to.equal(sessionId);
@@ -350,13 +482,36 @@ describe("Search Sessions By Summary", function () {
   });
 
   it("devuelve vacío cuando no existe ningún resumen elegible", async () => {
-    const history = await searchSessionsBySummary({
+    const result = await searchSessionsBySummary({
       query: "consulta sin resultados",
       project,
       owner: ownerA,
     });
 
-    expect(history).to.deep.equal([]);
+    const history = result.history;
+
+    expect(result).to.deep.equal({
+      history: [],
+      hasMore: false,
+      nextAfterSequenceId: null,
+    });
+  });
+
+  it("rechaza un afterSequenceId inválido", async () => {
+    let error;
+    try {
+      await searchSessionsBySummary({
+        query: "consulta",
+        project,
+        owner: ownerA,
+        afterSequenceId: "no-es-un-sequence-id",
+      });
+    } catch (err) {
+      error = err;
+    }
+
+    expect(error).to.be.instanceOf(Error);
+    expect(error.message).to.include("afterSequenceId");
   });
 
   it("valida los parámetros obligatorios antes de consultar", async () => {
