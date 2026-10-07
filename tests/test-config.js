@@ -9,6 +9,8 @@ describe("centralized runtime configuration", () => {
   const keys = [
     "PORT",
     "MCP_DEFAULT_OWNER",
+    "MCP_TENANT_MAX_CONCURRENT_REQUESTS",
+    "MCP_TENANT_MAX_SSE_SESSIONS",
     "CONVERSATION_MEMORY_QUERY_TIMEOUT_MS",
     "CONVERSATION_MEMORY_CONNECT_TIMEOUT_MS",
     "CONVERSATION_MEMORY_KEEPALIVE_DELAY_MS",
@@ -75,6 +77,8 @@ describe("centralized runtime configuration", () => {
     const config = getConfig();
 
     expect(config.server.port).to.equal(3000);
+    expect(config.server.tenantMaxConcurrentRequests).to.equal(10);
+    expect(config.server.tenantMaxSseSessions).to.equal(10);
     expect(config.database.defaultOwner).to.equal("local-user");
     expect(config.database.queryTimeoutMs).to.equal(60000);
     expect(config.database.connectTimeoutMs).to.equal(10000);
@@ -96,6 +100,8 @@ describe("centralized runtime configuration", () => {
     Object.assign(process.env, {
       PORT: "4100",
       MCP_DEFAULT_OWNER: "owner-a",
+      MCP_TENANT_MAX_CONCURRENT_REQUESTS: "7",
+      MCP_TENANT_MAX_SSE_SESSIONS: "4",
       CONVERSATION_MEMORY_QUERY_TIMEOUT_MS: "70000",
       CONVERSATION_MEMORY_CONNECT_TIMEOUT_MS: "1200",
       CONVERSATION_MEMORY_KEEPALIVE_DELAY_MS: "5000",
@@ -122,6 +128,8 @@ describe("centralized runtime configuration", () => {
     const config = getConfig();
 
     expect(config.server.port).to.equal(4100);
+    expect(config.server.tenantMaxConcurrentRequests).to.equal(7);
+    expect(config.server.tenantMaxSseSessions).to.equal(4);
     expect(config.server.bearerToken).to.equal("");
     expect(config.server.enableEmbeddingWorkerHttp).to.equal(true);
     expect(config.server.enableEmbeddingWorkerStdio).to.equal(true);
