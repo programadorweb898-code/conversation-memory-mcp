@@ -7,6 +7,7 @@ const mcpSdk = require('@modelcontextprotocol/sdk/server/mcp.js');
 const sseSdk = require('@modelcontextprotocol/sdk/server/sse.js');
 const streamableHttpSdk = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const embeddingService = require('../src/services/embeddingService');
+const embeddingWorker = require('../src/services/embeddingWorker');
 const { db } = require('../src/database');
 const { createApiKey } = require('../src/services/apiKeyService');
 const { authLimiter, sseLimiter, messagesLimiter } = require('../src/middleware');
@@ -177,8 +178,7 @@ describe('Server HTTP layer', () => {
     transportInstance.close.callsFake(async () => { transportInstance.response?.end(); });
     try {
       const { startServer, shutdown } = require('../src/server');
-      httpServer = await startServer();
-      sseConnection = await openSse(httpServer);
+      httpServer = await startServer();      sseConnection = await openSse(httpServer);
       await shutdown('SIGTERM');
       expect(transportInstance.close.calledOnce).to.be.true;
       expect(stopWorkerStub.calledOnce).to.be.true;
@@ -377,8 +377,7 @@ describe('Server HTTP layer', () => {
 
     process.env.MCP_ALLOWED_HOSTS = 'allowed.example';
 
-    try {
-      const response = await request(app)
+    try {      const response = await request(app)
         .get('/mcp')
         .set('host', 'attacker.example')
         .set('authorization', 'Bearer test-token');
