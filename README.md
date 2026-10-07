@@ -50,7 +50,7 @@ Para consultar detalles operativos y de diseño sin cargar el README con instruc
 
 Requisitos:
 
-- Node.js 20+
+- Node.js 22+
 - Git
 - PostgreSQL con pgvector; Neon es una opción compatible.
 
