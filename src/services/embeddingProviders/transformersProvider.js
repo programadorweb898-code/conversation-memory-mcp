@@ -19,7 +19,7 @@ function flattenEmbeddingData(data) {
 function validateVector(vector, dimensions) {
   if (vector.length !== dimensions) {
     throw new Error(
-      `El proveedor devolvió ${vector.length} dimensiones; se esperaban ${dimensions}.`,
+      `El proveedor devolvió un vector de ${vector.length} dimensiones; se esperaban ${dimensions}.`,
     );
   }
 
