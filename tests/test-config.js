@@ -147,6 +147,22 @@ describe("centralized runtime configuration", () => {
     expect(config.llm.retryMaxDelayMs).to.equal(1000);
   });
 
+  it("normaliza las listas de Host y Origin para la protección MCP", () => {
+    process.env.MCP_ALLOWED_HOSTS = " Allowed.Example,SECOND.example ";
+    process.env.MCP_ALLOWED_ORIGINS = " https://Allowed.Example/,https://second.example ";
+
+    const config = getConfig();
+
+    expect(config.server.allowedHosts).to.deep.equal([
+      "allowed.example",
+      "second.example",
+    ]);
+    expect(config.server.allowedOrigins).to.deep.equal([
+      "https://allowed.example",
+      "https://second.example",
+    ]);
+  });
+
   it("falla rápido ante configuración inválida", () => {
     process.env.PORT = "0";
     expect(() => getConfig()).to.throw("PORT inválido");
