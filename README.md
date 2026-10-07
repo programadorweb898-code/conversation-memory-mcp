@@ -188,6 +188,10 @@ mande el cliente.
 El token maestro (`MCP_BEARER_TOKEN`) tiene acceso total sin restricción de
 owner — pensado para administración, no para uso normal de un agente.
 
+Además de limitar la tasa de requests, el modo HTTP aplica límites de concurrencia por tenant para evitar que un owner monopolice el pool de conexiones con operaciones simultáneas lentas. Por defecto cada owner puede tener hasta 10 requests MCP simultáneas en `/mcp` y `/messages`, y hasta 10 sesiones SSE activas. Varias API keys del mismo owner comparten el mismo límite. El token maestro queda fuera de estas cuotas para tareas administrativas.
+
+Se pueden ajustar con `MCP_TENANT_MAX_CONCURRENT_REQUESTS` y `MCP_TENANT_MAX_SSE_SESSIONS`.
+
 ## Herramientas principales
 
 ### Historial
