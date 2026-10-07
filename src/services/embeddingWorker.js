@@ -14,11 +14,6 @@ const batchSize = embeddingConfig.batchSize;
 // Violación de clave foránea: el mensaje fue borrado mientras esperaba.
 const FK_VIOLATION = "23503";
 
-function positiveInteger(value, fallback) {
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-}
-
 function isInfrastructureFailure(error) {
   const code = String(error?.code || "");
   return error?.retryable === true || code === "EMBEDDING_INFRASTRUCTURE" ||
