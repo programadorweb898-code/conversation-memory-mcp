@@ -124,17 +124,17 @@ function createEmbeddingReindexer({
           );
           stats.reindexed += 1;
         }
+      }
 
-        if (skippedIds.length > 0) {
-          await dbClient.runAsync(
-            `DELETE FROM message_embeddings me
-             USING conversations c
-             WHERE me.message_id = c.id
-               AND me.message_id = ANY($1::text[])
-               AND length(btrim(c.content)) < $2`,
-            [skippedIds, minEmbeddingChars],
-          );
-        }
+      if (!dryRun && skippedIds.length > 0) {
+        await dbClient.runAsync(
+          `DELETE FROM message_embeddings me
+           USING conversations c
+           WHERE me.message_id = c.id
+             AND me.message_id = ANY($1::text[])
+             AND length(btrim(c.content)) < $2`,
+          [skippedIds, minEmbeddingChars],
+        );
       }
 
       if (dryRun) {
