@@ -51,7 +51,7 @@ async function searchMessages(params) {
         sql += ` WHERE ` + whereClauses.join(` AND `);
       }
 
-      sql += ` ORDER BY c.sequence_id DESC LIMIT ${dbParams.length + 1}`;
+      sql += ` ORDER BY c.sequence_id DESC LIMIT $${dbParams.length + 1}`;
       dbParams.push(config.searchLimit);
       return await db.allAsync(sql, dbParams);
     }
@@ -130,7 +130,7 @@ async function searchMessages(params) {
 
     // Ordenamos por distancia de coseno ascendente (mayor similitud primero)
     // y limitamos los resultados para mantener acotada la respuesta.
-    sql += ` ORDER BY me.embedding <=> $1::vector ASC LIMIT ${dbParams.length + 1}`;
+    sql += ` ORDER BY me.embedding <=> $1::vector ASC LIMIT $${dbParams.length + 1}`;
     dbParams.push(config.searchLimit);
 
     const rows = await db.allAsync(sql, dbParams);
