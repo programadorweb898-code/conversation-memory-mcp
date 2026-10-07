@@ -36,12 +36,12 @@ describe("Database invariants", () => {
 
       try {
         await db.runAsync(
-          \`INSERT INTO conversations
+          `INSERT INTO conversations
            (id, session_id, project, role, content, owner)
-           VALUES ($1, $2, $3, 'user', $4, $5)\`,
+           VALUES ($1, $2, $3, 'user', $4, $5)`,
           [id, id, project, content, owner],
         );
-        expect.fail(\`La inserción inválida para \${name} debería haber fallado\`);
+        expect.fail(`La inserción inválida para \${name} debería haber fallado`);
       } catch (err) {
         expect(err.code).to.equal("23514");
       }
@@ -55,9 +55,9 @@ describe("Database invariants", () => {
 
     try {
       await db.runAsync(
-        \`INSERT INTO conversations
+        `INSERT INTO conversations
          (id, session_id, project, role, content, owner)
-         VALUES ($1, $2, 'p16', 'tool', 'contenido', 'owner-p16')\`,
+         VALUES ($1, $2, 'p16', 'tool', 'contenido', 'owner-p16')`,
         [id, id],
       );
       expect.fail("Un role fuera del contrato debería haber fallado");
@@ -71,17 +71,17 @@ describe("Database invariants", () => {
     sessions.add(sessionId);
 
     await db.runAsync(
-      \`INSERT INTO conversations
+      `INSERT INTO conversations
        (id, session_id, project, role, content, owner)
-       VALUES ($1, $2, 'project-a', 'user', 'primero', 'owner-p16')\`,
+       VALUES ($1, $2, 'project-a', 'user', 'primero', 'owner-p16')`,
       [randomUUID(), sessionId],
     );
 
     try {
       await db.runAsync(
-        \`INSERT INTO conversations
+        `INSERT INTO conversations
          (id, session_id, project, role, content, owner)
-         VALUES ($1, $2, 'project-b', 'assistant', 'segundo', 'owner-p16')\`,
+         VALUES ($1, $2, 'project-b', 'assistant', 'segundo', 'owner-p16')`,
         [randomUUID(), sessionId],
       );
       expect.fail("Una sesión no debería poder quedar asociada a dos proyectos");
@@ -95,17 +95,17 @@ describe("Database invariants", () => {
     sessions.add(sessionId);
 
     await db.runAsync(
-      \`INSERT INTO conversations
+      `INSERT INTO conversations
        (id, session_id, project, role, content, owner)
-       VALUES ($1, $2, 'project-a', 'user', 'mensaje', 'owner-p16')\`,
+       VALUES ($1, $2, 'project-a', 'user', 'mensaje', 'owner-p16')`,
       [randomUUID(), sessionId],
     );
 
     try {
       await db.runAsync(
-        \`INSERT INTO session_summaries
+        `INSERT INTO session_summaries
          (session_id, project, owner, summary)
-         VALUES ($1, 'project-b', 'owner-p16', 'resumen')\`,
+         VALUES ($1, 'project-b', 'owner-p16', 'resumen')`,
         [sessionId],
       );
       expect.fail("El resumen debería respetar el proyecto de la sesión");
@@ -124,17 +124,17 @@ describe("Database invariants", () => {
     messages.add(sourceId);
 
     await db.runAsync(
-      \`INSERT INTO conversations
+      `INSERT INTO conversations
        (id, session_id, project, role, content, owner)
-       VALUES ($1, $2, 'project-a', 'user', 'objetivo', 'owner-a')\`,
+       VALUES ($1, $2, 'project-a', 'user', 'objetivo', 'owner-a')`,
       [targetId, targetSession],
     );
 
     try {
       await db.runAsync(
-        \`INSERT INTO conversations
+        `INSERT INTO conversations
          (id, session_id, project, role, content, owner, related_message_id)
-         VALUES ($1, $2, 'project-a', 'assistant', 'respuesta', 'owner-a', $3)\`,
+         VALUES ($1, $2, 'project-a', 'assistant', 'respuesta', 'owner-a', $3)`,
         [sourceId, sourceId, targetId],
       );
       expect.fail("related_message_id no debería cruzar de sesión");
@@ -149,9 +149,9 @@ describe("Database invariants", () => {
 
     try {
       await db.runAsync(
-        \`INSERT INTO session_summaries
+        `INSERT INTO session_summaries
          (session_id, project, owner, summary, last_processed_seq_id)
-         VALUES ($1, 'project-a', 'owner-p16', 'resumen', -1)\`,
+         VALUES ($1, 'project-a', 'owner-p16', 'resumen', -1)`,
         [sessionId],
       );
       expect.fail("Un watermark negativo debería haber fallado");
