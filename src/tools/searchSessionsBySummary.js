@@ -66,10 +66,10 @@ async function searchSessionsBySummary({ query, project, owner }) {
 
   // 3. Recuperar todo el historial de la sesión identificada
   const historySql = `
-    SELECT id, session_id, timestamp, project, role, content, agent_id
+    SELECT id, session_id, sequence_id, timestamp, project, role, content, agent_id
     FROM conversations
     WHERE session_id = $1 AND project = $2 AND ($3::text IS NULL OR owner = $3)
-    ORDER BY timestamp ASC
+    ORDER BY sequence_id ASC
   `;
   
   const history = await db.allAsync(historySql, [bestSessionId, project, owner ?? null]);
