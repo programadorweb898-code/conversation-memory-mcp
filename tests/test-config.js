@@ -34,6 +34,8 @@ describe("centralized runtime configuration", () => {
     "CONVERSATION_MEMORY_LLM_RETRY_MAX_DELAY_MS",
     "PG_SEARCH_PATH",
     "PGSSL_REJECT_UNAUTHORIZED",
+    "MCP_ALLOWED_HOSTS",
+    "MCP_ALLOWED_ORIGINS",
   ];
   const original = {};
 
@@ -65,7 +67,7 @@ describe("centralized runtime configuration", () => {
       const script = `const { getConfig } = require(${JSON.stringify(configPath)}); process.stdout.write(JSON.stringify(getConfig().server.port) + "|" + getConfig().database.defaultOwner);`;
       const result = spawnSync(process.execPath, ["-e", script], {
         cwd: tempDir,
-        env: childEnv,
+        env: { ...childEnv, DOTENV_CONFIG_QUIET: "true" },
         encoding: "utf8",
       });
 
