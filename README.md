@@ -83,6 +83,40 @@ El instalador no adopta `DATABASE_URL` automáticamente. No apuntes esta variabl
 
 En instalación de proyecto, la URL dedicada se guarda en el `.env` de ese proyecto. En instalación global, se guarda en el archivo de configuración del usuario (`%APPDATA%/conversation-memory-mcp/.env` en Windows o `~/.config/conversation-memory-mcp/.env` en Linux/macOS), para que el MCP funcione aunque el agente arranque desde otro directorio.
 
+## Upgrade desde 1.x
+
+La versión 2.0.0 contiene cambios incompatibles. **No actualices desde 1.x como si fuera una versión menor o patch.** Antes de arrancar el servidor con 2.0.0, prepará la base y revisá la configuración.
+
+### Cambios incompatibles
+
+- **Versión:** el paquete pasa de 1.x a 2.0.0.
+- **Node.js:** 2.0.0 requiere Node.js 22 o superior.
+- **Base de datos:** 2.0.0 usa `CONVERSATION_MEMORY_DATABASE_URL` como conexión dedicada. No dependas de `DATABASE_URL`.
+- **Migraciones:** las migraciones deben ejecutarse explícitamente durante el upgrade; el arranque del MCP no migra la base automáticamente.
+- **Embeddings:** el modelo activo es `Xenova/multilingual-e5-small` (384 dimensiones). Los embeddings generados con un modelo anterior deben reindexarse antes de confiar en la búsqueda semántica.
+- **Instalación:** el flujo público es `npx conversation-memory-mcp install`; los instaladores históricos de plugin de 1.x ya no forman parte del producto.
+
+### Procedimiento recomendado
+
+1. Hacé un backup de la base de datos antes de aplicar el upgrade.
+2. Actualizá el paquete a 2.0.0.
+3. Configurá `CONVERSATION_MEMORY_DATABASE_URL` apuntando a la base dedicada de Conversation Memory.
+4. Verificá que la base esté dedicada a este servicio y ejecutá:
+
+```bash
+npx conversation-memory-mcp migrate
+```
+
+5. Completá el reindexado de embeddings antes de volver a confiar en búsquedas semánticas sobre datos existentes:
+
+```bash
+npx conversation-memory-mcp reindex
+```
+
+6. Reiniciá el agente/MCP y verificá una recuperación histórica y una búsqueda semántica antes de considerar completado el upgrade.
+
+**No omitas el backup, las migraciones ni el reindexado.** Una instalación 1.x puede contener datos y embeddings que no deben reinterpretarse como si hubieran sido generados por el modelo de 2.0.0.
+
 ## Instalación de la política del agente
 
 Configurar el MCP no garantiza que el agente lo consulte primero cuando una pregunta requiere historial anterior. El instalador configura ambas piezas para el agente seleccionado:
