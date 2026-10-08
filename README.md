@@ -107,12 +107,7 @@ La versión 2.0.0 contiene cambios incompatibles. **No actualices desde 1.x como
 npx conversation-memory-mcp migrate
 ```
 
-5. Completá el reindexado de embeddings antes de volver a confiar en búsquedas semánticas sobre datos existentes:
-
-```bash
-npx conversation-memory-mcp reindex
-```
-
+5. Completá el reindexado de embeddings antes de volver a confiar en búsquedas semánticas sobre datos existentes. La operación de reindexado forma parte del procedimiento de upgrade porque los vectores generados con el modelo anterior no son comparables con los del modelo 2.0.0.
 6. Reiniciá el agente/MCP y verificá una recuperación histórica y una búsqueda semántica antes de considerar completado el upgrade.
 
 **No omitas el backup, las migraciones ni el reindexado.** Una instalación 1.x puede contener datos y embeddings que no deben reinterpretarse como si hubieran sido generados por el modelo de 2.0.0.
