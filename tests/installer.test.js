@@ -453,4 +453,14 @@ describe("installer", () => {
     assert.equal(config.mcpServers.other.command, "other");
     assert.equal(config.mcpServers["conversation-memory"].command, "npx");
   });
+
+  it("injects the per-turn save policy with a duplicate guard", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "conversation-memory-"));
+    install({ cwd, agent: "copilot" });
+    const policy = readFileSync(join(cwd, ".github", "copilot-instructions.md"), "utf8");
+    assert.match(policy, /## Guardado por turno/);
+    assert.match(policy, /saveMessage/);
+    assert.match(policy, /relatedMessageId/);
+    assert.match(policy, /plugin\/hook de captura automática/);
+  });
 });
