@@ -112,6 +112,12 @@ describe("Embedding Worker", function () {
     embeddingQueue.addTask(task);
     embeddingQueue.addTask(task);
 
+    // Este test verifica la deduplicación de la cola en memoria. El worker, si el
+    // batch no se llena con la cola, además consulta TODA la base por mensajes
+    // pendientes de embedding (otras suites, residuos): eso haría que el batch no
+    // sea solo la tarea duplicada. Se anula ese fallback para aislar la unidad.
+    sinon.stub(db, "allAsync").resolves([]);
+
     const generateEmbeddings = sinon.stub(embeddingService, "generateEmbeddings")
       .resolves([JSON.stringify(fakeEmbedding(0.25))]);
     const saveEmbedding = sinon.stub(embeddingService, "saveEmbedding").resolves();

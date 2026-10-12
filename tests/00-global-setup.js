@@ -40,7 +40,12 @@ async function ensureSchema() {
   try {
     const client = await bootstrap.connect();
     try {
-      await client.query(`CREATE SCHEMA IF NOT EXISTS "${TEST_SCHEMA}"`);
+      // Reset duro: cada corrida arranca de un schema vacío aunque la anterior
+      // haya muerto a mitad (Ctrl+C/timeout). Sin esto, los residuos de corridas
+      // previas quedan como conversaciones sin embedding y el worker los mete en
+      // el batch de un test ajeno, volviendo flaky la suite.
+      await client.query(`DROP SCHEMA IF EXISTS "${TEST_SCHEMA}" CASCADE`);
+      await client.query(`CREATE SCHEMA "${TEST_SCHEMA}"`);
     } finally {
       client.release();
     }
