@@ -20,7 +20,9 @@ export function resolveProjectName(raw) {
 }
 
 export function resolveProjectIdentity(projectId, fallbackPath) {
+  const fromPath = resolveProjectName(baseName(fallbackPath));
+  if (fromPath) return fromPath;
   const stableId = typeof projectId === "string" ? projectId.trim() : "";
   if (stableId && !INVALID_PROJECT.test(stableId)) return stableId;
-  return resolveProjectName(baseName(fallbackPath));
+  return "";
 }
