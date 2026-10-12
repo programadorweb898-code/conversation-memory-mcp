@@ -15,10 +15,10 @@ function getGlobalDatabaseEnvFile() {
 function getDatabaseUrl() {
   if (process.env[DATABASE_URL_ENV]) return process.env[DATABASE_URL_ENV];
 
-  dotenv.config({ path: join(process.cwd(), ".env"), override: false });
+  dotenv.config({ path: join(process.cwd(), ".env"), override: false, quiet: true });
   if (process.env[DATABASE_URL_ENV]) return process.env[DATABASE_URL_ENV];
 
-  dotenv.config({ path: getGlobalDatabaseEnvFile(), override: false });
+  dotenv.config({ path: getGlobalDatabaseEnvFile(), override: false, quiet: true });
   return process.env[DATABASE_URL_ENV] || "";
 }
 

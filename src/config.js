@@ -4,7 +4,7 @@ const { join } = require("node:path");
 // Bootstrap único de variables de entorno para todos los módulos runtime.
 // Se ejecuta al cargar este módulo, antes de que cualquier consumidor lea
 // process.env durante su inicialización.
-dotenv.config({ path: join(process.cwd(), ".env"), override: false });
+dotenv.config({ path: join(process.cwd(), ".env"), override: false, quiet: true });
 
 const DEFAULT_PORT = 3000;
 const DEFAULT_OWNER = "local-user";

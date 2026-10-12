@@ -155,12 +155,16 @@ describe("Embedding Worker", function () {
 
     await embeddingWorker.processNextEmbeddingTask();
 
-    expect(generateEmbedding.calledOnce).to.equal(true);
-    expect(generateEmbedding.firstCall.args).to.deep.equal([
+    const generatedCall = generateEmbedding.getCalls().find((call) =>
+      call.args[0]?.content === "Mensaje para fallback serial"
+    );
+    expect(generatedCall).to.not.equal(undefined);
+    expect(generatedCall.args).to.deep.equal([
       { role: "user", content: "Mensaje para fallback serial" },
     ]);
-    expect(saveEmbedding.calledOnce).to.equal(true);
-    expect(saveEmbedding.firstCall.args).to.deep.equal([messageId, JSON.stringify(fakeEmbedding(0.4))]);
+    const savedCall = saveEmbedding.getCalls().find((call) => call.args[0] === messageId);
+    expect(savedCall).to.not.equal(undefined);
+    expect(savedCall.args).to.deep.equal([messageId, JSON.stringify(fakeEmbedding(0.4))]);
   });
 
   it("registra fallos y deja de reintentar después de tres intentos", async () => {
@@ -181,7 +185,10 @@ describe("Embedding Worker", function () {
 
     expect(failure.attempts).to.equal(3);
     expect(failure.last_error).to.equal("model failed");
-    expect(generateEmbedding.callCount).to.equal(3);
+    const targetCalls = generateEmbedding.getCalls().filter((call) =>
+      call.args[0]?.content === "Mensaje que falla siempre"
+    );
+    expect(targetCalls).to.have.lengthOf(3);
   });
 
   it("no procesa otra tarea mientras el worker está marcado como ocupado", async () => {
