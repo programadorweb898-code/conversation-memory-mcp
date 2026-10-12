@@ -488,8 +488,6 @@ describe("Search Sessions By Summary", function () {
       owner: ownerA,
     });
 
-    const history = result.history;
-
     expect(result).to.deep.equal({
       history: [],
       hasMore: false,

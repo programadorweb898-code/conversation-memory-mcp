@@ -41,7 +41,7 @@ describe("Database invariants", () => {
            VALUES ($1, $2, $3, 'user', $4, $5)`,
           [id, id, project, content, owner],
         );
-        expect.fail(`La inserción inválida para \${name} debería haber fallado`);
+        expect.fail(`La inserción inválida para ${name} debería haber fallado`);
       } catch (err) {
         expect(err.code).to.equal("23514");
       }
