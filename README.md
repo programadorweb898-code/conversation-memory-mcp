@@ -393,6 +393,22 @@ Las migraciones actuales forman parte del flujo numerado y se ejecutan mediante 
 
 Las migraciones históricas de una sola vez que ya fueron absorbidas por el esquema actual se eliminaron del repositorio para evitar scripts obsoletos y rutas de mantenimiento peligrosas.
 
+### Actualizar a una versión nueva
+
+Actualizar el paquete **no** migra el schema por sí solo: son dos pasos.
+
+1. Traer la versión nueva:
+   - ejecutado con `npx conversation-memory-mcp` (sin versión fija): al reiniciar el agente, `npx` descarga la última publicada;
+   - instalado global: `npm install -g conversation-memory-mcp@latest`;
+   - versión fija (pin) en la configuración: actualizá el pin o quitalo para seguir `@latest`.
+2. Migrar el schema:
+
+   ```bash
+   npx conversation-memory-mcp migrate
+   ```
+
+   Muestra el destino y pide confirmación; aplica solo las migraciones pendientes y es idempotente. Como alternativas, volver a correr `install` (migra al confirmar el destino) o definir `CONVERSATION_MEMORY_AUTO_MIGRATE=true` para que migre al arrancar.
+
 ### Chequeo de schema al arrancar
 
 Antes de servir, tanto `stdio.js` como `server.js` comparan las migraciones empaquetadas con `schema_migrations`:
@@ -401,8 +417,6 @@ Antes de servir, tanto `stdio.js` como `server.js` comparan las migraciones empa
 - **Atrasado y sin opt-in:** no arranca y muestra qué migración falta y el comando a correr (`npx conversation-memory-mcp migrate`). Evita el fallo tardío al escribir (por ejemplo `column project_path does not exist`) cuando se actualiza el paquete sin migrar.
 - **Atrasado con `CONVERSATION_MEMORY_AUTO_MIGRATE=true`:** aplica las pendientes solo, sin el gate interactivo; requiere que el rol de conexión tenga permisos DDL en runtime.
 - **No verificable** (base inalcanzable, timeout): avisa y arranca igual; el error se reporta por request.
-
-Al actualizar el paquete, corré `npx conversation-memory-mcp migrate` antes de reiniciar el agente.
 
 ### Tope de duración de las queries
 
