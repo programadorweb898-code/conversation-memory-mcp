@@ -3,7 +3,7 @@ const saveSessionSummary = require("./saveSessionSummary");
 const { db } = require("../database");
 const { resolveWriteOwner } = require("../context");
 
-async function finalizeSession({ sessionId, project, owner }) {
+async function finalizeSession({ sessionId, project, projectPath, owner }) {
   if (!project) throw new Error("El parámetro 'project' es obligatorio.");
   console.log(`Finalizando sesión: ${sessionId}`);
   const writeOwner = resolveWriteOwner(owner);
@@ -70,6 +70,7 @@ async function finalizeSession({ sessionId, project, owner }) {
   const saved = await saveSessionSummary({
     sessionId,
     project,
+    projectPath,
     owner: writeOwner,
     summary,
     lastProcessedSeqId: lastMessageSeqId,

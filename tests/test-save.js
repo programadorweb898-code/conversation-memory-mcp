@@ -258,4 +258,30 @@ describe('saveMessage', () => {
     const retrievedMessage = await db.getAsync(`SELECT * FROM conversations WHERE session_id = $1`, [sessionId]);
     expect(retrievedMessage).to.exist;
   });
+
+  it('should persist the project path when provided', async () => {
+    const sessionId = uuidv4();
+    testSessionIds.push(sessionId);
+
+    await saveMessage({
+      sessionId,
+      project: 'path-project',
+      projectPath: 'C:/repos/path-project',
+      role: 'user',
+      content: 'Hola con ruta',
+    });
+
+    const stored = await db.getAsync(`SELECT project_path FROM conversations WHERE session_id = $1`, [sessionId]);
+    expect(stored.project_path).to.equal('C:/repos/path-project');
+  });
+
+  it('should leave the project path as null when not provided', async () => {
+    const sessionId = uuidv4();
+    testSessionIds.push(sessionId);
+
+    await saveMessage({ sessionId, project: 'no-path-project', role: 'user', content: 'Sin ruta' });
+
+    const stored = await db.getAsync(`SELECT project_path FROM conversations WHERE session_id = $1`, [sessionId]);
+    expect(stored.project_path).to.be.null;
+  });
 });

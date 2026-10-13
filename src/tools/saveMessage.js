@@ -8,6 +8,7 @@ const { resolveWriteOwner } = require("../context");
 const SaveMessageSchema = z.object({
   sessionId: z.string().min(1),
   project: z.string().min(1),
+  projectPath: z.string().optional().nullable(),
   role: z.enum(["user", "assistant", "system"]),
   content: z.string().min(1),
   agentId: z.string().optional(),
@@ -45,7 +46,7 @@ function isMcpProtocolNoise(content) {
 
 async function saveMessage(params) {
   const validatedParams = SaveMessageSchema.parse(params);
-  const { sessionId, project, role, content, agentId, relatedMessageId, owner } = validatedParams;
+  const { sessionId, project, projectPath, role, content, agentId, relatedMessageId, owner } = validatedParams;
 
   if (isMcpProtocolNoise(content)) {
     console.log(`Skipping MCP protocol message: ${content}`);
@@ -82,13 +83,14 @@ async function saveMessage(params) {
     await client.query(
       `
         INSERT INTO conversations
-        (id, session_id, timestamp, project, role, content, agent_id, related_message_id, owner)
-        VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6, $7, $8)
+        (id, session_id, timestamp, project, project_path, role, content, agent_id, related_message_id, owner)
+        VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6, $7, $8, $9)
       `,
       [
         messageId,
         sessionId,
         project ?? null,
+        projectPath ?? null,
         role,
         content,
         agentId ?? null,

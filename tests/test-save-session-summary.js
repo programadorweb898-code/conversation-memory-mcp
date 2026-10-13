@@ -260,4 +260,38 @@ describe("Atomicidad de saveSessionSummary", function () {
     const embedding = await readEmbedding(sessionId);
     expect(leadingValues(embedding)[0]).to.be.closeTo(0.7, 0.001);
   });
+
+  it("guarda project_path y lo conserva cuando una actualización no lo provee", async () => {
+    const sessionId = `project-path-${uuidv4()}`;
+    sessions.push(sessionId);
+    const saveSessionSummary = loadSaveSessionSummary(sinon.stub().resolves(vector(0.5)));
+
+    await saveSessionSummary({
+      sessionId,
+      project: PROJECT,
+      projectPath: "C:/repos/app",
+      summary: "Resumen con ruta",
+      lastProcessedSeqId: 1,
+    });
+
+    let row = await db.getAsync(
+      `SELECT project_path FROM session_summaries WHERE session_id = $1`,
+      [sessionId]
+    );
+    expect(row.project_path).to.equal("C:/repos/app");
+
+    // Una actualización posterior sin projectPath no debe borrar la ruta ya conocida.
+    await saveSessionSummary({
+      sessionId,
+      project: PROJECT,
+      summary: "Resumen sin ruta",
+      lastProcessedSeqId: 2,
+    });
+
+    row = await db.getAsync(
+      `SELECT project_path FROM session_summaries WHERE session_id = $1`,
+      [sessionId]
+    );
+    expect(row.project_path).to.equal("C:/repos/app");
+  });
 });

@@ -33,8 +33,8 @@ function withScope(params) {
 }
 
 function createSaveSessionSummaryHandler(saveSummary = saveSessionSummary) {
-  return async ({ sessionId, project, summary }) => {
-    const saved = await saveSummary(withScope({ sessionId, project, summary }));
+  return async ({ sessionId, project, projectPath, summary }) => {
+    const saved = await saveSummary(withScope({ sessionId, project, projectPath, summary }));
     if (!saved) {
       return {
         isError: true,
@@ -65,13 +65,14 @@ Esta tool debe usarse únicamente para conservar el historial real de conversaci
   {
     sessionId: z.string().describe("ID de la sesión"),
     project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
+    projectPath: z.string().optional().describe("Ruta absoluta del proyecto (opcional; desambigua proyectos con el mismo nombre)"),
     role: z.string().describe("Rol del emisor (user/assistant)"),
     content: z.string().describe("Contenido del mensaje"),
     agentId: z.string().optional().describe("Identificador único del agente que genera el mensaje"),
     relatedMessageId: z.string().optional().describe("ID del mensaje relacionado (pregunta/respuesta)"),
   },
-  async ({ sessionId, project, role, content, agentId, relatedMessageId }) => {
-    const result = await saveMessage(withScope({ sessionId, project, role, content, agentId, relatedMessageId }));
+  async ({ sessionId, project, projectPath, role, content, agentId, relatedMessageId }) => {
+    const result = await saveMessage(withScope({ sessionId, project, projectPath, role, content, agentId, relatedMessageId }));
     const text = result?.messageId
       ? `Mensaje guardado correctamente. ID: ${result.messageId}`
       : "Mensaje guardado correctamente.";
@@ -218,6 +219,7 @@ REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícit
     {
       sessionId: z.string().describe("ID de la sesión"),
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
+      projectPath: z.string().optional().describe("Ruta absoluta del proyecto (opcional; desambigua proyectos con el mismo nombre)"),
       summary: z.string().describe("Contenido del resumen"),
     },
     saveSessionSummaryHandler
@@ -251,9 +253,10 @@ REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícit
     {
       sessionId: z.string().describe("ID de la sesión"),
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
+      projectPath: z.string().optional().describe("Ruta absoluta del proyecto (opcional; desambigua proyectos con el mismo nombre)"),
     },
-    async ({ sessionId, project }) => {
-      const result = await finalizeSession(withScope({ sessionId, project }));
+    async ({ sessionId, project, projectPath }) => {
+      const result = await finalizeSession(withScope({ sessionId, project, projectPath }));
       return { content: [{ type: "text", text: JSON.stringify(result) }] };
     }
   );

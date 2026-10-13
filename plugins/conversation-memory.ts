@@ -9,6 +9,10 @@ import { baseName, resolveProjectIdentity, resolveProjectName } from "./projectI
 
 const MCP_PREFIXES = ["conversation-memory-local_", "conversation-memory_"]
 
+// Solo estas tools aceptan/guardan `projectPath`; inyectárselo a otras (búsquedas,
+// borrados) sería un parámetro no declarado. El nombre llega con prefijo MCP.
+const PROJECT_PATH_TOOLS = new Set(["saveMessage", "saveSessionSummary", "finalizeSession"])
+
 const CONFIG_DIR = process.env.OPENCODE_CONFIG_DIR || join(homedir(), ".config", "opencode")
 const CACHE_FILE = join(CONFIG_DIR, "conversation-memory-cache.json")
 
@@ -197,9 +201,10 @@ async function log(client: any, level: string, message: string, extra?: unknown)
 }
 
 export const ConversationMemory: Plugin = async ({ client, project, directory }) => {
+  const fallbackProjectPath = String(project?.worktree || directory || "")
   const fallbackProjectName = resolveProjectIdentity(
     typeof project?.id === "string" ? project.id : "",
-    project?.worktree || directory || "",
+    fallbackProjectPath,
   )
   const mcpConfig = findMcpConfig(directory || "")
 
@@ -222,16 +227,24 @@ export const ConversationMemory: Plugin = async ({ client, project, directory })
   // son ubicaciones que pueden cambiar. Para sesiones de otros proyectos bajo el
   // mismo proceso, session.projectID tiene prioridad; el path queda como fallback
   // de compatibilidad cuando el ID no está disponible.
-  async function resolveProjectForSession(sessionID: string): Promise<string> {
+  //
+  // Además del nombre corto (legible pero potencialmente colisionable), se
+  // devuelve la ruta absoluta para poder detectar a posteriori dos repositorios
+  // distintos que comparten basename.
+  async function resolveProjectForSession(
+    sessionID: string,
+  ): Promise<{ projectName: string; projectPath: string }> {
     try {
       const res: any = await client.session.get({ path: { id: sessionID } })
-      const sessionDirectory = res?.data?.directory
+      const sessionDirectory = typeof res?.data?.directory === "string" ? res.data.directory : ""
       const sessionProjectId = res?.data?.projectID ?? res?.data?.projectId
       const resolved = resolveProjectIdentity(
         typeof sessionProjectId === "string" ? sessionProjectId : "",
         sessionDirectory || "",
       )
-      if (resolved) return resolved
+      if (resolved) {
+        return { projectName: resolved, projectPath: sessionDirectory || fallbackProjectPath }
+      }
       if (sessionDirectory) {
         console.error(
           `[conversation-memory] directorio de sesión inválido como proyecto: ${JSON.stringify(sessionDirectory)}`
@@ -243,14 +256,15 @@ export const ConversationMemory: Plugin = async ({ client, project, directory })
         error instanceof Error ? error.message : String(error)
       )
     }
-    return fallbackProjectName
+    return { projectName: fallbackProjectName, projectPath: fallbackProjectPath }
   }
 
   async function savePending(sessionID: string): Promise<void> {
     if (!fallbackProjectName || !mcpConfig) return
 
-    const projectName = await resolveProjectForSession(sessionID)
+    const { projectName, projectPath } = await resolveProjectForSession(sessionID)
     if (!projectName) return
+    const pathArg = projectPath ? { projectPath } : {}
 
     try {
       const res: any = await client.session.messages({ path: { id: sessionID } })
@@ -279,6 +293,7 @@ export const ConversationMemory: Plugin = async ({ client, project, directory })
           const mcpId = await callSaveMessage(mcpConfig!, {
             sessionId: sessionID,
             project: projectName,
+            ...pathArg,
             role: "user",
             content: text,
             agentId: currentAgent,
@@ -292,6 +307,7 @@ export const ConversationMemory: Plugin = async ({ client, project, directory })
           const mcpId = await callSaveMessage(mcpConfig!, {
             sessionId: sessionID,
             project: projectName,
+            ...pathArg,
             role: "assistant",
             content: text,
             // Cada mensaje assistant trae su propio agent: usar el del mensaje
@@ -334,10 +350,17 @@ export const ConversationMemory: Plugin = async ({ client, project, directory })
       if (!fallbackProjectName) return
       if (!MCP_PREFIXES.some((prefix) => input.tool.startsWith(prefix))) return
       const args = output.args ?? {}
+      let changed = false
       if (!args.project) {
         args.project = fallbackProjectName
-        output.args = args
+        changed = true
       }
+      const toolName = input.tool.replace(/^conversation-memory(?:-local)?_/, "")
+      if (PROJECT_PATH_TOOLS.has(toolName) && !args.projectPath && fallbackProjectPath) {
+        args.projectPath = fallbackProjectPath
+        changed = true
+      }
+      if (changed) output.args = args
     },
   }
 }

@@ -13,7 +13,7 @@ const { resolveWriteOwner } = require("../context");
  * embedding, para que dos llamadas concurrentes no dejen el vector de un
  * resumen viejo pegado al resumen nuevo.
  */
-async function saveSessionSummary({ sessionId, project, summary, lastProcessedSeqId, owner }) {
+async function saveSessionSummary({ sessionId, project, projectPath, summary, lastProcessedSeqId, owner }) {
   if (!project) throw new Error("El parámetro 'project' es obligatorio.");
 
   try {
@@ -39,10 +39,11 @@ async function saveSessionSummary({ sessionId, project, summary, lastProcessedSe
       }
 
       const summarySql = `
-        INSERT INTO session_summaries (session_id, project, owner, summary, last_processed_seq_id, timestamp)
-        VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+        INSERT INTO session_summaries (session_id, project, project_path, owner, summary, last_processed_seq_id, timestamp)
+        VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
         ON CONFLICT(session_id, owner) DO UPDATE SET
           project = EXCLUDED.project,
+          project_path = COALESCE(EXCLUDED.project_path, session_summaries.project_path),
           owner = EXCLUDED.owner,
           summary = EXCLUDED.summary,
           last_processed_seq_id = EXCLUDED.last_processed_seq_id,
@@ -58,6 +59,7 @@ async function saveSessionSummary({ sessionId, project, summary, lastProcessedSe
       const summaryResult = await client.query(summarySql, [
         sessionId,
         project,
+        projectPath ?? null,
         writeOwner,
         summary,
         lastProcessedSeqId,

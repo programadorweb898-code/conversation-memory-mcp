@@ -3,7 +3,7 @@
 -- lexical fallback; composite B-tree indexes cover project/owner/session
 -- filtering together with sequence/timestamp ordering.
 
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
 
 CREATE INDEX IF NOT EXISTS idx_conversations_session_project_owner_sequence
   ON conversations(session_id, project, owner, sequence_id ASC);
