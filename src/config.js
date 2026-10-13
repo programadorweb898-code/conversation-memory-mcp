@@ -107,6 +107,7 @@ function getConfig() {
       queryTimeoutMs: readPositiveInteger("CONVERSATION_MEMORY_QUERY_TIMEOUT_MS", DEFAULT_QUERY_TIMEOUT_MS),
       connectTimeoutMs: readPositiveInteger("CONVERSATION_MEMORY_CONNECT_TIMEOUT_MS", 10000),
       keepaliveDelayMs: readPositiveInteger("CONVERSATION_MEMORY_KEEPALIVE_DELAY_MS", 30000),
+      autoMigrate: readBoolean("CONVERSATION_MEMORY_AUTO_MIGRATE", false),
       searchPath: readSearchPath(),
       sslRejectUnauthorized: readBoolean("PGSSL_REJECT_UNAUTHORIZED", true),
     },

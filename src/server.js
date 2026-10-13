@@ -2,6 +2,7 @@ const { startWorker, stopWorker } = require("./services/embeddingWorker");
 const { getConfig } = require("./config");
 const app = require("./app");
 const { db } = require("./database");
+const { guardStartupSchema } = require("./schemaGuard");
 
 const { closeMcpRoutes } = app;
 
@@ -24,6 +25,19 @@ async function startServer() {
   if (!getConfig().server.bearerToken) {
     console.error("Fatal error: MCP_BEARER_TOKEN environment variable is required.");
     process.exit(1);
+  }
+
+  // Igual que en stdio: no servir con un schema atrasado (el guardado fallaría
+  // al escribir). Fatal solo si está desactualizado; si no se puede verificar,
+  // se avisa y se sigue.
+  try {
+    await guardStartupSchema();
+  } catch (error) {
+    if (error.code === "SCHEMA_OUTDATED") {
+      console.error(error.message);
+      process.exit(1);
+    }
+    throw error;
   }
 
   const PORT = getConfig().server.port;

@@ -53,7 +53,7 @@ Primero instalá y confirmá el destino dedicado:
 npx conversation-memory-mcp install --agent opencode
 ```
 
-Después, el cliente inicia `npx conversation-memory-mcp` por stdio. Ese arranque requiere `CONVERSATION_MEMORY_DATABASE_URL`, pero no ejecuta migraciones. `MCP_DEFAULT_OWNER` es opcional y usa `local-user` por defecto.
+Después, el cliente inicia `npx conversation-memory-mcp` por stdio. Ese arranque requiere `CONVERSATION_MEMORY_DATABASE_URL`. No aplica migraciones por su cuenta: verifica que el schema esté al día y, si falta alguna, no arranca y pide correr `npx conversation-memory-mcp migrate` (salvo que definas `CONVERSATION_MEMORY_AUTO_MIGRATE=true`). `MCP_DEFAULT_OWNER` es opcional y usa `local-user` por defecto.
 
 ### Windows PowerShell
 
@@ -77,7 +77,7 @@ En scope de proyecto, la URL se guarda en el `.env` del proyecto. En scope globa
 
 El instalador muestra host, base y schema, y pide confirmar que la base está dedicada exclusivamente a Conversation Memory antes de ejecutar migraciones. No adopta `DATABASE_URL` de la aplicación anfitriona.
 
-El arranque stdio no ejecuta migraciones. Para una actualización manual, `npm run migrate` también muestra el destino y pide confirmación. Las migraciones normales son idempotentes y usan un advisory lock de PostgreSQL.
+El arranque stdio no aplica migraciones por su cuenta: compara las migraciones empaquetadas con `schema_migrations` y, si falta alguna, se niega a arrancar con el comando a correr. Con `CONVERSATION_MEMORY_AUTO_MIGRATE=true` las aplica solo al arrancar (requiere permisos DDL en runtime). Para una actualización manual, `npm run migrate` también muestra el destino y pide confirmación. Las migraciones normales son idempotentes y usan un advisory lock de PostgreSQL.
 
 Las migraciones históricas de una sola vez que ya fueron absorbidas por el esquema actual se eliminaron del repositorio. Las migraciones actuales se ejecutan mediante `npx conversation-memory-mcp migrate` con confirmación explícita del destino.
 

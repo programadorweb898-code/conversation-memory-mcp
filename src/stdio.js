@@ -13,12 +13,26 @@ const { createMcpServer } = require("./createMcpServer");
 const { startWorker, stopWorker } = require("./services/embeddingWorker");
 const { db } = require("./database");
 const { getDatabaseUrl } = require("./databaseConfig");
+const { guardStartupSchema } = require("./schemaGuard");
 
 
 async function startStdioServer({ processRef = process } = {}) {
   if (!getDatabaseUrl()) {
     console.error("Fatal error: CONVERSATION_MEMORY_DATABASE_URL environment variable is required. Run `conversation-memory-mcp install` first.");
     process.exit(1);
+  }
+
+  // Antes de servir: si el schema quedó atrás respecto al código, un guardado
+  // fallaría en el momento de escribir. Falla acá, con la acción concreta, o
+  // migra solo si CONVERSATION_MEMORY_AUTO_MIGRATE=true.
+  try {
+    await guardStartupSchema();
+  } catch (error) {
+    if (error.code === "SCHEMA_OUTDATED") {
+      console.error(error.message);
+      process.exit(1);
+    }
+    throw error;
   }
 
   const server = createMcpServer();

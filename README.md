@@ -393,6 +393,17 @@ Las migraciones actuales forman parte del flujo numerado y se ejecutan mediante 
 
 Las migraciones históricas de una sola vez que ya fueron absorbidas por el esquema actual se eliminaron del repositorio para evitar scripts obsoletos y rutas de mantenimiento peligrosas.
 
+### Chequeo de schema al arrancar
+
+Antes de servir, tanto `stdio.js` como `server.js` comparan las migraciones empaquetadas con `schema_migrations`:
+
+- **Al día:** arranca normal.
+- **Atrasado y sin opt-in:** no arranca y muestra qué migración falta y el comando a correr (`npx conversation-memory-mcp migrate`). Evita el fallo tardío al escribir (por ejemplo `column project_path does not exist`) cuando se actualiza el paquete sin migrar.
+- **Atrasado con `CONVERSATION_MEMORY_AUTO_MIGRATE=true`:** aplica las pendientes solo, sin el gate interactivo; requiere que el rol de conexión tenga permisos DDL en runtime.
+- **No verificable** (base inalcanzable, timeout): avisa y arranca igual; el error se reporta por request.
+
+Al actualizar el paquete, corré `npx conversation-memory-mcp migrate` antes de reiniciar el agente.
+
 ### Tope de duración de las queries
 
 Por default cada statement tiene 60s de tope, aplicado por el servidor con

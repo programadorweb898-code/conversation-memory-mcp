@@ -17,12 +17,17 @@ function loadStdioWithDependencies({
   stopWorker,
   StdioServerTransport,
   databaseDb,
+  guardStartupSchema = async () => ({ status: 'ok' }),
 }) {
   const originalLoad = Module._load;
 
   Module._load = function patchedLoad(request, parent, isMain) {
     if (request === './createMcpServer' && parent?.filename?.endsWith(`${require('path').sep}src${require('path').sep}stdio.js`)) {
       return { ...createMcp, createMcpServer };
+    }
+
+    if (request === './schemaGuard' && parent?.filename?.endsWith(`${require('path').sep}src${require('path').sep}stdio.js`)) {
+      return { guardStartupSchema };
     }
 
     if (request === './services/embeddingWorker' && parent?.filename?.endsWith(`${require('path').sep}src${require('path').sep}stdio.js`)) {
@@ -105,6 +110,38 @@ describe('stdio server', () => {
     expect(thrownError).to.equal(fatalExit);
     expect(exitStub.calledWith(1)).to.be.true;
     expect(errorStub.calledWith('Fatal error: CONVERSATION_MEMORY_DATABASE_URL environment variable is required. Run `conversation-memory-mcp install` first.')).to.be.true;
+  });
+
+  it('should fail fast when the schema is outdated', async () => {
+    process.env.CONVERSATION_MEMORY_DATABASE_URL = 'postgresql://test';
+    const fatalExit = new Error('process.exit called');
+    const exitStub = sinon.stub(process, 'exit').callsFake(() => {
+      throw fatalExit;
+    });
+    const errorStub = sinon.stub(console, 'error');
+    const schemaError = Object.assign(
+      new Error('Schema desactualizado: faltan 1 migración(es): 014_project_path.sql.'),
+      { code: 'SCHEMA_OUTDATED' },
+    );
+
+    const { startStdioServer } = loadStdioWithDependencies({
+      createMcpServer: sinon.stub(),
+      startWorker: sinon.stub(),
+      StdioServerTransport: sinon.stub(),
+      databaseDb,
+      guardStartupSchema: sinon.stub().rejects(schemaError),
+    });
+
+    let thrownError;
+    try {
+      await startStdioServer({ processRef });
+    } catch (error) {
+      thrownError = error;
+    }
+
+    expect(thrownError).to.equal(fatalExit);
+    expect(exitStub.calledWith(1)).to.be.true;
+    expect(errorStub.calledWith(schemaError.message)).to.be.true;
   });
 
   it('should connect over stdio and start embeddings worker without running migrations', async () => {
