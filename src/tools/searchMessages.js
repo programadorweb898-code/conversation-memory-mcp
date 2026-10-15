@@ -4,6 +4,7 @@ const embeddingService = require("../services/embeddingService");
 const removeStopwords = require("../services/stopwords");
 const { lexicalSearch, countEmbeddings } = require("../services/lexicalSearch");
 const { config } = require("../config");
+const { fuseSearchResults } = require("../services/searchFusion");
 
 const SearchMessagesSchema = z.object({
   searchTerm: z.string().optional(),
@@ -93,6 +94,7 @@ async function searchMessages(params) {
     try {
       queryEmbeddingJson = await embeddingService.generateEmbedding({
         role: "query",
+        inputType: "query",
         content: semanticSearchTerm,
       });
     } catch (error) {
@@ -151,11 +153,8 @@ async function searchMessages(params) {
       .filter((result) => result.lexicalScore > 0 || result.semanticScore >= threshold)
       .sort((a, b) => b.similarity - a.similarity);
 
-    if (filteredResults.length > 0) {
-      return filteredResults;
-    }
-
-    return await fallbackToLexical();
+    const lexicalResults = await fallbackToLexical();
+    return fuseSearchResults(filteredResults, lexicalResults, config.searchLimit);
   } catch (err) {
     console.error("Error searching messages:", err.message);
     throw err;

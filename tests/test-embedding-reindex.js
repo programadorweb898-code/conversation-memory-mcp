@@ -16,6 +16,8 @@ function createDbDouble({ messagePages = [], summaryPages = [] }) {
     queries,
     writes,
     allAsync: async (sql, params) => {
+      const placeholders = [...sql.matchAll(/\$(\d+)/g)].map((match) => Number(match[1]));
+      expect(Math.max(...placeholders)).to.equal(params.length);
       queries.push({ sql, params });
 
       if (sql.includes("FROM conversations c")) {
@@ -297,3 +299,4 @@ describe("Reindex CLI", () => {
     expect(() => parseArgs(["--wat"])).to.throw("Opción desconocida");
   });
 });
+

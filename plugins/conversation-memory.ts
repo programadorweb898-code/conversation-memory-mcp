@@ -259,11 +259,21 @@ export const ConversationMemory: Plugin = async ({ client, project, directory })
     return { projectName: fallbackProjectName, projectPath: fallbackProjectPath }
   }
 
-  async function savePending(sessionID: string): Promise<void> {
-    if (!fallbackProjectName || !mcpConfig) return
+  const pendingSaves = new Map<string, Promise<boolean>>()
+
+  async function savePending(sessionID: string): Promise<boolean> {
+    const pending = pendingSaves.get(sessionID)
+    if (pending) return pending
+    const task = savePendingOnce(sessionID).finally(() => pendingSaves.delete(sessionID))
+    pendingSaves.set(sessionID, task)
+    return task
+  }
+
+  async function savePendingOnce(sessionID: string): Promise<boolean> {
+    if (!fallbackProjectName || !mcpConfig) return false
 
     const { projectName, projectPath } = await resolveProjectForSession(sessionID)
-    if (!projectName) return
+    if (!projectName) return false
     const pathArg = projectPath ? { projectPath } : {}
 
     try {
@@ -287,18 +297,19 @@ export const ConversationMemory: Plugin = async ({ client, project, directory })
             continue
           }
           if (saveCache.has(sessionID, info.id)) {
-            mcpIdByOpenCodeId.set(info.id, "")
+            mcpIdByOpenCodeId.set(info.id, saveCache.getMessageId(sessionID, info.id) ?? "")
             continue
           }
           const mcpId = await callSaveMessage(mcpConfig!, {
             sessionId: sessionID,
+            sourceMessageId: info.id,
             project: projectName,
             ...pathArg,
             role: "user",
             content: text,
             agentId: currentAgent,
           })
-          saveCache.mark(sessionID, info.id)
+          saveCache.mark(sessionID, info.id, mcpId)
           mcpIdByOpenCodeId.set(info.id, mcpId)
           savedCount++
         } else if (info.role === "assistant") {
@@ -306,6 +317,7 @@ export const ConversationMemory: Plugin = async ({ client, project, directory })
           const related = info.parentID ? mcpIdByOpenCodeId.get(info.parentID) : undefined
           const mcpId = await callSaveMessage(mcpConfig!, {
             sessionId: sessionID,
+            sourceMessageId: info.id,
             project: projectName,
             ...pathArg,
             role: "assistant",
@@ -316,7 +328,7 @@ export const ConversationMemory: Plugin = async ({ client, project, directory })
             agentId: info.agent || currentAgent,
             ...(related ? { relatedMessageId: related } : {}),
           })
-          saveCache.mark(sessionID, info.id)
+          saveCache.mark(sessionID, info.id, mcpId)
           mcpIdByOpenCodeId.set(info.id, mcpId)
           savedCount++
         }

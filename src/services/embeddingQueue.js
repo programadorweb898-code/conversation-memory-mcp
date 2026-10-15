@@ -5,6 +5,12 @@ const { getConfig } = require("../config");
 const embeddingQueue = [];
 let processing = false; // Flag to prevent multiple workers processing the queue
 const maxQueueSize = getConfig().embeddings.queueMaxSize;
+const taskListeners = new Set();
+
+function onTask(listener) {
+  taskListeners.add(listener);
+  return () => taskListeners.delete(listener);
+}
 
 /**
  * Adds a task to the embedding queue.
@@ -19,6 +25,7 @@ function addTask(task) {
     return false;
   }
   embeddingQueue.push(task);
+  for (const listener of taskListeners) listener();
   console.log(`Task added to embedding queue: ${task.messageId}. Queue size: ${embeddingQueue.length}`);
   return true;
 }
@@ -76,4 +83,6 @@ module.exports = {
   size,
   setProcessingStatus,
   getProcessingStatus,
+  onTask,
 };
+

@@ -362,7 +362,7 @@ Los módulos de runtime consumen esa configuración en lugar de interpretar dire
 Scripts principales:
 
 ```bash
-npm test
+TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/conversation_memory_test npm test
 npm run lint
 npm run check
 npx conversation-memory-mcp migrate
@@ -461,3 +461,4 @@ Historial conversacional persistente
 ```
 
 La memoria técnica, las decisiones durables y otros sistemas externos de memoria quedan fuera del alcance de este proyecto y deben ser responsabilidad de herramientas o MCP independientes.
+

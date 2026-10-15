@@ -2,11 +2,13 @@ const generateSessionSummary = require("./generateSessionSummary");
 const saveSessionSummary = require("./saveSessionSummary");
 const { db } = require("../database");
 const { resolveWriteOwner } = require("../context");
+const { getSessionRevision } = require("../services/sessionRevision");
 
 async function finalizeSession({ sessionId, project, projectPath, owner }) {
   if (!project) throw new Error("El parámetro 'project' es obligatorio.");
   console.log(`Finalizando sesión: ${sessionId}`);
   const writeOwner = resolveWriteOwner(owner);
+  const sourceRevision = await getSessionRevision(sessionId, writeOwner);
 
   const existingSession = await db.getAsync(
     "SELECT project FROM conversations WHERE session_id = $1 AND owner = $2 LIMIT 1",
@@ -74,6 +76,7 @@ async function finalizeSession({ sessionId, project, projectPath, owner }) {
     owner: writeOwner,
     summary,
     lastProcessedSeqId: lastMessageSeqId,
+    sourceRevision,
   });
 
   if (!saved) {
@@ -83,9 +86,10 @@ async function finalizeSession({ sessionId, project, projectPath, owner }) {
     );
 
     return {
-      summary: latest?.summary ?? summary,
-      summaryGenerated: true,
-      summaryPending: false,
+      summary: latest?.summary ?? null,
+      summaryGenerated: Boolean(latest),
+      summaryPending: !latest,
+      reason: latest ? undefined : "session_changed",
       staleWriteSkipped: true,
     };
   }
@@ -98,3 +102,4 @@ async function finalizeSession({ sessionId, project, projectPath, owner }) {
 }
 
 module.exports = finalizeSession;
+

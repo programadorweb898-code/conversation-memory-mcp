@@ -246,6 +246,26 @@ describe("Embedding Worker", function () {
   });
 
   describe("startWorker", () => {
+    it("10: adding a task wakes an idle worker immediately and unsubscribes on stop", async () => {
+      const timer = { unref() {} };
+      const schedule = sinon.stub(global, "setTimeout").returns(timer);
+      const cancel = sinon.stub(global, "clearTimeout");
+      try {
+        embeddingWorker.startWorker();
+        embeddingQueue.addTask({ messageId: "wake-test", role: "user", content: "Queued message" });
+        expect(schedule.lastCall.args[1]).to.equal(0);
+        expect(cancel.called).to.equal(true);
+        await embeddingWorker.stopWorker();
+        const calls = schedule.callCount;
+        embeddingQueue.addTask({ messageId: "stopped-test", role: "user", content: "Queued message" });
+        expect(schedule.callCount).to.equal(calls);
+      } finally {
+        await embeddingWorker.stopWorker();
+        schedule.restore(); cancel.restore();
+        while (!embeddingQueue.isEmpty()) embeddingQueue.getNextTask();
+      }
+    });
+
     it("waits for an active batch when stopping despite repeated ticks", async () => {
       await insertMessage("Mensaje para validar el apagado del worker");
 
@@ -384,3 +404,4 @@ describe("Embedding Worker", function () {
     });
   });
 });
+

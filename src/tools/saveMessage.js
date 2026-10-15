@@ -13,6 +13,7 @@ const SaveMessageSchema = z.object({
   content: z.string().min(1),
   agentId: z.string().optional(),
   relatedMessageId: z.string().optional().nullable(),
+  sourceMessageId: z.string().min(1).optional(),
   owner: z.string().optional(),
 });
 
@@ -46,7 +47,7 @@ function isMcpProtocolNoise(content) {
 
 async function saveMessage(params) {
   const validatedParams = SaveMessageSchema.parse(params);
-  const { sessionId, project, projectPath, role, content, agentId, relatedMessageId, owner } = validatedParams;
+  const { sessionId, project, projectPath, role, content, agentId, relatedMessageId, sourceMessageId, owner } = validatedParams;
 
   if (isMcpProtocolNoise(content)) {
     console.log(`Skipping MCP protocol message: ${content}`);
@@ -61,7 +62,8 @@ async function saveMessage(params) {
     throw error;
   }
 
-  const messageId = randomUUID();
+  let messageId = randomUUID();
+  let inserted = false;
   const writeOwner = resolveWriteOwner(owner);
 
   // La validación de proyecto/owner y el INSERT deben ser atómicos respecto de
@@ -80,11 +82,33 @@ async function saveMessage(params) {
       throw error;
     }
 
+    if (sourceMessageId) {
+      const previous = await client.query(
+        `SELECT id, role, content, related_message_id FROM conversations
+         WHERE owner = $1 AND project = $2 AND session_id = $3 AND source_message_id = $4`,
+        [writeOwner, project, sessionId, sourceMessageId]
+      );
+      const existing = previous.rows[0];
+      if (existing) {
+        if (existing.role !== role || existing.content !== content ||
+            (relatedMessageId && existing.related_message_id && existing.related_message_id !== relatedMessageId)) {
+          const error = new Error("sourceMessageId ya identifica otro contenido o vínculo.");
+          error.code = "IDEMPOTENCY_CONFLICT";
+          throw error;
+        }
+        messageId = existing.id;
+        if (relatedMessageId && !existing.related_message_id) {
+          await client.query("UPDATE conversations SET related_message_id = $1 WHERE id = $2", [relatedMessageId, messageId]);
+        }
+        return;
+      }
+    }
+
     await client.query(
       `
         INSERT INTO conversations
-        (id, session_id, timestamp, project, project_path, role, content, agent_id, related_message_id, owner)
-        VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6, $7, $8, $9)
+        (id, session_id, timestamp, project, project_path, role, content, agent_id, related_message_id, owner, source_message_id)
+        VALUES ($1, $2, CURRENT_TIMESTAMP, $3, $4, $5, $6, $7, $8, $9, $10)
       `,
       [
         messageId,
@@ -95,13 +119,15 @@ async function saveMessage(params) {
         content,
         agentId ?? null,
         relatedMessageId ?? null,
-        writeOwner
+        writeOwner,
+        sourceMessageId ?? null
       ]
     );
+    inserted = true;
   });
 
   const embeddable = isEmbeddingsEnabled() ? prepareForEmbedding(content) : null;
-  if (embeddable) {
+  if (inserted && embeddable) {
     embeddingQueue.addTask({ messageId, content: embeddable, role });
     console.log(`Embedding task for message ${messageId} queued.`);
   }
@@ -112,3 +138,4 @@ async function saveMessage(params) {
 module.exports = saveMessage;
 module.exports.saveMessage = saveMessage;
 module.exports.SaveMessageSchema = SaveMessageSchema;
+

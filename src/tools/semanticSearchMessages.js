@@ -2,6 +2,7 @@ const { db } = require("../database");
 const embeddingService = require("../services/embeddingService");
 const { lexicalSearch, countEmbeddings } = require("../services/lexicalSearch");
 const { config } = require("../config");
+const { fuseSearchResults } = require("../services/searchFusion");
 
 async function semanticSearchMessages({ query, project, agentId, limit = 5, owner }) {
   if (!query) throw new Error("La consulta no puede estar vacía.");
@@ -37,6 +38,7 @@ async function semanticSearchMessages({ query, project, agentId, limit = 5, owne
   try {
     queryEmbeddingJson = await embeddingService.generateEmbedding({
       role: "search",
+      inputType: "query",
       content: query,
     });
   } catch (error) {
@@ -80,10 +82,8 @@ async function semanticSearchMessages({ query, project, agentId, limit = 5, owne
 
   const results = await db.allAsync(sql, params);
 
-  if (results.length > 0) {
-    return results;
-  }
-  return await fallbackToLexical();
+  return fuseSearchResults(results, await fallbackToLexical(), effectiveLimit);
 }
 
 module.exports = semanticSearchMessages;
+
