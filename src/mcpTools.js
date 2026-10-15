@@ -38,7 +38,7 @@ function createSaveSessionSummaryHandler(saveSummary = saveSessionSummary) {
     if (!saved) {
       return {
         isError: true,
-        content: [{ type: "text", text: "No se guardó el resumen porque su watermark no avanzó." }],
+        content: [{ type: "text", text: "No se guardó el resumen: cambió la sesión o existe una versión más reciente. Volvé a leerla antes de reintentar." }],
       };
     }
 
@@ -70,9 +70,10 @@ Esta tool debe usarse únicamente para conservar el historial real de conversaci
     content: z.string().describe("Contenido del mensaje"),
     agentId: z.string().optional().describe("Identificador único del agente que genera el mensaje"),
     relatedMessageId: z.string().optional().describe("ID del mensaje relacionado (pregunta/respuesta)"),
+    sourceMessageId: z.string().min(1).optional().describe("ID estable del mensaje en el cliente; permite reintentos sin duplicar el turno"),
   },
-  async ({ sessionId, project, projectPath, role, content, agentId, relatedMessageId }) => {
-    const result = await saveMessage(withScope({ sessionId, project, projectPath, role, content, agentId, relatedMessageId }));
+  async ({ sessionId, project, projectPath, role, content, agentId, relatedMessageId, sourceMessageId }) => {
+    const result = await saveMessage(withScope({ sessionId, project, projectPath, role, content, agentId, relatedMessageId, sourceMessageId }));
     const text = result?.messageId
       ? `Mensaje guardado correctamente. ID: ${result.messageId}`
       : "Mensaje guardado correctamente.";
@@ -130,7 +131,7 @@ La respuesta incluye hasMore y nextAfterSequenceId para facilitar la siguiente p
       query: z.string().describe("La consulta de búsqueda"),
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
       limit: z.number().int().positive().optional().describe("Número máximo de mensajes por página (por defecto: 100; sujeto a RECOVER_SESSION_LIMIT)"),
-      afterSequenceId: z.string().regex(/^\\d+$/).optional().describe("Cursor exclusivo: devuelve mensajes posteriores a este sequence_id"),
+      afterSequenceId: z.string().regex(/^\d+$/).optional().describe("Cursor exclusivo: devuelve mensajes posteriores a este sequence_id"),
     },
     async ({ query, project, limit, afterSequenceId }) => {
       const result = await searchSessionsBySummary(
@@ -198,16 +199,20 @@ REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícit
   // 7. getLastSessionContext
   registerTool(
     "getLastSessionContext",
-    `Recupera el historial completo de la última sesión.
+    `Recupera el resumen y los mensajes más recientes de la última sesión, en orden cronológico.
+La respuesta indica hasMore/truncated. Para recuperar mensajes anteriores, repetí la llamada con el sessionId devuelto y nextBeforeSequenceId como beforeSequenceId.
 Cada mensaje incluye agent_id para saber qué agente lo escribió.
 Sin agentId, la última sesión puede ser de cualquier agente; pasándolo, la última de ese agente.
 REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícitamente filtrar por agente. Un agentId no pedido puede devolver vacío aunque exista historia de otros agentes.`,
     {
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
       agentId: z.string().optional().describe("Filtrar por ID de agente (SOLO si el usuario lo pidió explícitamente; no lo uses en lecturas base)"),
+      sessionId: z.string().optional().describe("Sesión devuelta por la primera página; fija la sesión durante la paginación"),
+      beforeSequenceId: z.string().regex(/^\d+$/).optional().describe("Cursor exclusivo hacia mensajes anteriores"),
+      limit: z.number().int().positive().optional().describe("Tamaño de página, acotado por RECOVER_SESSION_LIMIT"),
     },
-    async ({ project, agentId }) => {
-      const context = await getLastSessionContext(withScope({ project, agentId }));
+    async ({ project, agentId, sessionId, beforeSequenceId, limit }) => {
+      const context = await getLastSessionContext(withScope({ project, agentId, sessionId, beforeSequenceId, limit }));
       return { content: [{ type: "text", text: JSON.stringify(context, null, 2) }] };
     }
   );
@@ -215,7 +220,7 @@ REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícit
   // 8. saveSessionSummary
   registerTool(
     "saveSessionSummary",
-    "Guarda o actualiza el resumen de una sesión",
+    "Guarda o actualiza un resumen manual que cubre los mensajes existentes al comenzar la operación. El servidor calcula el watermark y rechaza cambios concurrentes.",
     {
       sessionId: z.string().describe("ID de la sesión"),
       project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
@@ -307,3 +312,4 @@ REGLA: NO uses agentId en lecturas base. Usalo solo si el usuario pide explícit
 }
 
 module.exports = { createSaveSessionSummaryHandler, registerMcpTools, saveSessionSummaryHandler, withScope };
+
