@@ -1,6 +1,7 @@
 const { readFileSync } = require("node:fs")
 const { mkdir, rename, writeFile } = require("node:fs/promises")
 const { dirname, join } = require("node:path")
+const { randomUUID } = require("node:crypto")
 
 const DEFAULT_MAX_ENTRIES = 10000
 
@@ -10,7 +11,7 @@ function normalizeEntries(raw) {
   for (const [sessionID, messages] of Object.entries(raw)) {
     if (!messages || typeof messages !== "object" || Array.isArray(messages)) continue
     for (const [messageID, value] of Object.entries(messages)) {
-      if (value) entries.push([`${sessionID}\u0000${messageID}`, true])
+      if (value === true || typeof value === "string" && value.length > 0) entries.push([`${sessionID}\u0000${messageID}`, value])
     }
   }
   return entries
@@ -43,10 +44,10 @@ function createSaveCache(file, options = {}) {
     return cache.has(key(sessionID, messageID))
   }
 
-  function mark(sessionID, messageID) {
+  function mark(sessionID, messageID, mcpMessageId = true) {
     const cacheKey = key(sessionID, messageID)
     if (cache.has(cacheKey)) cache.delete(cacheKey)
-    cache.set(cacheKey, true)
+    cache.set(cacheKey, mcpMessageId)
 
     while (cache.size > maxEntries) {
       cache.delete(cache.keys().next().value)
@@ -55,20 +56,20 @@ function createSaveCache(file, options = {}) {
 
   function snapshot() {
     const result = {}
-    for (const cacheKey of cache.keys()) {
+    for (const [cacheKey, value] of cache) {
       const separator = cacheKey.indexOf("\u0000")
       if (separator === -1) continue
       const sessionID = cacheKey.slice(0, separator)
       const messageID = cacheKey.slice(separator + 1)
       result[sessionID] ??= {}
-      result[sessionID][messageID] = true
+      result[sessionID][messageID] = value
     }
     return result
   }
 
   function persist() {
     const data = JSON.stringify(snapshot(), null, 2)
-    const tempFile = join(dirname(file), `.${file.split(/[\\/]/).pop()}.tmp`)
+    const tempFile = join(dirname(file), `.${file.split(/[\\/]/).pop()}.${randomUUID()}.tmp`)
     persistChain = persistChain
       .catch(() => {})
       .then(async () => {
@@ -81,6 +82,10 @@ function createSaveCache(file, options = {}) {
 
   return {
     has,
+    getMessageId: (sessionID, messageID) => {
+      const value = cache.get(key(sessionID, messageID))
+      return typeof value === "string" ? value : undefined
+    },
     mark,
     persist,
     size: () => cache.size,
@@ -89,3 +94,4 @@ function createSaveCache(file, options = {}) {
 }
 
 module.exports = { createSaveCache, loadCache, DEFAULT_MAX_ENTRIES }
+
