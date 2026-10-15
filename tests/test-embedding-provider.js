@@ -16,6 +16,13 @@ function vector(start, length = DEFAULT_DIMENSIONS) {
 describe("Embedding Provider", function () {
   this.timeout(15000);
 
+  it("6: maps both query entrypoints to the E5 query prefix", () => {
+    const { getEmbeddingInputType } = require("../src/services/embeddingService");
+    expect(getEmbeddingInputType("query")).to.equal("query");
+    expect(getEmbeddingInputType("search")).to.equal("query");
+    expect(getEmbeddingInputType("assistant")).to.equal("passage");
+  });
+
   it("usa el modelo multilingüe E5 de 384 dimensiones", () => {
     const provider = createTransformersEmbeddingProvider();
     const metadata = provider.getMetadata();
@@ -140,3 +147,4 @@ describe("Embedding Provider", function () {
     expect(factoryCalls).to.equal(2);
   });
 });
+
