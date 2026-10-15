@@ -1,6 +1,7 @@
-const { withAdvisoryLock } = require("../database");
+const { db, withAdvisoryLock } = require("../database");
 const { generateEmbedding, isEmbeddingsEnabled } = require("../services/embeddingService");
 const { resolveWriteOwner } = require("../context");
+const { getSessionRevision } = require("../services/sessionRevision");
 
 /**
  * Guarda o actualiza el resumen de una sesión específica y su embedding.
@@ -13,17 +14,44 @@ const { resolveWriteOwner } = require("../context");
  * embedding, para que dos llamadas concurrentes no dejen el vector de un
  * resumen viejo pegado al resumen nuevo.
  */
-async function saveSessionSummary({ sessionId, project, projectPath, summary, lastProcessedSeqId, owner }) {
+async function saveSessionSummary({ sessionId, project, projectPath, summary, lastProcessedSeqId, owner, sourceRevision }) {
   if (!project) throw new Error("El parámetro 'project' es obligatorio.");
 
   try {
     const writeOwner = resolveWriteOwner(owner);
+    const expectedRevision = sourceRevision ?? await getSessionRevision(sessionId, writeOwner);
+    const manual = lastProcessedSeqId === undefined || lastProcessedSeqId === null;
+    let previousSummary;
+    if (manual) {
+      previousSummary = await db.getAsync(
+        "SELECT summary, last_processed_seq_id FROM session_summaries WHERE session_id = $1 AND owner = $2",
+        [sessionId, writeOwner]
+      );
+      const latest = await db.getAsync(
+        "SELECT COALESCE(MAX(sequence_id), 0)::text AS watermark FROM conversations WHERE session_id = $1 AND owner = $2 AND project = $3",
+        [sessionId, writeOwner, project]
+      );
+      lastProcessedSeqId = latest.watermark;
+    }
 
     const embedding = isEmbeddingsEnabled()
       ? await generateEmbedding({ role: "session_summary", content: summary })
       : null;
 
     return await withAdvisoryLock(`save-summary-session:${writeOwner}:${sessionId}`, async (client) => {
+      // Same database lock as the deletion trigger, across all server instances.
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`summary-source:${writeOwner}:${sessionId}`]);
+      const revision = await getSessionRevision(sessionId, writeOwner, async (sql, params) =>
+        (await client.query(sql, params)).rows[0]);
+      if (revision !== String(expectedRevision)) return false;
+      if (manual) {
+        const current = (await client.query(
+          "SELECT summary, last_processed_seq_id FROM session_summaries WHERE session_id = $1 AND owner = $2",
+          [sessionId, writeOwner]
+        )).rows[0];
+        if ((current?.summary ?? null) !== (previousSummary?.summary ?? null) ||
+            String(current?.last_processed_seq_id ?? "") !== String(previousSummary?.last_processed_seq_id ?? "")) return false;
+      }
       const existingSession = await client.query(
         `SELECT project FROM conversations WHERE session_id = $1 AND owner = $2 LIMIT 1`,
         [sessionId, writeOwner]
@@ -52,6 +80,7 @@ async function saveSessionSummary({ sessionId, project, projectPath, summary, la
           AND (
             session_summaries.last_processed_seq_id IS NULL
             OR EXCLUDED.last_processed_seq_id > session_summaries.last_processed_seq_id
+            OR ($7::boolean AND EXCLUDED.last_processed_seq_id = session_summaries.last_processed_seq_id)
           )
         RETURNING session_id
       `;
@@ -63,6 +92,7 @@ async function saveSessionSummary({ sessionId, project, projectPath, summary, la
         writeOwner,
         summary,
         lastProcessedSeqId,
+        manual,
       ]);
 
       if (summaryResult.rowCount === 0) {
@@ -79,6 +109,8 @@ async function saveSessionSummary({ sessionId, project, projectPath, summary, la
            ON CONFLICT(session_id, owner) DO UPDATE SET embedding = EXCLUDED.embedding`,
           [sessionId, writeOwner, embedding]
         );
+      } else {
+        await client.query("DELETE FROM session_summary_embeddings WHERE session_id = $1 AND owner = $2", [sessionId, writeOwner]);
       }
 
       return true;
