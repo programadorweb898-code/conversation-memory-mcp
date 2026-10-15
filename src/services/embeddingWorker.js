@@ -175,6 +175,18 @@ let workerTimer;
 let workerTask;
 let workerRunning = false;
 let idlePollIntervalMs = initialPollIntervalMs;
+let unsubscribeQueue;
+let wakeRequested = false;
+
+function wakeWorker() {
+  if (!workerRunning) return;
+  idlePollIntervalMs = initialPollIntervalMs;
+  if (workerTask) {
+    wakeRequested = true;
+    return;
+  }
+  scheduleWorkerTick(0);
+}
 
 function runWorkerTick() {
   if (workerTask) return workerTask;
@@ -200,11 +212,14 @@ function startWorker() {
   console.log("Starting embedding worker (model will load on first use)...");
   workerRunning = true;
   idlePollIntervalMs = initialPollIntervalMs;
-  scheduleWorkerTick(idlePollIntervalMs);
+  wakeRequested = false;
+  unsubscribeQueue = embeddingQueue.onTask(wakeWorker);
+  scheduleWorkerTick(embeddingQueue.isEmpty() ? idlePollIntervalMs : 0);
 }
 
 function scheduleWorkerTick(delay) {
   if (!workerRunning) return;
+  clearTimeout(workerTimer);
   workerTimer = setTimeout(async () => {
     workerTimer = undefined;
     let didWork = false;
@@ -217,7 +232,9 @@ function scheduleWorkerTick(delay) {
     idlePollIntervalMs = didWork
       ? initialPollIntervalMs
       : Math.min(maxPollIntervalMs, idlePollIntervalMs * 2);
-    scheduleWorkerTick(idlePollIntervalMs);
+    const nextDelay = wakeRequested ? 0 : idlePollIntervalMs;
+    wakeRequested = false;
+    scheduleWorkerTick(nextDelay);
   }, delay);
   workerTimer.unref?.();
 }
@@ -225,6 +242,9 @@ function scheduleWorkerTick(delay) {
 async function stopWorker() {
   console.log("Stopping embedding worker...");
   workerRunning = false;
+  unsubscribeQueue?.();
+  unsubscribeQueue = undefined;
+  wakeRequested = false;
   clearTimeout(workerTimer);
   workerTimer = undefined;
   if (workerTask) await workerTask;
@@ -237,3 +257,4 @@ module.exports = {
   processNextEmbeddingTask,
   recordEmbeddingFailure,
 };
+
