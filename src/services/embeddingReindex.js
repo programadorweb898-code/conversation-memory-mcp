@@ -169,9 +169,10 @@ function createEmbeddingReindexer({
       const where = [];
 
       if (cursor) {
+        const cursorStart = params.length + 1;
         params.push(cursor.timestamp, cursor.sessionId, cursor.owner);
         where.push(
-          `(COALESCE(ss.timestamp, TIMESTAMP '1970-01-01 00:00:00'), ss.session_id, ss.owner) > ($${params.length}::timestamp, $${params.length + 1}, $${params.length + 2})`,
+          `(COALESCE(ss.timestamp, TIMESTAMP '1970-01-01 00:00:00'), ss.session_id, ss.owner) > ($${cursorStart}::timestamp, $${cursorStart + 1}, $${cursorStart + 2})`,
         );
       }
 
@@ -302,3 +303,4 @@ module.exports = {
   DEFAULT_SCOPE,
   SCOPES,
 };
+
