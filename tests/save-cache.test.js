@@ -66,4 +66,17 @@ describe("plugin save cache", () => {
       "message-2": true,
     })
   })
+
+  it("9: restores MCP IDs while keeping legacy boolean entries readable", async () => {
+    const file = join(dir, "cache.json")
+    const cache = createSaveCache(file)
+    cache.mark("session", "legacy")
+    cache.mark("session", "question", "mcp-question-id")
+    await cache.persist()
+    const restored = createSaveCache(file)
+    assert.equal(restored.has("session", "legacy"), true)
+    assert.equal(restored.getMessageId("session", "legacy"), undefined)
+    assert.equal(restored.getMessageId("session", "question"), "mcp-question-id")
+  })
 })
+
