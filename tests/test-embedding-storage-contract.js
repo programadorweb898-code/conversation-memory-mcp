@@ -30,4 +30,20 @@ describe("Embedding storage contract", function () {
       await db.runAsync("UPDATE embedding_metadata SET version = 1 WHERE id = 1");
     }
   });
+
+  it("8: every runtime generation entrypoint rejects incompatible storage before inference", async () => {
+    await db.runAsync("UPDATE embedding_metadata SET version = 999 WHERE id = 1");
+    try {
+      for (const run of [
+        () => embeddingService.generateEmbedding({ role: "query", content: "query" }),
+        () => embeddingService.generateEmbeddings([{ role: "user", content: "message" }]),
+        () => embeddingService.saveEmbedding("absent", JSON.stringify(Array(384).fill(0.1))),
+      ]) {
+        await require("node:assert/strict").rejects(run, { code: "EMBEDDING_STORAGE_MISMATCH" });
+      }
+    } finally {
+      await db.runAsync("UPDATE embedding_metadata SET version = 1 WHERE id = 1");
+    }
+  });
 });
+
