@@ -87,6 +87,7 @@ async function searchSessionsBySummary({
     try {
       const queryEmbeddingJson = await embeddingService.generateEmbedding({
         role: "search",
+        inputType: "query",
         content: query,
       });
 
