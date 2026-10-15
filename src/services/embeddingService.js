@@ -34,7 +34,7 @@ function prepareForEmbedding(content) {
 }
 
 function getEmbeddingInputType(role) {
-  return role === "search" ? "query" : "passage";
+  return role === "search" || role === "query" ? "query" : "passage";
 }
 
 /**
@@ -86,8 +86,8 @@ async function initializeEmbeddingPipeline() {
     throw error;
   }
 
-  await embeddingProvider.initialize();
   await assertEmbeddingStorageCompatibility();
+  await embeddingProvider.initialize();
   return getEmbeddingMetadata();
 }
 
@@ -105,9 +105,10 @@ async function generateEmbedding(message) {
     throw error;
   }
 
+  await assertEmbeddingStorageCompatibility();
   const enrichedText = `${message.role}: ${message.content}`;
   const [embedding] = await embeddingProvider.embed(enrichedText, {
-    inputType: getEmbeddingInputType(message.role),
+    inputType: message.inputType ?? getEmbeddingInputType(message.role),
   });
 
   return JSON.stringify(embedding);
@@ -127,10 +128,11 @@ async function generateEmbeddings(messages) {
     throw error;
   }
 
+  await assertEmbeddingStorageCompatibility();
   const grouped = new Map();
 
   messages.forEach((message, index) => {
-    const inputType = getEmbeddingInputType(message.role);
+    const inputType = message.inputType ?? getEmbeddingInputType(message.role);
     if (!grouped.has(inputType)) grouped.set(inputType, []);
     grouped.get(inputType).push({
       index,
@@ -168,6 +170,7 @@ function getEmbeddingMetadata() {
  */
 async function saveEmbedding(messageId, embedding) {
   try {
+    await assertEmbeddingStorageCompatibility();
     const parsedEmbedding = typeof embedding === "string" ? JSON.parse(embedding) : embedding;
     const embeddingValue = Array.isArray(parsedEmbedding) ? `[${parsedEmbedding.join(",")}]` : embedding;
 
@@ -207,3 +210,4 @@ module.exports = {
   MIN_EMBEDDING_CHARS,
   MAX_EMBEDDING_CHARS,
 };
+
