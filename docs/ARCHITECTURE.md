@@ -46,12 +46,14 @@ Una sesión para un mismo owner pertenece a un único project. PostgreSQL refuer
 
 ## Guardado de mensajes
 
-1. El agente envía saveMessage.
+1. El agente envía saveMessage o saveMessagePair.
 2. Se valida project, role, content y demás campos.
 3. Se resuelve el owner.
 4. Se toma un advisory lock por sesión/owner.
 5. Se inserta el mensaje con un sequence_id global monotónico.
 6. Si embeddings están habilitados, el mensaje se encola para procesamiento asíncrono.
+
+saveMessagePair ejecuta los pasos 1 a 6 dos veces, en orden (usuario y después asistente), y pasa el id del primero como related_message_id del segundo. No comparte transacción entre ambas escrituras: si la segunda falla, el mensaje del usuario queda persistido y la tool responde PAIR_PARTIAL_SAVE con ese id, de modo que un reintento con el mismo sourceMessageId completa el turno sin duplicarlo. Se prefiere un turno a medio guardar antes que perder la pregunta.
 
 El embedding no forma parte de la transacción de guardado del mensaje: guardar conversación debe seguir funcionando aunque el modelo esté temporalmente indisponible.
 

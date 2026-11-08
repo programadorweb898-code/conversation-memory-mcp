@@ -459,8 +459,8 @@ describe("installer", () => {
     install({ cwd, agent: "copilot" });
     const policy = readFileSync(join(cwd, ".github", "copilot-instructions.md"), "utf8");
     assert.match(policy, /## Guardado por turno/);
-    assert.match(policy, /saveMessage/);
-    assert.match(policy, /relatedMessageId/);
+    assert.match(policy, /saveMessagePair/);
+    assert.match(policy, /userSourceMessageId/);
     assert.match(policy, /plugin\/hook de captura automática/);
   });
 });

@@ -222,6 +222,7 @@ Se pueden ajustar con `MCP_TENANT_MAX_CONCURRENT_REQUESTS` y `MCP_TENANT_MAX_SSE
 ### Historial
 
 - `saveMessage`: guarda un mensaje.
+- `saveMessagePair`: guarda un turno completo (usuario + asistente) en una sola llamada.
 - `searchMessages`: búsqueda textual/híbrida.
 - `semanticSearchMessages`: búsqueda semántica mediante embeddings.
 - `searchSessionsBySummary`: localiza sesiones mediante sus resúmenes.
@@ -308,17 +309,34 @@ La ausencia de un LLM no impide guardar ni recuperar el historial.
 
 ## Guardado de conversaciones
 
-El servidor persiste información recibida mediante `saveMessage`.
+El servidor persiste información recibida mediante `saveMessage` y `saveMessagePair`.
+
+`saveMessagePair` guarda un turno completo (mensaje del usuario + respuesta del asistente) en una sola llamada y vincula ambas partes automáticamente. Es la forma recomendada: evita el pasamanos del `messageId` que exige la secuencia de dos `saveMessage`, que es donde más turnos se pierden.
+
+```json
+{
+  "sessionId": "sesión-actual",
+  "project": "nombre-del-repo",
+  "agentId": "opencode",
+  "userContent": "mensaje del usuario",
+  "assistantContent": "respuesta del asistente",
+  "userSourceMessageId": "id-estable-del-cliente",
+  "assistantSourceMessageId": "id-estable-del-cliente"
+}
+```
+
+Los `sourceMessageId` son opcionales pero recomendados: si el cliente tiene un ID estable del mensaje, un reintento devuelve el mensaje existente en vez de duplicar el turno.
 
 Cuando el agente no dispone de un plugin/hook de captura automática, el patrón recomendado es:
 
-1. guardar el mensaje del usuario;
-2. conservar el `messageId`;
-3. guardar la respuesta del asistente con `relatedMessageId`;
-4. mantener el mismo `sessionId`;
-5. enviar siempre `project`;
-6. utilizar `agentId` para trazabilidad;
-7. evitar mensajes sin valor histórico, como saludos o confirmaciones triviales.
+1. guardar el turno con `saveMessagePair` al cerrar cada turno sustancioso;
+2. mantener el mismo `sessionId` durante toda la sesión;
+3. enviar siempre `project`;
+4. utilizar `agentId` para trazabilidad;
+5. pasar `userSourceMessageId` / `assistantSourceMessageId` si el cliente los tiene;
+6. evitar turnos sin valor histórico, como saludos o confirmaciones triviales.
+
+Si una escritura falla después de guardar el mensaje del usuario, la tool devuelve el código `PAIR_PARTIAL_SAVE` junto con el `userMessageId` ya persistido. Reintentar con el mismo `userSourceMessageId` completa el turno sin duplicarlo.
 
 Si un plugin ya realiza esta captura, no deben duplicarse las llamadas manuales.
 

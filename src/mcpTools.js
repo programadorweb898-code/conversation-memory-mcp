@@ -5,6 +5,7 @@ const { withLocalToolRateLimit } = require("./services/stdioRateLimiter");
 
 // Import tools
 const { saveMessage } = require("./tools/saveMessage");
+const saveMessagePair = require("./tools/saveMessagePair");
 const searchMessages = require("./tools/searchMessages");
 const semanticSearchMessages = require("./tools/semanticSearchMessages");
 const searchSessionsBySummary = require("./tools/searchSessionsBySummary");
@@ -80,6 +81,35 @@ Esta tool debe usarse únicamente para conservar el historial real de conversaci
     return { content: [{ type: "text", text }] };
   }
 );
+
+  // 1.5. saveMessagePair
+  registerTool(
+    "saveMessagePair",
+    `Guarda un turno completo (mensaje del usuario + respuesta del asistente) en UNA sola llamada.
+Es la forma preferida de guardar historial: vincula la respuesta con el mensaje del usuario automáticamente, así que NO tenés que conservar el messageId del primer mensaje ni encadenar dos llamadas.
+Usala al cerrar cada turno sustancioso, con el mismo sessionId durante toda la sesión y agentId para trazabilidad.
+Si tu cliente tiene un ID estable del mensaje, pasalo en userSourceMessageId / assistantSourceMessageId: un reintento devuelve el mensaje existente y no duplica el turno.
+No la uses para saludos ni confirmaciones triviales sin valor histórico.`,
+    {
+      sessionId: z.string().describe("ID de la sesión (el mismo durante toda la conversación)"),
+      project: z.string().describe("Nombre del proyecto (OBLIGATORIO para aislar los datos por proyecto)"),
+      projectPath: z.string().optional().describe("Ruta absoluta del proyecto (opcional; desambigua proyectos con el mismo nombre)"),
+      agentId: z.string().optional().describe("Identificador del agente que genera el turno (por ejemplo 'opencode', 'claude-code', 'gemini-cli')"),
+      userContent: z.string().describe("Contenido del mensaje del usuario"),
+      assistantContent: z.string().describe("Contenido de la respuesta del asistente"),
+      userSourceMessageId: z.string().min(1).optional().describe("ID estable del mensaje del usuario en el cliente; permite reintentos sin duplicar"),
+      assistantSourceMessageId: z.string().min(1).optional().describe("ID estable de la respuesta en el cliente; permite reintentos sin duplicar"),
+    },
+    async ({ sessionId, project, projectPath, agentId, userContent, assistantContent, userSourceMessageId, assistantSourceMessageId }) => {
+      const result = await saveMessagePair(
+        withScope({ sessionId, project, projectPath, agentId, userContent, assistantContent, userSourceMessageId, assistantSourceMessageId })
+      );
+      const text = result.skipped
+        ? "Turno descartado: el mensaje del usuario era ruido de protocolo MCP y no se guardó nada."
+        : `Turno guardado correctamente. Usuario: ${result.userMessageId} · Asistente: ${result.assistantMessageId ?? "sin guardar"}`;
+      return { content: [{ type: "text", text }] };
+    }
+  );
 
   // 2. searchMessages
   registerTool(
