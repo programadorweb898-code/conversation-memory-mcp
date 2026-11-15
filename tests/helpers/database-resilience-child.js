@@ -1,5 +1,5 @@
 const fs = require("node:fs");
-const { db } = require("../../src/database");
+const { db, withTransaction, withAdvisoryLock } = require("../../src/database");
 
 // plain  → una query trivial (el black-hole nunca contesta el handshake)
 // sleep:N→ una query lenta, para separar el timeout del servidor del del cliente
@@ -27,6 +27,57 @@ async function attempt() {
 }
 
 (async () => {
+  if (mode === "cleanup-drop") {
+    const { cleanupMessages } = require("../test-helper");
+    try {
+      await cleanupMessages({ messageIds: ["cleanup-test-message"] });
+      out("CLEANUP_RECOVERED");
+    } catch (error) {
+      out(`CLEANUP_REJECTED:${error.message}`);
+      process.exitCode = 1;
+    } finally {
+      await db.close();
+    }
+    return;
+  }
+  if (mode === "startup-drop") {
+    try {
+      await db.query("SELECT 1");
+      out("STARTUP_RECOVERED");
+    } catch (error) {
+      out(`STARTUP_REJECTED:${error.message}`);
+      process.exitCode = 1;
+    } finally {
+      await db.close();
+    }
+    return;
+  }
+  if (mode === "active-drop" || mode === "transaction-gap" || mode === "lock-gap") {
+    let calls = 0;
+    try {
+      if (mode === "active-drop") {
+        await db.query("SELECT connection_drop");
+      } else {
+        const work = async (client) => {
+          calls += 1;
+          await client.query("SELECT 1");
+          out("EN_TRANSACCION");
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          await client.query("SELECT 2");
+        };
+        if (mode === "lock-gap") await withAdvisoryLock("disconnect-test", work);
+        else await withTransaction(work);
+      }
+      out("RESUELTO_INESPERADO");
+    } catch (error) {
+      out(`RECHAZADO:${error.message}`);
+    }
+    out(`WORK_CALLS:${calls}`);
+    await db.query("SELECT 1");
+    out("SIGUIENTE_QUERY_OK");
+    await db.close();
+    return;
+  }
   if (mode === "idle") {
     // Deja el client en el pool como ocioso y se queda vivo. Cuando el servidor
     // corte el socket, pg-pool purga el client y emite 'error': eso escribe en

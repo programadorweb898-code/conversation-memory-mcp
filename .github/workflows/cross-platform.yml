@@ -39,7 +39,7 @@ jobs:
         run: npm run lint
 
       - name: Run installer tests
-        run: npx mocha --timeout 30000 tests/cli.test.js tests/database-installer.test.js tests/installer.test.js
+        run: npx mocha --timeout 30000 tests/cli.test.js tests/database-installer.test.js tests/installer.test.js tests/opencode-installer.test.js tests/opencode-capture.test.js tests/native-capture.test.js tests/extended-capture.test.js
 
-      - name: Smoke test published CLI
-        run: npx -y conversation-memory-mcp@latest --help
+      - name: Smoke test packed candidate and persistent plugins
+        run: node scripts/smoke-package.js

@@ -34,7 +34,8 @@ function startChild({ args = [], env = {} } = {}) {
   child.stderr.on("error", () => {});
 
   state.done = new Promise((resolve) => {
-    child.on("close", () => {
+    child.on("close", (code) => {
+      state.exitCode = code;
       clearTimeout(timer);
       resolve(state);
     });
@@ -141,9 +142,10 @@ const dataRow = (value) => message("D", Buffer.concat([int16(1), int32(value.len
 // responde solo a los SET, dejando cualquier otra query sin respuesta. Es el
 // peor caso posible: el cliente cree que está conectado y el servidor acepta el
 // tráfico sin contestarle nunca.
-function startSilentPostgresServer({ answerEveryQuery = false } = {}) {
+function startSilentPostgresServer({ answerEveryQuery = false, disconnectOnStatement, disconnectOnce = false } = {}) {
   const sockets = [];
   let accepted = 0;
+  let dropped = 0;
 
   const server = net.createServer((socket) => {
     accepted += 1;
@@ -169,13 +171,38 @@ function startSilentPostgresServer({ answerEveryQuery = false } = {}) {
       }
 
       // Simple Query: 'Q' + Int32 length + sql\0
-      while (buffer.length >= 5 && buffer[0] === 0x51) {
+      while (buffer.length >= 5) {
+        const type = String.fromCharCode(buffer[0]);
         const length = buffer.readInt32BE(1);
         if (buffer.length < 1 + length) return;
-        const statement = buffer.subarray(5, 1 + length - 1).toString("utf8");
+        const payload = buffer.subarray(5, 1 + length);
         buffer = buffer.subarray(1 + length);
+        // Minimal extended protocol for the parameterized advisory-lock query.
+        if (type !== "Q") {
+          if (type === "P") {
+            const start = payload.indexOf(0) + 1;
+            const statement = payload.subarray(start, payload.indexOf(0, start)).toString("utf8");
+            if (disconnectOnStatement?.test(statement) && (!disconnectOnce || dropped === 0)) {
+              dropped += 1;
+              socket.destroy();
+              return;
+            }
+            socket.write(message("1"));
+          }
+          else if (type === "B") socket.write(message("2"));
+          else if (type === "D") socket.write(message("n"));
+          else if (type === "E") socket.write(commandComplete("SELECT 1"));
+          else if (type === "S") socket.write(readyForQuery());
+          continue;
+        }
+        const statement = payload.subarray(0, -1).toString("utf8");
 
-        if (answerEveryQuery || /^\s*SET\b/i.test(statement)) {
+        if (disconnectOnStatement?.test(statement) && (!disconnectOnce || dropped === 0)) {
+          dropped += 1;
+          socket.destroy();
+          return;
+        }
+        if (answerEveryQuery || /^\s*(SET|BEGIN|COMMIT|ROLLBACK)\b/i.test(statement)) {
           if (/^\s*SELECT\b/i.test(statement)) {
             socket.write(rowDescription());
             socket.write(dataRow("1"));
@@ -225,6 +252,89 @@ function startSilentPostgresServer({ answerEveryQuery = false } = {}) {
 
 describe("database resilience", function () {
   this.timeout(40000);
+
+  it("retries one connection failure before application SQL starts", async () => {
+    const server = await startSilentPostgresServer({
+      answerEveryQuery: true,
+      disconnectOnStatement: /^BEGIN/,
+      disconnectOnce: true,
+    });
+    const child = startChild({ args: ["startup-drop"], env: { CONVERSATION_MEMORY_DATABASE_URL: server.url } });
+    try {
+      const { output, exitCode, timedOut } = await child.done;
+      assert.equal(timedOut, false, output);
+      assert.equal(exitCode, 0, output);
+      assert.match(output, /STARTUP_RECOVERED/);
+      assert.equal(server.connections(), 2);
+    } finally {
+      child.kill();
+      server.close();
+    }
+  });
+
+  it("stops after one retry when transaction setup keeps disconnecting", async () => {
+    const server = await startSilentPostgresServer({ answerEveryQuery: true, disconnectOnStatement: /^BEGIN/ });
+    const child = startChild({ args: ["startup-drop"], env: { CONVERSATION_MEMORY_DATABASE_URL: server.url } });
+    try {
+      const { output, exitCode, timedOut } = await child.done;
+      assert.equal(timedOut, false, output);
+      assert.equal(exitCode, 1, output);
+      assert.match(output, /STARTUP_REJECTED:/);
+      assert.equal(server.connections(), 2);
+    } finally {
+      child.kill();
+      server.close();
+    }
+  });
+
+  for (const disconnectOnce of [true, false]) {
+    it(`bounds retries for idempotent test cleanup (disconnectOnce=${disconnectOnce})`, async () => {
+      const server = await startSilentPostgresServer({
+        answerEveryQuery: true, disconnectOnStatement: /^DELETE/, disconnectOnce,
+      });
+      const child = startChild({ args: ["cleanup-drop"], env: { CONVERSATION_MEMORY_DATABASE_URL: server.url } });
+      try {
+        const { output, exitCode, timedOut } = await child.done;
+        assert.equal(timedOut, false, output);
+        assert.equal(exitCode, disconnectOnce ? 0 : 1, output);
+        assert.match(output, disconnectOnce ? /CLEANUP_RECOVERED/ : /CLEANUP_REJECTED:/);
+        assert.equal(server.connections(), 2);
+      } finally {
+        child.kill();
+        server.close();
+      }
+    });
+  }
+
+  for (const mode of ["active-drop", "transaction-gap", "lock-gap"]) {
+    it(`rejects a checked-out connection failure without uncaught errors (${mode})`, async () => {
+      const server = await startSilentPostgresServer({
+        answerEveryQuery: true,
+        disconnectOnStatement: mode === "active-drop" ? /connection_drop/ : undefined,
+      });
+      const child = startChild({
+        args: [mode],
+        env: { CONVERSATION_MEMORY_DATABASE_URL: server.url },
+      });
+      try {
+        if (mode !== "active-drop") {
+          await waitForOutput(child, /EN_TRANSACCION/);
+          server.dropAll();
+        }
+        const { output, exitCode, timedOut } = await child.done;
+        assert.equal(timedOut, false, output);
+        assert.equal(exitCode, 0, output);
+        assert.match(output, /RECHAZADO:/);
+        assert.doesNotMatch(output, /RESUELTO_INESPERADO|Unhandled 'error' event/);
+        assert.match(output, /SIGUIENTE_QUERY_OK/);
+        assert.match(output, mode === "active-drop" ? /WORK_CALLS:0/ : /WORK_CALLS:1/);
+        assert.equal(server.connections(), 2, "replace the broken connection without replaying work");
+      } finally {
+        child.kill();
+        server.close();
+      }
+    });
+  }
 
   it("falla rápido cuando el endpoint acepta la conexión pero nunca responde", async () => {
     const server = await startBlackHoleServer();

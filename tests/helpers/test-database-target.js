@@ -1,4 +1,8 @@
 const { randomUUID } = require("node:crypto");
+const { config } = require("dotenv");
+const { join } = require("node:path");
+
+config({ path: join(process.cwd(), ".env"), override: false, quiet: true });
 
 function testDatabaseTarget(env = process.env) {
   if (!env.TEST_DATABASE_URL) {

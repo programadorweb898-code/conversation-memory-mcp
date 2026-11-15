@@ -2,7 +2,7 @@ const { expect } = require('chai');
 const sinon = require('sinon');
 const { v4: uuidv4 } = require('uuid');
 
-const { db } = require('./test-helper');
+const { db, cleanupMessages } = require('./test-helper');
 const saveMessage = require('../src/tools/saveMessage');
 
 describe('saveMessage', () => {
@@ -14,18 +14,10 @@ describe('saveMessage', () => {
     sinon.replace(require('../src/services/embeddingQueue'), 'addTask', queueStub);
   });
 
-  afterEach(async () => {
+  afterEach(async function () {
+    this.timeout(60000);
     sinon.restore();
-
-    for (const sessionId of testSessionIds) {
-      try {
-        await db.runAsync(`DELETE FROM message_embeddings WHERE message_id IN (SELECT id FROM conversations WHERE session_id = $1)`, [sessionId]);
-        await db.runAsync(`DELETE FROM conversations WHERE session_id = $1`, [sessionId]);
-      } catch (err) {
-        console.error("Error en limpieza de test-save:", err.message);
-      }
-    }
-    testSessionIds.length = 0;
+    await cleanupMessages({ sessionIds: testSessionIds.splice(0) });
   });
 
   it('should save a message successfully with required fields', async () => {

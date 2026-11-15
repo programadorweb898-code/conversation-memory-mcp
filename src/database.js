@@ -10,7 +10,7 @@ const { getDatabaseUrl, getPgSslOptions } = require("./databaseConfig");
 const { connectTimeoutMs: CONNECT_TIMEOUT_MS, keepaliveDelayMs: KEEPALIVE_DELAY_MS } = getConfig().database;
 
 // Tope de duración de cada statement. Hay dos mecanismos y el orden importa:
-// `statement_timeout` (el que se le manda al servidor en `acquire()`) es el
+// `statement_timeout` (el que se le manda al servidor al iniciar cada transaccion) es el
 // primario, porque Postgres cancela la query él mismo y el client queda
 // reutilizable. `query_timeout` (el de pg, en el cliente) es la red de seguridad
 // para el socket muerto, donde el servidor no puede cancelar nada, y por eso va
@@ -80,12 +80,9 @@ pool.on("error", (err) => {
 // No se puede pasar por el startup packet: el endpoint pooled de Neon lo rechaza.
 const searchPath = getConfig().database.searchPath;
 
-// Los `SET` van al adquirir la conexión, no en el evento "connect": pg-pool no
-// espera al handler del evento, así que ahí el SET compite con la primera
-// query y las escrituras terminaban yendo a `public`. pg-pool recicla el mismo
-// objeto client, así que un WeakSet alcanza para no repetirlo por conexión.
-const prepared = new WeakSet();
-
+// PgBouncer puede cambiar el backend después de cada transacción. El esquema
+// y el timeout deben aplicarse con SET LOCAL dentro de la transacción que
+// ejecuta el trabajo, incluso cuando pg-pool reutiliza el mismo client.
 // Cuando vence `query_timeout`, pg no cancela nada en el servidor: rechaza local
 // y saca la query de `_queryQueue` (pg/lib/client.js:678), así que la siguiente
 // se escribe al cable mientras el servidor todavía corre la anterior y su
@@ -97,41 +94,85 @@ function poisonedByClientTimeout(err) {
   return CLIENT_QUERY_TIMEOUT.test(err.message || "");
 }
 
-async function acquire() {
-  const client = await pool.connect();
-  if (!prepared.has(client)) {
+// One round trip starts and configures the transaction. Values come from the
+// validated runtime config; SQL with application data stays parameterized.
+const TRANSACTION_START_SQL = [
+  "BEGIN",
+  ...(searchPath ? [`SET LOCAL search_path TO "${searchPath}", public`] : []),
+  `SET LOCAL statement_timeout = ${STATEMENT_TIMEOUT_MS}`,
+].join("; ");
+
+function isTransientConnectionError(err) {
+  return isIdleDisconnect(err) || String(err.code || "").startsWith("08") ||
+    ["ECONNRESET", "ECONNREFUSED", "EPIPE", "ETIMEDOUT"].includes(err.code);
+}
+
+async function runTransaction(work) {
+  for (let attempt = 0; ; attempt += 1) {
+    let workStarted = false;
     try {
-      if (searchPath) await client.query(`SET search_path TO ${searchPath}, public`);
-      await client.query(`SET statement_timeout = ${STATEMENT_TIMEOUT_MS}`);
-      prepared.add(client);
+      return await runTransactionAttempt((client) => {
+        workStarted = true;
+        return work(client);
+      });
     } catch (err) {
-      client.release(err);
-      throw err;
+      // Only acquisition/setup is safe to retry: no application SQL has run.
+      if (attempt > 0 || workStarted || !isTransientConnectionError(err)) throw err;
     }
   }
-  return client;
+}
+
+async function runTransactionAttempt(work) {
+  const client = await pool.connect();
+  let transactionActive = false;
+  let connectionError = null;
+  // pg-pool removes its idle error listener when a client is checked out.
+  // pg rejects the active query AND emits error, even between awaited queries.
+  const onError = (err) => { connectionError ||= err; };
+  client.on("error", onError);
+
+  const query = async (...args) => {
+    if (connectionError) throw connectionError;
+    try {
+      const result = await client.query(...args);
+      if (connectionError) throw connectionError;
+      return result;
+    } catch (err) {
+      if (poisonedByClientTimeout(err)) connectionError ||= err;
+      throw err;
+    }
+  };
+
+  try {
+    transactionActive = true;
+    await query(TRANSACTION_START_SQL);
+    const result = await work({ query });
+    await query("COMMIT");
+    transactionActive = false;
+    return result;
+  } finally {
+    if (transactionActive && !connectionError) {
+      try {
+        await query("ROLLBACK");
+      } catch (err) {
+        connectionError = err;
+        console.error("Error haciendo ROLLBACK de la transaccion:", err.message);
+      }
+    }
+    // Hand error handling back to pg-pool before removing our own listener.
+    // A broken connection is destroyed; work is never automatically replayed.
+    client.release(connectionError);
+    client.removeListener("error", onError);
+  }
 }
 
 async function runQuery(sql, params) {
-  const client = await acquire();
-  let poisoned = null;
-  try {
-    return await client.query(sql, params);
-  } catch (err) {
-    poisoned = poisonedByClientTimeout(err) ? err : null;
-    throw err;
-  } finally {
-    client.release(poisoned);
-  }
+  return runTransaction((client) => client.query(sql, params));
 }
 
 async function withTransaction(work) {
-  const client = await acquire();
-  let transactionActive = false;
-  let poisoned = null;
-
-  const tx = {
-    query: (sql, params) => client.query(sql, params),
+  return runTransaction((client) => work({
+    query: client.query,
     runAsync: async (sql, params = []) => {
       const result = await client.query(sql, params);
       return { changes: result.rowCount };
@@ -144,59 +185,14 @@ async function withTransaction(work) {
       const result = await client.query(sql, params);
       return result.rows;
     },
-  };
-
-  try {
-    await client.query("BEGIN");
-    transactionActive = true;
-    const result = await work(tx);
-    await client.query("COMMIT");
-    transactionActive = false;
-    return result;
-  } catch (err) {
-    poisoned = poisonedByClientTimeout(err) ? err : null;
-    throw err;
-  } finally {
-    if (transactionActive && !poisoned) {
-      try {
-        await client.query("ROLLBACK");
-      } catch (err) {
-        console.error("Error haciendo ROLLBACK de la transacción:", err.message);
-      }
-    }
-    client.release(poisoned);
-  }
+  }));
 }
 
 async function withAdvisoryLock(key, work) {
-  const client = await acquire();
-  const lockValue = hashtext(`advisory:${key}`);
-  let transactionActive = false;
-  let poisoned = null;
-  try {
-    await client.query("BEGIN");
-    transactionActive = true;
-    await client.query("SELECT pg_advisory_xact_lock($1)", [lockValue]);
-    const result = await work(client);
-    await client.query("COMMIT");
-    transactionActive = false;
-    return result;
-  } catch (err) {
-    poisoned = poisonedByClientTimeout(err) ? err : null;
-    throw err;
-  } finally {
-    // Con la conexión envenenada el ROLLBACK iría detrás de la query abandonada
-    // en el cable: su respuesta no es confiable y solo gastaría otro timeout.
-    // Al destruir el client, el servidor deshace la transacción solo.
-    if (transactionActive && !poisoned) {
-      try {
-        await client.query("ROLLBACK");
-      } catch (err) {
-        console.error("Error haciendo ROLLBACK del advisory lock:", err.message);
-      }
-    }
-    client.release(poisoned);
-  }
+  return runTransaction(async (client) => {
+    await client.query("SELECT pg_advisory_xact_lock($1)", [hashtext(`advisory:${key}`)]);
+    return work(client);
+  });
 }
 
 function hashtext(value) {

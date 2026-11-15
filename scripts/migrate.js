@@ -7,7 +7,7 @@ const readline = require("node:readline/promises");
 const { stdin, stdout } = require("node:process");
 const { describeDatabaseTarget, getDatabaseUrl } = require("../src/databaseConfig");
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 const MIGRATIONS_DIR = path.join(__dirname, "..", "migrations");
 const MIGRATION_LOCK_KEY = 19082026;
@@ -103,11 +103,10 @@ async function runMigrations({ logger = console, confirmed = false } = {}) {
       throw error;
     }
 
-    if (searchPath) {
-      await client.query(`SET search_path TO ${searchPath}, public`);
-    }
-
     await client.query("BEGIN");
+    if (searchPath) {
+      await client.query(`SET LOCAL search_path TO "${searchPath}", public`);
+    }
     await client.query("SELECT pg_advisory_xact_lock($1)", [MIGRATION_LOCK_KEY]);
 
     await client.query(`

@@ -38,19 +38,15 @@ async function recordEmbeddingFailure(messageId, error) {
       return;
     }
 
-    await db.runAsync(`
+    const failureRow = await db.getAsync(`
       INSERT INTO embedding_failures (message_id, attempts, last_error, last_attempt_at)
       VALUES ($1, 1, $2, CURRENT_TIMESTAMP)
       ON CONFLICT(message_id) DO UPDATE SET
         attempts = embedding_failures.attempts + 1,
         last_error = EXCLUDED.last_error,
         last_attempt_at = CURRENT_TIMESTAMP
+      RETURNING attempts
     `, [messageId, errorMessage]);
-
-    const failureRow = await db.getAsync(
-      `SELECT attempts FROM embedding_failures WHERE message_id = $1`,
-      [messageId]
-    );
 
     const attempts = failureRow ? Number(failureRow.attempts) : 1;
     if (attempts >= maxEmbeddingAttempts) {

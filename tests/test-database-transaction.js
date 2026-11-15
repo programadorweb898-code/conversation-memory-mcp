@@ -1,8 +1,29 @@
 const { expect } = require('chai');
-const { db, withTransaction } = require('../src/database');
+const { db, withTransaction, withAdvisoryLock } = require('../src/database');
 const { v4: uuidv4 } = require('uuid');
 
 describe('Database transactions', () => {
+  it('keeps schema and timeout on the backend executing each concurrent transaction', async () => {
+    const { getConfig } = require('../src/config');
+    const expected = getConfig().database;
+    const sql = `SELECT current_schema() AS schema,
+      extract(epoch FROM current_setting('statement_timeout')::interval) * 1000 AS timeout_ms`;
+    const readSettings = async () => {
+      const ordinary = await db.getAsync(sql);
+      const transaction = await withTransaction((tx) => tx.getAsync(sql));
+      const locked = await withAdvisoryLock(uuidv4(), async (client) => {
+        const result = await client.query(sql);
+        return result.rows[0];
+      });
+      return [ordinary, transaction, locked];
+    };
+    const results = await Promise.all(Array.from({ length: 12 }, readSettings));
+    for (const row of results.flat()) {
+      expect(row.schema).to.equal(expected.searchPath);
+      expect(Number(row.timeout_ms)).to.equal(expected.queryTimeoutMs);
+    }
+  });
+
   it('should rollback all writes when a transaction fails', async () => {
     const id = uuidv4();
     const project = `transaction-test-${Date.now()}`;

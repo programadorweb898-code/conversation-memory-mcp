@@ -98,6 +98,76 @@ npx conversation-memory-mcp install --agent opencode
 
 El instalador es idempotente y conserva otros servidores MCP existentes. La configuración se limita al proyecto actual; no modifica silenciosamente la configuración global del usuario.
 
+### Captura automática y compatibilidad (1.2.0)
+
+| Agente | Configuración MCP | Captura de conversaciones |
+| --- | --- | --- |
+| OpenCode estable 1.x | Automática | Plugin V1 seleccionado por versión |
+| OpenCode estable 2.x | Automática | Plugin V2 seleccionado por versión |
+| Claude Code con API de hooks | Automática | Hook `Stop`, leyendo texto visible del transcript |
+| Cursor con API de hooks | Automática | `beforeSubmitPrompt` + `afterAgentResponse` |
+| Gemini CLI con API de hooks | Automática | `AfterAgent`, leyendo el transcript |
+| Codex con hooks y `turn_id` | Automática | `UserPromptSubmit` + `Stop` |
+| Copilot CLI / motor Copilot actual de VS Code | Automática | `agentStop`, transcript de eventos |
+| Kimi Code CLI | Automática | `Stop`, historial wire/context de la sesión exacta; hook global |
+| Qwen Code | Automática | `Stop`, transcript con identificadores de mensaje |
+| Windsurf | Automática global | Transcript JSONL estructurado al terminar la respuesta |
+| Hermes | Automática global | Shell hook `post_llm_call` |
+| Kilo Code | Automática | Plugin de servidor, evento `session.idle` |
+| OpenClaw | Automática global | Plugin `agent_end`, con permiso de acceso a conversación |
+| Pi | MCP manual | Extensión de captura `agent_end` |
+| Trae CN (`--agent trae-cn`) | MCP manual | Hooks `UserPromptSubmit` + `Stop` |
+| Kiro IDE, Antigravity, Trae internacional, genérico | Según adaptador | Instrucciones; captura completa pendiente de validar |
+
+El instalador consulta `opencode --version` y rechaza versiones desconocidas,
+prereleases y majors distintos de 1/2 antes de instalar el plugin. Si el ejecutable
+no está en PATH, indicá la versión estable explícitamente:
+
+```bash
+npx conversation-memory-mcp install --agent opencode --opencode-version 2.2.6
+```
+
+Los contratos de captura se verificaron con las APIs publicadas de OpenCode
+1.19.5 y 2.2.6. El paquete generado se prueba con entradas V1/V2 y un servidor MCP
+real de prueba. Esto no equivale a certificar cada versión histórica o una sesión
+real con un modelo dentro de cada aplicación. Otras versiones 1.x/2.x requieren
+conservar los contratos usados por sus respectivas APIs.
+
+OpenCode recibe una copia persistente en `.opencode/conversation-memory-plugin/`,
+con dependencias locales instaladas sin scripts de terceros. V1 registra la entrada
+como archivo; V2 registra el directorio. Se conserva la configuración JSONC
+existente y se prioriza la del proyecto sobre la global. Un plugin manual antiguo
+con el mismo nombre debe retirarse antes de instalar la captura administrada,
+para evitar dos grabadores activos.
+
+Los hooks nativos reciben un lanzador Node persistente que conserva la entrada
+antes de iniciar `npx` con la versión exacta del MCP que los instaló. Requieren
+que esa versión esté publicada, Node/npm disponibles y los hooks autorizados en el
+agente. No capturan razonamiento interno ni resultados de herramientas. Si falla el
+guardado, avisan por stderr sin bloquear el agente ni iniciar otro turno. Cursor
+conserva el prompt pendiente en el directorio privado de configuración del usuario
+para recuperar el vínculo si falla el primer guardado. Los hooks preparan una cola
+local de mensajes visibles antes de acceder a la base. Los pendientes se reintentan
+en eventos posteriores del mismo proyecto, con identificadores estables; no hay un
+daemon que reintente cuando el agente está cerrado. Los plugins nuevos conservan
+también pendientes si falla su lanzador. Estos archivos contienen conversaciones
+en texto plano bajo el directorio de configuración privado y no deben compartirse.
+Windsurf genera además su propia transcripción completa, que puede incluir herramientas;
+el adaptador guarda solo `user_input` y `planner_response`.
+La política instalada evita
+llamadas manuales duplicadas cuando se instala captura automática.
+
+La disponibilidad de hooks depende del host y su versión, permisos y opciones de
+desactivación. Los adaptadores nuevos se contrastan con contratos publicados y
+pruebas de integración del CLI; no se certifica una conversación real en cada IDE.
+Kiro y Antigravity sí tienen hooks, pero eso por sí solo no certifica cómo extraer
+ambos mensajes: el instalador explica que conserva el guardado por instrucciones.
+Trae internacional no se trata como si fuera Trae CN. Kimi necesita un hook global
+aunque la configuración MCP sea del proyecto; el instalador lo informa.
+
+La versión 1.2.0 preparada en este repositorio debe publicarse antes de distribuir
+sus comandos de hooks por npm. Cambiar archivos locales no actualiza npm.
+
 Agentes reconocidos:
 
 - OpenCode
@@ -382,8 +452,8 @@ El único flujo público de instalación es:
 npx conversation-memory-mcp install
 ```
 
-El instalador moderno configura la base de datos, el MCP y la política del
-agente desde un único punto de entrada. No se publica ni se mantiene un
+El instalador configura base de datos, MCP, política y captura automática donde
+existe un adaptador en la tabla de compatibilidad, desde un único punto de entrada. No se publica ni se mantiene un
 segundo instalador de plugin para evitar dos mecanismos con comportamientos
 distintos o destinos de configuración diferentes.
 
@@ -427,6 +497,17 @@ además un timeout del lado cliente, 5s por encima, que solo entra en juego si e
 socket se muere y el servidor no puede cancelar nada; cuando ese caso se
 dispara, la conexión se destruye en vez de volver al pool, porque para entonces
 ya no es confiable. Se ajusta con `CONVERSATION_MEMORY_QUERY_TIMEOUT_MS`.
+
+El esquema (`PG_SEARCH_PATH`) y el timeout se aplican con `SET LOCAL` dentro
+de cada transacción, incluidas las consultas individuales y las migraciones.
+Así se conservan en el backend que ejecuta la operación cuando se utiliza un
+pool por transacción como el endpoint pooled de Neon.
+
+Los cortes de una conexión adquirida se propagan como errores de la operación y
+la conexión se descarta. Solo se reintenta una vez la adquisición o preparación
+si falla por una desconexión transitoria antes de ejecutar SQL de la aplicación;
+las operaciones ya iniciadas no se repiten automáticamente.
+
 
 Una instalación nueva no los necesita: `migrations/001_initial_schema.sql` ya
 incluye `CREATE EXTENSION vector`, `ADD COLUMN IF NOT EXISTS project`,

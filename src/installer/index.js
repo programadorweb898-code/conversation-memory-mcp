@@ -1,11 +1,15 @@
 const { existsSync, mkdirSync, readFileSync, writeFileSync } = require("node:fs");
+const { homedir } = require("node:os");
+const { installHooks } = require("./hooks");
 const { dirname, join, resolve } = require("node:path");
 const { MEMORY_POLICY, POLICY_MARKER, POLICY_END_MARKER } = require("./policy");
 const { AGENTS, normalizeAgent, installMcpConfig } = require("./mcpConfig");
 
 function detectAgent(cwd) {
   const candidates = [
+    ["opencode", join(cwd, ".opencode", "opencode.jsonc")],
     ["opencode", join(cwd, ".opencode", "opencode.json")],
+    ["opencode", join(cwd, "opencode.jsonc")],
     ["opencode", join(cwd, "opencode.json")],
     ["codex", join(cwd, ".codex")],
     ["claude", join(cwd, "CLAUDE.md")],
@@ -22,10 +26,11 @@ function targetFile(cwd, agent) {
   return resolve(cwd, AGENTS[agent].policy);
 }
 
-function applyPolicy(file) {
+function applyPolicy(file, automaticCapture = false) {
   const existed = existsSync(file);
   const current = existed ? readFileSync(file, "utf8") : "";
-  const block = `${POLICY_MARKER}\n${MEMORY_POLICY}\n${POLICY_END_MARKER}`;
+  const capturePolicy = automaticCapture ? MEMORY_POLICY.split("## Guardado por turno")[0] + "## Guardado por turno\n" + "\n\nCaptura automatica instalada: no ejecutes saveMessage manualmente para estos turnos; el plugin/hook los persiste. Si falla, revisa los logs antes de reintentar.\n" : MEMORY_POLICY;
+  const block = `${POLICY_MARKER}\n${capturePolicy}\n${POLICY_END_MARKER}`;
   const start = current.indexOf(POLICY_MARKER);
   const end = current.indexOf(POLICY_END_MARKER);
 
@@ -43,27 +48,29 @@ function applyPolicy(file) {
   return { changed: true, existed };
 }
 
-function installPolicy({ cwd = process.cwd(), agent } = {}) {
+function installPolicy({ cwd = process.cwd(), agent, automaticCapture = false } = {}) {
   const projectRoot = resolve(cwd);
   const selectedAgent = normalizeAgent(agent);
   const file = targetFile(projectRoot, selectedAgent);
   mkdirSync(dirname(file), { recursive: true });
-  const result = applyPolicy(file);
+  const result = applyPolicy(file, automaticCapture);
   return { agent: selectedAgent, file, created: !result.existed, changed: result.changed };
 }
 
-function install({ cwd = process.cwd(), agent, scope, homeDir, commandRunner } = {}) {
+function install({ cwd = process.cwd(), agent, scope, homeDir = homedir(), commandRunner, opencodeVersion } = {}) {
   const projectRoot = resolve(cwd);
   const selectedAgent = agent ? normalizeAgent(agent) : detectAgent(projectRoot);
-  const policy = installPolicy({ cwd: projectRoot, agent: selectedAgent });
   const mcp = installMcpConfig({
     cwd: projectRoot,
     agent: selectedAgent,
     scope,
     ...(homeDir ? { homeDir } : {}),
     ...(commandRunner ? { commandRunner } : {}),
+    opencodeVersion,
   });
-  return { ...policy, mcp };
+  const capture = selectedAgent === "opencode" ? { mode: "automatic", file: mcp.file } : installHooks({ cwd: projectRoot, agent: selectedAgent, scope, homeDir });
+  const policy = installPolicy({ cwd: projectRoot, agent: selectedAgent, automaticCapture: capture.mode === "automatic" });
+  return { ...policy, mcp, capture };
 }
 
 module.exports = { AGENTS, detectAgent, installPolicy, install };

@@ -4,7 +4,7 @@ const { v4: uuidv4 } = require("uuid");
 const embeddingService = require("../src/services/embeddingService");
 const embeddingQueue = require("../src/services/embeddingQueue");
 const embeddingWorker = require("../src/services/embeddingWorker");
-const { db } = require("./test-helper");
+const { db, cleanupMessages } = require("./test-helper");
 const fakeEmbedding = require("./helpers/fakeEmbedding");
 
 describe("Embedding Worker", function () {
@@ -47,15 +47,11 @@ describe("Embedding Worker", function () {
     sinon.restore();
   });
 
-  afterEach(async () => {
+  afterEach(async function () {
+    this.timeout(60000);
     sinon.restore();
     embeddingQueue.setProcessingStatus(false);
-
-    for (const messageId of messageIds) {
-      await db.runAsync("DELETE FROM embedding_failures WHERE message_id = $1", [messageId]);
-      await db.runAsync("DELETE FROM message_embeddings WHERE message_id = $1", [messageId]);
-      await db.runAsync("DELETE FROM conversations WHERE id = $1", [messageId]);
-    }
+    await cleanupMessages({ messageIds });
   });
 
   async function insertMessage(content) {
@@ -173,7 +169,9 @@ describe("Embedding Worker", function () {
     expect(savedCall.args).to.deep.equal([messageId, JSON.stringify(fakeEmbedding(0.4))]);
   });
 
-  it("registra fallos y deja de reintentar después de tres intentos", async () => {
+  it("registra fallos y deja de reintentar después de tres intentos", async function () {
+    // This integration test performs four worker passes against remote Postgres.
+    this.timeout(60000);
     const messageId = await insertMessage("Mensaje que falla siempre");
 
     sinon.stub(embeddingService, "generateEmbeddings").rejects(new Error("batch failed"));

@@ -67,9 +67,12 @@ describe("database installer", () => {
       delete process.env[DATABASE_URL_ENV];
       assert.equal(loadEnvironment(cwd), "postgresql://target@memory.example/db");
     } finally {
-      process.chdir(previousCwd);
-      if (previousDedicatedUrl === undefined) delete process.env[DATABASE_URL_ENV];
-      else process.env[DATABASE_URL_ENV] = previousDedicatedUrl;
+      try {
+        process.chdir(previousCwd);
+      } finally {
+        if (previousDedicatedUrl === undefined) delete process.env[DATABASE_URL_ENV];
+        else process.env[DATABASE_URL_ENV] = previousDedicatedUrl;
+      }
     }
   });
 

@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 
-const { startStdioServer } = require("./stdio");
+if (require.main === module && process.argv[2] === "capture") {
+  void require("./hooks/capture").main();
+} else {
+
 const { install, detectAgent } = require("./installer");
 const { getDefaultScope, normalizeAgent, normalizeScope, resolveScope } = require("./installer/mcpConfig");
+const { detectOpenCodeVersion } = require("./installer/opencode");
 const { setupDatabase } = require("./installer/database");
 const { confirmMigrationTarget, runMigrations } = require("../scripts/migrate");
 const { getDatabaseUrl } = require("./databaseConfig");
@@ -41,6 +45,10 @@ function printHelp() {
     "  conversation-memory-mcp install --agent <agente> --scope <scope>",
     "  conversation-memory-mcp migrate     Migra una base dedicada tras confirmación",
     "",
+    "OpenCode: se detecta la version instalada; --opencode-version <version> permite indicarla.",
+    "",
+    "  conversation-memory-mcp capture --agent <agente>  Uso interno de hooks de captura",
+    "",
     "Scopes disponibles:",
     "  project  Configuración dentro del proyecto (predeterminado)",
     "  global   Configuración global del agente, cuando está soportada",
@@ -72,17 +80,21 @@ function parseArgs(argv) {
 
   let agent = null;
   let scope;
+  let opencodeVersion;
   for (let i = 1; i < args.length; i++) {
     if (args[i] === "--agent") {
       agent = args[++i];
       if (!agent) throw new Error("--agent requiere un valor");
+    } else if (args[i] === "--opencode-version") {
+      opencodeVersion = args[++i];
+      if (!opencodeVersion) throw new Error("--opencode-version requiere un valor");
     } else if (args[i] === "--scope") {
       scope = normalizeScope(args[++i]);
     } else {
       throw new Error(`Argumento desconocido: ${args[i]}`);
     }
   }
-  return { command, agent, scope };
+  return { command, agent, scope, ...(opencodeVersion ? { opencodeVersion } : {}) };
 }
 
 function printAgentChoices(output = process.stdout) {
@@ -219,7 +231,10 @@ async function main() {
   if (parsed.command === "install") {
     const resolved = await resolveAgent(parsed.agent);
 
+    if (parsed.opencodeVersion && resolved.agent !== "opencode") throw new Error("--opencode-version solo se aplica a OpenCode.");
     const effectiveScope = resolveScope(resolved.agent, parsed.scope);
+    const opencodeVersion = resolved.agent === "opencode"
+      ? detectOpenCodeVersion({ cwd: process.cwd(), version: parsed.opencodeVersion }).version : undefined;
 
     if (parsed.scope === "global" && !["claude", "cursor", "gemini-cli", "github-copilot", "qwen-code", "antigravity", "windsurf", "openclaw", "hermes"].includes(resolved.agent)) {
       throw new Error("El scope global no está implementado para este agente.");
@@ -233,7 +248,7 @@ async function main() {
     const database = await setupDatabase({ scope: effectiveScope });
 
     printStep("Configurando MCP y política...");
-    const result = install({ agent: resolved.agent, scope: parsed.scope });
+    const result = install({ agent: resolved.agent, scope: parsed.scope, opencodeVersion });
 
     console.log("");
     printSuccess(`Base de datos: configurada (${database.source})`);
@@ -247,13 +262,19 @@ async function main() {
       printSuccess(`MCP: ${result.mcp.changed ? "configurado/actualizado" : "sin cambios"} -> ${result.mcp.file}`);
     }
 
+    if (result.mcp.capture === "automatic") printSuccess(`Captura automatica: plugin OpenCode ${result.mcp.plugin.api} (${result.mcp.plugin.version})`);
+    else if (result.capture?.mode === "automatic") printSuccess(`Captura automatica: hooks -> ${result.capture.file}`);
+    else console.log("Captura: mediante instrucciones al agente; no se instalaron hooks automaticos.");
+    if (result.capture?.reason) console.log(`[conversation-memory-mcp] ${result.capture.reason}`);
+    if (result.capture?.requiresHostTrust) console.log("El agente debe autorizar/confiar en los hooks antes de que se ejecuten. Reinicie y compruebe su estado.");
+    if (result.capture?.scope === "global" && effectiveScope !== "global") console.log("Captura: este host solo permite hooks globales; se instalaron para el usuario. La politica/MCP permanece en el scope indicado.");
     console.log("");
     printSuccess("Instalación completada.");
     console.log("Reiniciá tu agente para aplicar la configuración.");
     return;
   }
 
-  await startStdioServer();
+  await require("./stdio").startStdioServer();
 }
 
 if (require.main === module) {
@@ -271,3 +292,5 @@ module.exports = {
   promptForAgent,
   resolveAgent,
 };
+
+}

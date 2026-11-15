@@ -3,6 +3,11 @@ const { existsSync, mkdirSync, readFileSync, writeFileSync } = require("node:fs"
 const { homedir } = require("node:os");
 const { dirname, join, resolve } = require("node:path");
 
+const { readConfig, updateConfig } = require("./configFiles");
+const { installOpenCode } = require("./opencode");
+const { isDeepStrictEqual } = require("node:util");
+const TOML = require("@iarna/toml");
+
 const SERVER_NAME = "conversation-memory";
 
 const AGENTS = {
@@ -24,6 +29,7 @@ const AGENTS = {
   antigravity: { policy: "GEMINI.md", config: "antigravity", supportsGlobal: true },
   openclaw: { policy: "AGENTS.md", config: "openclaw", globalOnly: true },
   trae: { policy: "AGENTS.md", config: null },
+  "trae-cn": { policy: "AGENTS.md", config: null },
   pi: { policy: "AGENTS.md", config: null },
   hermes: { policy: "AGENTS.md", config: "hermes", globalOnly: true },
 };
@@ -56,38 +62,16 @@ function resolveScope(agent, scope) {
   return normalizeScope(scope);
 }
 
-function readJson(file) {
-  if (!existsSync(file)) return {};
-  const content = readFileSync(file, "utf8").trim();
-  return content ? JSON.parse(content) : {};
-}
-
-function writeJson(file, value) {
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-}
-
 function mergeJsonServer(file, rootPath, server) {
-  const config = readJson(file);
+  const config = readConfig(file).value;
   const parts = rootPath.split(".");
-  let cursor = config;
-  for (const part of parts) {
-    cursor[part] = cursor[part] || {};
-    cursor = cursor[part];
-  }
-  const current = cursor[SERVER_NAME];
+  let current = config;
+  for (const part of parts) current = current?.[part];
+  current = current?.[SERVER_NAME];
   const next = { ...(current || {}), ...server };
   if (JSON.stringify(current) === JSON.stringify(next)) return { changed: false, file, supported: true };
-  cursor[SERVER_NAME] = next;
-  writeJson(file, config);
-  return { changed: true, file, supported: true };
-}
-
-function installOpenCode(cwd) {
-  return mergeJsonServer(join(cwd, ".opencode", "opencode.json"), "mcp", {
-    type: "local",
-    command: ["npx", "-y", "conversation-memory-mcp"],
-  });
+  const changed = updateConfig(file, [...parts, SERVER_NAME], next);
+  return { changed, file, supported: true };
 }
 
 function installKilo(cwd) {
@@ -121,12 +105,28 @@ function installCodex(cwd) {
   const file = join(cwd, ".codex", "config.toml");
   mkdirSync(dirname(file), { recursive: true });
   const current = existsSync(file) ? readFileSync(file, "utf8") : "";
-  const header = `[mcp_servers.conversation-memory]\ncommand = "npx"\nargs = ["-y", "conversation-memory-mcp"]\n`;
-  const section = /^\[mcp_servers\.conversation-memory\][\s\S]*?(?=^\[|$)/m;
-  const match = current.match(section);
-  const updated = match
-    ? current.replace(match[0], header)
-    : `${current.trimEnd()}${current.trimEnd() ? "\n\n" : ""}${header}\n`;
+  // Parse TOML instead of matching a section up to the first multiline `$`.
+  // Preserve every other setting, including env, trust and other MCP servers.
+  const config = current.trim() ? TOML.parse(current) : {};
+  config.mcp_servers ??= {};
+  const previous = config.mcp_servers[SERVER_NAME] || {};
+  if (previous.command === "npx" && JSON.stringify(previous.args) === JSON.stringify(["-y", "conversation-memory-mcp"])) {
+    return { changed: false, file, supported: true };
+  }
+  config.mcp_servers[SERVER_NAME] = { ...previous, command: "npx", args: ["-y", "conversation-memory-mcp"] };
+  const replacement = TOML.stringify({ mcp_servers: { [SERVER_NAME]: config.mcp_servers[SERVER_NAME] } });
+  // Replace only this server and its subtables. Leave unrelated comments intact.
+  const blocks = current.split(/(?=^\s*\[)/m);
+  let inserted = false;
+  let updated = blocks.map(block => {
+    if (!/^\s*\[mcp_servers\.(?:conversation-memory|"conversation-memory")(?:\]|\.)/.test(block)) return block;
+    if (inserted) return "";
+    inserted = true;
+    return replacement + "\n";
+  }).join("") + (inserted ? "" : `${current.trim() ? "\n" : ""}${replacement}`);
+  try {
+    if (!isDeepStrictEqual(TOML.parse(updated), config)) updated = TOML.stringify(config);
+  } catch { updated = TOML.stringify(config); }
   if (updated === current) return { changed: false, file, supported: true };
   writeFileSync(file, updated, "utf8");
   return { changed: true, file, supported: true };
@@ -307,14 +307,15 @@ function installHermes(scope, homeDir = homedir(), commandRunner = execFileSync)
   };
 }
 
-function installMcpConfig({ cwd = process.cwd(), agent, scope, homeDir = homedir(), commandRunner = execFileSync } = {}) {
+function installMcpConfig({ cwd = process.cwd(), agent, scope, homeDir = homedir(), commandRunner = execFileSync, opencodeVersion } = {}) {
   const projectRoot = resolve(cwd);
   const selectedAgent = normalizeAgent(agent);
   const normalizedScope = resolveScope(selectedAgent, scope);
 
   switch (AGENTS[selectedAgent].config) {
     case "opencode":
-      return installOpenCode(projectRoot);
+      if (normalizedScope !== "project") throw new Error("OpenCode solo admite scope project en este instalador.");
+      return installOpenCode({ cwd: projectRoot, homeDir, version: opencodeVersion, commandRunner });
     case "kilo":
       return installKilo(projectRoot);
     case "codex":

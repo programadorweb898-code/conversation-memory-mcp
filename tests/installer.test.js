@@ -2,7 +2,8 @@ const assert = require("node:assert/strict");
 const { mkdtempSync, readFileSync, writeFileSync, existsSync, mkdirSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { dirname, join } = require("node:path");
-const { install, detectAgent } = require("../src/installer");
+const { install: installActual, detectAgent } = require("../src/installer");
+const install = options => installActual({ homeDir: mkdtempSync(join(tmpdir(), "cm-home-")), opencodeVersion: "1.19.5", commandRunner: () => ({ status: 0 }), ...options });
 
 describe("installer", () => {
   it("installs policy and MCP for OpenCode", () => {
@@ -350,9 +351,9 @@ describe("installer", () => {
         agent: "opencode",
         marker: "opencode.json",
         markerIsFile: true,
-        config: ".opencode/opencode.json",
+        config: "opencode.json",
         assertConfig: (cwd) => {
-          const config = JSON.parse(readFileSync(join(cwd, ".opencode", "opencode.json"), "utf8"));
+          const config = JSON.parse(readFileSync(join(cwd, "opencode.json"), "utf8"));
           assert.equal(config.mcp["conversation-memory"].type, "local");
           assert.equal(config.mcp.servers, undefined);
         },
@@ -460,7 +461,6 @@ describe("installer", () => {
     const policy = readFileSync(join(cwd, ".github", "copilot-instructions.md"), "utf8");
     assert.match(policy, /## Guardado por turno/);
     assert.match(policy, /saveMessage/);
-    assert.match(policy, /relatedMessageId/);
-    assert.match(policy, /plugin\/hook de captura automática/);
+    assert.match(policy, /no ejecutes saveMessage manualmente/);
   });
 });

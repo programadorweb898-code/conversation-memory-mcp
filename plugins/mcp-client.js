@@ -46,7 +46,13 @@ function createMcpClientManager(createConnection) {
     }
   }
 
-  return { getClient }
+  async function close() {
+    if (connectPromise) await connectPromise.catch(() => {});
+    const current = client;
+    client = null;
+    if (current) await current.close();
+  }
+  return { getClient, close }
 }
 
 module.exports = { createMcpClientManager }

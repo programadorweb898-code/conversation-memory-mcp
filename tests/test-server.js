@@ -368,16 +368,17 @@ describe('Server HTTP layer', () => {
     messagesLimiter.resetKey(`owner:${ownerB}`);
 
     try {
-      for (let requestNumber = 0; requestNumber < 60; requestNumber += 1) {
-        const response = await request(app)
+      // Issue the burst concurrently so remote database latency cannot consume
+      // the rate-limit window or leave requests running after Mocha times out.
+      const responses = await Promise.all(Array.from({ length: 60 }, (_, requestNumber) =>
+        request(app)
           .post('/mcp')
           .set('content-type', 'application/json')
           .set('authorization', `Bearer ${firstKey.token}`)
           .set('x-forwarded-for', clientIp)
-          .send({ jsonrpc: '2.0', id: requestNumber, method: 'tools/list', params: {} });
-
-        expect(response.status).to.equal(200);
-      }
+          .send({ jsonrpc: '2.0', id: requestNumber, method: 'tools/list', params: {} })
+      ));
+      for (const response of responses) expect(response.status).to.equal(200);
 
       const sameOwnerResponse = await request(app)
         .post('/mcp')
@@ -512,14 +513,13 @@ describe('Server HTTP layer', () => {
     };
 
     try {
-      for (let requestNumber = 0; requestNumber < 100; requestNumber += 1) {
-        const response = await request(app)
+      const responses = await Promise.all(Array.from({ length: 100 }, () =>
+        request(app)
           .get('/mcp')
           .set('authorization', 'Bearer invalid-token')
-          .set('x-forwarded-for', clientIp);
-
-        expect(response.status).to.equal(401);
-      }
+          .set('x-forwarded-for', clientIp)
+      ));
+      for (const response of responses) expect(response.status).to.equal(401);
 
       expect(lookupCount).to.equal(100);
 
@@ -627,14 +627,15 @@ describe('Server HTTP layer', () => {
 
     const sessionId = `health-skipped-${uuidv4()}`;
     const id = uuidv4();
+    const owner = `health-owner-${uuidv4()}`;
     await db.runAsync(
-      `INSERT INTO conversations (id, session_id, project, role, content)
-       VALUES ($1, $2, 'health-test', 'user', 'ok')`,
-      [id, sessionId]
+      `INSERT INTO conversations (id, session_id, project, role, content, owner)
+       VALUES ($1, $2, 'health-test', 'user', 'ok', $3)`,
+      [id, sessionId, owner]
     );
 
     try {
-      const health = await getHealth();
+      const health = await getHealth(owner);
       expect(health.messages.pending).to.equal(0);
       expect(health.messages.skipped).to.be.at.least(1);
       expect(health.messages.total).to.be.at.least(1);
