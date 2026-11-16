@@ -40,7 +40,14 @@ async function createConnection(mcpConfig) {
       command: mcpConfig.command,
       args: mcpConfig.args,
       env: mcpConfig.env,
+      // OpenCode's Windows service cannot reliably pass its stderr handle to
+      // the child. A separate pipe also keeps diagnostics out of MCP stdout.
+      stderr: "pipe",
       ...(mcpConfig.cwd ? { cwd: mcpConfig.cwd } : {}),
+    });
+    // Drain continuously so verbose workers cannot block on a full pipe.
+    transport.stderr?.on("data", (chunk) => {
+      console.error(`[conversation-memory] MCP: ${chunk.toString()}`);
     });
   } else {
     const { StreamableHTTPClientTransport } = await import(
@@ -161,13 +168,22 @@ export const ConversationMemory = async (
   }
 
   const pendingSaves = new Map();
+  const rescanSessions = new Set();
 
   async function savePending(sessionID) {
     const pending = pendingSaves.get(sessionID);
-    if (pending) return pending;
-    const task = savePendingOnce(sessionID).finally(() =>
-      pendingSaves.delete(sessionID),
-    );
+    if (pending) {
+      rescanSessions.add(sessionID);
+      return pending;
+    }
+    const task = (async () => {
+      let saved = false;
+      do {
+        rescanSessions.delete(sessionID);
+        saved = (await savePendingOnce(sessionID)) || saved;
+      } while (rescanSessions.has(sessionID));
+      return saved;
+    })().finally(() => pendingSaves.delete(sessionID));
     pendingSaves.set(sessionID, task);
     return task;
   }

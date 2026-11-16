@@ -1,8 +1,22 @@
 import { ConversationMemory } from "./conversation-memory.mjs";
+import { resolve } from "node:path";
+
+// V2 declares session.idle for compatibility, but 2.2.6 publishes execution
+// terminal events instead. Subscribe to the emitted lifecycle, not just its schema.
+export const CAPTURE_EVENTS = [
+  "session.execution.succeeded",
+  "session.execution.failed",
+  "session.execution.interrupted",
+  "session.idle",
+];
 
 // V2's Plugin.define is an identity helper; this is its JS definition shape.
 // Keep this entrypoint independent from the V1 loader and its SDK imports.
 export async function setupConversationMemory(ctx, options = {}) {
+  const normalizeDirectory = (directory) => {
+    const value = resolve(directory);
+    return process.platform === "win32" ? value.toLowerCase() : value;
+  };
   const client = {
     app: {
       log: async ({ body }) =>
@@ -80,16 +94,18 @@ export async function setupConversationMemory(ctx, options = {}) {
   const events = (async () => {
     try {
       for await (const event of ctx.event.subscribe({
-        types: ["session.idle"],
+        types: CAPTURE_EVENTS,
         signal: controller.signal,
       })) {
         if (
-          event.type === "session.idle" &&
-          typeof event.data?.sessionID === "string"
+          CAPTURE_EVENTS.includes(event.type) &&
+          typeof event.data?.sessionID === "string" &&
+          (!event.location?.directory ||
+            normalizeDirectory(event.location.directory) === normalizeDirectory(ctx.location.directory))
         ) {
           await hooks.event({
             event: {
-              type: event.type,
+              type: "session.idle",
               properties: { sessionID: event.data.sessionID },
             },
           });

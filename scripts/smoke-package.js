@@ -82,7 +82,7 @@ server.connect(new StdioServerTransport());`);
           { id: "a", type: "assistant", content: [{ type: "text", text: "Decision saved" }], agent: "build" },
         ] },
         tool: { hook: async () => ({ dispose: async () => {} }) },
-        event: { subscribe: async function* () { yield { type: "session.idle", data: { sessionID: "fixture" } }; yield { type: "session.idle", data: { sessionID: "fixture" } }; } },
+        event: { subscribe: async function* ({ types }) { assert.ok(types.includes("session.execution.succeeded")); yield { type: "session.execution.succeeded", data: { sessionID: "fixture" } }; yield { type: "session.execution.succeeded", data: { sessionID: "fixture" } }; } },
       });
     }
     for (let count = 0; count < 100; count++) {

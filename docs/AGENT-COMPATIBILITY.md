@@ -2,7 +2,12 @@
 
 ## Alcance de 1.2.0
 
-- OpenCode: selección por `--version`, entradas separadas V1/V2, runtime persistente y dependencias aisladas.
+- OpenCode: selección por `--version`, entradas separadas V1/V2, runtime persistente y dependencias aisladas. V2 captura `session.execution.succeeded`, `session.execution.failed` y `session.execution.interrupted`; conserva `session.idle` como compatibilidad. En 2.2.6, declarar `session.idle` en el esquema no garantiza su emisión al completar un turno.
+  El comando MCP indica explícitamente el paquete npm y su versión, para evitar
+  que npm intente ejecutar/enlazar un proyecto local con el mismo nombre.
+  El proceso MCP usa un pipe de stderr separado y drenado continuamente: en
+  la comprobación nativa de Windows 2.2.6, heredar stderr cerraba la conexión
+  durante el arranque; el pipe permitió conectar y listar las herramientas.
 - Claude Code: Stop con transcript JSONL. Se almacenan texto de usuario/asistente e identificadores de origen, no thinking ni tool results.
 - Cursor: prompt y respuesta por conversation_id/generation_id. El estado pendiente se conserva en la configuración privada del usuario.
 - Gemini CLI: AfterAgent con transcript JSON y respuesta final; no pensamientos ni llamadas a herramientas.
@@ -47,6 +52,10 @@ hooks según la política de confianza de cada aplicación.
   instalación fallida de dependencias y plugin manual duplicado.
 - Adaptadores V1/V2 con eventos y mensajes del contrato publicado: captura, relación,
   deduplicación, exclusión de razonamiento y liberación al descargar.
+  Las regresiones de V2 incluyen finales de ejecución sin `session.idle`, rechazo
+  de eventos de otros directorios y un nuevo turno mientras sigue pendiente el
+  guardado anterior. Estas pruebas no sustituyen la confirmación de persistencia
+  de un turno dentro del host real.
 - `node scripts/smoke-package.js`: empaqueta el candidato local, instala el tarball
   en una carpeta limpia, instala dependencias persistentes del plugin y ejecuta
   guardados reales mediante MCP stdio con ambas entradas. No usa npm @latest ni

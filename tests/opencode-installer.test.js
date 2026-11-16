@@ -33,6 +33,7 @@ describe("version-aware OpenCode installer", () => {
       const text = readFileSync(file, "utf8"), config = parse(text);
       assert.match(text, /keep me/); assert.equal(config.model, "user-model");
       assert.deepEqual(config.mcp.other.command, ["other"]);
+      assert.deepEqual(config.mcp["conversation-memory"].command, ["npx", "--yes", `--package=conversation-memory-mcp@${require("../package.json").version}`, "--", "conversation-memory-mcp"]);
       const entry = config[version.startsWith("1") ? "plugin" : "plugins"][0];
       const directory = first.mcp.plugin.directory;
       assert.equal(entry, pathToFileURL(version.startsWith("1") ? join(directory, "entry.mjs") : directory).href);

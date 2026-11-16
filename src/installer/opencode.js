@@ -60,7 +60,9 @@ function installOpenCode({ cwd, homeDir, version, commandRunner = spawnSync }) {
     const remaining = config[oldKey].filter(entry => !isManaged(entry));
     changed = updateConfig(file, [oldKey], remaining.length ? remaining : undefined) || changed;
   }
-  const server = { ...(config.mcp?.["conversation-memory"] || {}), type: "local", command: ["npx", "-y", "conversation-memory-mcp"] };
+  // An explicit package spec avoids npm treating a same-named working project
+  // as the executable package (and attempting a local package symlink).
+  const server = { ...(config.mcp?.["conversation-memory"] || {}), type: "local", command: ["npx", "--yes", `--package=conversation-memory-mcp@${pkg.version}`, "--", "conversation-memory-mcp"] };
   changed = updateConfig(file, ["mcp", "conversation-memory"], server) || changed;
   return { changed, file, supported: true, capture: "automatic", plugin: { directory: destination, version: detected.version, api: `v${detected.major}` } };
 }
