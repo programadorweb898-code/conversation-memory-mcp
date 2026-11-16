@@ -98,7 +98,7 @@ npx conversation-memory-mcp install --agent opencode
 
 El instalador es idempotente y conserva otros servidores MCP existentes. La configuración se limita al proyecto actual; no modifica silenciosamente la configuración global del usuario.
 
-### Captura automática y compatibilidad (1.2.0)
+### Captura automática y compatibilidad (1.2.1)
 
 | Agente | Configuración MCP | Captura de conversaciones |
 | --- | --- | --- |
@@ -165,7 +165,7 @@ ambos mensajes: el instalador explica que conserva el guardado por instrucciones
 Trae internacional no se trata como si fuera Trae CN. Kimi necesita un hook global
 aunque la configuración MCP sea del proyecto; el instalador lo informa.
 
-La versión 1.2.0 preparada en este repositorio debe publicarse antes de distribuir
+La versión 1.2.1 preparada en este repositorio debe publicarse antes de distribuir
 sus comandos de hooks por npm. Cambiar archivos locales no actualiza npm.
 
 Agentes reconocidos:

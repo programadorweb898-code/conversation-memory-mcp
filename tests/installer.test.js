@@ -13,7 +13,7 @@ describe("installer", () => {
     const config = JSON.parse(readFileSync(join(cwd, ".opencode", "opencode.json"), "utf8"));
     assert.deepEqual(config.mcp["conversation-memory"], {
       type: "local",
-      command: ["npx", "-y", "conversation-memory-mcp"],
+      command: ["npx", "--yes", `--package=conversation-memory-mcp@${require("../package.json").version}`, "--", "conversation-memory-mcp"],
     });
     assert.equal(config.mcp.servers, undefined);
   });
